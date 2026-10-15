@@ -54,22 +54,22 @@ func pickJudgeHandler(parent *ProviderHandler, handlers []*ProviderHandler, prov
 		if parent == nil || !providerMatches(parent.ProvidesFor, provider) {
 			return nil, false, false
 		}
-		return parent, mode == ModeMessages && parent.ProvidesFor.Mode == ModeAgent, true
+		return parent, mode == ModeMessages && handlerMode(parent) == ModeAgent, true
 	}
 	for _, c := range handlers {
-		if providerMatches(c.ProvidesFor, provider) && c.ProvidesFor.Mode == mode {
+		if providerMatches(c.ProvidesFor, provider) && handlerMode(c) == mode {
 			return c, false, true
 		}
 	}
 	if mode == ModeMessages {
 		for _, c := range handlers {
-			if providerMatches(c.ProvidesFor, provider) && c.ProvidesFor.Mode == ModeAgent {
+			if providerMatches(c.ProvidesFor, provider) && handlerMode(c) == ModeAgent {
 				return c, true, true
 			}
 		}
 	}
 	if parent != nil && providerMatches(parent.ProvidesFor, provider) {
-		return parent, mode == ModeMessages && parent.ProvidesFor.Mode == ModeAgent, true
+		return parent, mode == ModeMessages && handlerMode(parent) == ModeAgent, true
 	}
 	return nil, false, false
 }
@@ -87,15 +87,28 @@ func activeJudges(cfg AiConfig) []JudgeRef {
 	return out
 }
 
+// resolveJudge fetches a judge's config. A judge runs after the response is
+// already produced and paid for, so a judge that cannot be resolved (most
+// often one toggled off in LaunchDarkly) is logged and skipped rather than
+// failing the call, as in the JavaScript SDK.
+func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context) (AiConfig, VariationMeta, bool) {
+	cfg, meta, err := extractVariation(ctx, key, userCtx)
+	if err != nil {
+		sdkLogger().Error("judge skipped: its config could not be resolved", "judge", key, "error", err)
+		return AiConfig{}, VariationMeta{}, false
+	}
+	return cfg, meta, true
+}
+
 // runJudges executes the configured judges inline. Judges never get
 // the caller's tools. A provider failure is returned; an unparseable verdict
 // is logged and that judge is skipped.
 func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error) {
 	results := map[string]JudgeResult{}
 	for _, j := range activeJudges(a.cfg) {
-		jcfg, jmeta, err := extractVariation(ctx, j.Key, a.userCtx)
-		if err != nil {
-			return results, err
+		jcfg, jmeta, ok := resolveJudge(ctx, j.Key, a.userCtx)
+		if !ok {
+			continue
 		}
 		h, collapse, ok := pickJudgeHandler(a.handler, a.handlers, jcfg.Provider.Name, NormalizeMode(jmeta.Mode))
 		if !ok {
@@ -106,7 +119,7 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 			effective = collapseMessages(jcfg)
 		}
 		history := judging.BuildMessageHistory(a.userInput, a.trajectory, a.output)
-		err = withJudgeEvaluation(ctx, j.Key, func(ctx context.Context, record func(float64, string)) error {
+		err := withJudgeEvaluation(ctx, j.Key, func(ctx context.Context, record func(float64, string)) error {
 			res, err := executeAndTrack(ctx, execArgs{
 				configKey: j.Key, config: effective, meta: jmeta, userCtx: a.userCtx, handler: h,
 				userInput: a.output, graphKey: a.graphKey,
@@ -167,9 +180,9 @@ func BuildJudgeTasks(ctx context.Context, args BuildJudgeTasksArgs) ([]JudgeTask
 func buildJudgeTasks(ctx context.Context, a judgeArgs) ([]JudgeTask, error) {
 	tasks := []JudgeTask{}
 	for _, j := range activeJudges(a.cfg) {
-		jcfg, jmeta, err := extractVariation(ctx, j.Key, a.userCtx)
-		if err != nil {
-			return tasks, err
+		jcfg, jmeta, ok := resolveJudge(ctx, j.Key, a.userCtx)
+		if !ok {
+			continue
 		}
 		mode := NormalizeMode(jmeta.Mode)
 		_, collapse, ok := pickJudgeHandler(a.handler, a.handlers, jcfg.Provider.Name, mode)
@@ -202,14 +215,14 @@ func RunJudge(ctx context.Context, task JudgeTask, handlers []*ProviderHandler) 
 	reportUsage("client.runJudge", "", "")
 	var h *ProviderHandler
 	for _, c := range handlers {
-		if providerMatches(c.ProvidesFor, task.JudgeProvider) && c.ProvidesFor.Mode == task.JudgeMode {
+		if providerMatches(c.ProvidesFor, task.JudgeProvider) && handlerMode(c) == task.JudgeMode {
 			h = c
 			break
 		}
 	}
 	if h == nil && task.JudgeMode == ModeMessages {
 		for _, c := range handlers {
-			if providerMatches(c.ProvidesFor, task.JudgeProvider) && c.ProvidesFor.Mode == ModeAgent {
+			if providerMatches(c.ProvidesFor, task.JudgeProvider) && handlerMode(c) == ModeAgent {
 				h = c
 				break
 			}

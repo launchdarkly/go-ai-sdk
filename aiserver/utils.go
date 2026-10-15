@@ -120,6 +120,10 @@ func ParseUsage(usage map[string]any) TokenUsage {
 	return TokenUsage{}
 }
 
+// handlerMode is a handler's declared mode, normalized like a config's, so a
+// handler declared with "completion" serves messages configs everywhere.
+func handlerMode(h *ProviderHandler) Mode { return NormalizeMode(string(h.ProvidesFor.Mode)) }
+
 // NormalizeMode maps a variation mode to a handler mode.
 func NormalizeMode(mode string) Mode {
 	if mode == "agent" {

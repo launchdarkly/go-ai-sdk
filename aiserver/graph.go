@@ -316,7 +316,7 @@ func selectNodeHandler(n *GraphNode, handlers []*ProviderHandler) (*ProviderHand
 	mode := NormalizeMode(n.Meta.Mode)
 	for _, want := range []ProvidesFor{{provider, mode}, {WildcardProvider, mode}} {
 		for _, h := range handlers {
-			if h.ProvidesFor == want {
+			if h.ProvidesFor.Provider == want.Provider && handlerMode(h) == want.Mode {
 				return h, nil
 			}
 		}

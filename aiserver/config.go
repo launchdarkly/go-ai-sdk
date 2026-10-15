@@ -108,7 +108,7 @@ func selectHandler(cfg AiConfig, meta VariationMeta, handlers []*ProviderHandler
 func SelectHandler(handlers []*ProviderHandler, provider string, mode Mode) (*ProviderHandler, error) {
 	for _, want := range []ProvidesFor{{provider, mode}, {WildcardProvider, mode}} {
 		for _, h := range handlers {
-			if h.ProvidesFor.Provider == want.Provider && NormalizeMode(string(h.ProvidesFor.Mode)) == want.Mode {
+			if h.ProvidesFor.Provider == want.Provider && handlerMode(h) == want.Mode {
 				return h, nil
 			}
 		}

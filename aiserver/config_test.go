@@ -492,3 +492,35 @@ func TestTrackSkipsUndefinedContext(t *testing.T) {
 		t.Error("a defined context was not tracked")
 	}
 }
+
+// A judge whose config cannot be resolved (missing, or toggled off) is
+// skipped: the generation already succeeded and is returned, inline and as
+// deferred tasks, and the other judges still run.
+func TestUnresolvableJudgeIsSkipped(t *testing.T) {
+	judged := map[string]any{"judgeConfiguration": map[string]any{"judges": []any{
+		map[string]any{"key": "missing", "samplingRate": 1.0},
+		map[string]any{"key": "off", "samplingRate": 1.0},
+		map[string]any{"key": "judge", "samplingRate": 1.0},
+	}}}
+	off := enabledConfig("P", "judge", nil)
+	off["_ldMeta"] = map[string]any{"enabled": false}
+	withFake(t, map[string]any{
+		"cfg":   enabledConfig("P", "", judged),
+		"off":   off,
+		"judge": enabledConfig("P", "judge", nil),
+	})
+	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+		if req.Variables["response_to_evaluate"] != nil {
+			return HandlerResult{Output: `{"score":0.5,"reasoning":"ok"}`}, nil
+		}
+		return HandlerResult{Output: "answer"}, nil
+	}, nil, false)
+	resp, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, "q", userCtx)
+	if err != nil || resp.Response != "answer" || len(resp.JudgeResults) != 1 || resp.JudgeResults["judge"].Score != 0.5 {
+		t.Fatalf("inline: resp=%+v err=%v", resp, err)
+	}
+	resp, err = Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}, SkipJudges: true}).Invoke(bg, "q", userCtx)
+	if err != nil || len(resp.JudgeTasks) != 1 || resp.JudgeTasks[0].ConfigKey != "judge" {
+		t.Fatalf("deferred: tasks=%+v err=%v", resp.JudgeTasks, err)
+	}
+}

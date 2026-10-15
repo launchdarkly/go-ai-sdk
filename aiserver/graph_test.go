@@ -608,3 +608,28 @@ func TestGraphSpanPathAcrossHops(t *testing.T) {
 		t.Errorf("path = %q, calls = %d", path, len(rh.calls))
 	}
 }
+
+// Graph node routing normalizes a handler's declared mode like the config
+// routing rule: a "completion" handler serves a messages node, and an agent
+// handler for the same provider is not picked instead.
+func TestGraphRoutingNormalizesHandlerMode(t *testing.T) {
+	leaf := enabledConfig("P", "completion", nil)
+	withFake(t, map[string]any{
+		"g":         map[string]any{"root": "root-node", "edges": map[string]any{"root-node": []any{map[string]any{"key": "leaf-node"}}}},
+		"root-node": nodeCfg("root work"), "leaf-node": leaf,
+	})
+	var served []string
+	mk := func(mode Mode, tag string) *ProviderHandler {
+		return CreateHandlerInternal(ProvidesFor{"P", mode}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+			served = append(served, tag+":"+req.Variables[VarLD].(TrackData).ConfigKey)
+			return HandlerResult{Output: "out"}, nil
+		}, nil, false)
+	}
+	hs := []*ProviderHandler{mk(ModeAgent, "agent"), mk(Mode("completion"), "legacy")}
+	if _, err := Graph("g", GraphOptions{Handlers: hs}).Invoke(bg, "q", userCtx); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(served, []string{"agent:root-node", "legacy:leaf-node"}) {
+		t.Errorf("served = %v", served)
+	}
+}

@@ -35,7 +35,7 @@ func (r *Registry) Register(e RegistryEntries) {
 		if !h.ProvidesFor.IsZero() {
 			kept := r.handlers[:0:0]
 			for _, existing := range r.handlers {
-				if existing.ProvidesFor == h.ProvidesFor {
+				if existing.ProvidesFor.Provider == h.ProvidesFor.Provider && handlerMode(existing) == handlerMode(h) {
 					sdkLogger().Warn("multiple handlers registered; the last one will be used", "provider", h.ProvidesFor.Provider, "mode", h.ProvidesFor.Mode)
 					continue
 				}
