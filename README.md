@@ -1,5 +1,10 @@
 # LaunchDarkly AI SDK for Go
 
+> [!WARNING]
+> This SDK is in early development (version 0.x) and is not yet recommended for production use.
+> Public APIs may change in breaking ways between releases while it is hardened toward a 1.0
+> release. Please report problems and feedback through GitHub issues.
+
 LaunchDarkly AI SDK for Go. Manage prompts, models, tools, and agent graphs as AI
 Configs, target and roll them out per user, score quality with judges, and track
 cost, latency, and errors. Handlers for OpenAI, Anthropic, Bedrock, and LangChain.
