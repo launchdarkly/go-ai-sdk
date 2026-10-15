@@ -1,0 +1,36 @@
+# Creates release PRs from conventional commits on main and, when a release PR is merged,
+# tags the release (vX.Y.Z). Go modules are published by tag, so there is no package upload;
+# the final step asks the Go module proxy to fetch the new version so it is available at once.
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag-name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+
+  verify-release:
+    runs-on: ubuntu-latest
+    needs: ['release-please']
+    if: ${{ needs.release-please.outputs.released == 'true' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag-name }}
+      - uses: ./.github/actions/ci
+      - name: Publish to the Go module proxy
+        run: curl -sSf "https://proxy.golang.org/github.com/launchdarkly/go-ai-sdk/@v/${{ needs.release-please.outputs.tag-name }}.info"

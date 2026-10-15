@@ -26,7 +26,7 @@ const (
 	// PackageName is the Go import path, registered for `$ld:ai:sdk:info`.
 	PackageName = "github.com/launchdarkly/go-ai-sdk/openaiagents"
 	// PackageVersion is this package's release version.
-	PackageVersion = "0.1.0"
+	PackageVersion = "0.1.0" // x-release-please-version
 	// SpanName is the blocking handler's root span.
 	SpanName = "openai.agent.run"
 	// StreamSpanName is the streaming handler's root span.

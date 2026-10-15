@@ -1,0 +1,25 @@
+name: CI
+description: Format check, vet and test the Go module
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - name: Format check
+      shell: bash
+      run: make format-check
+
+    - name: Vet
+      shell: bash
+      run: make vet
+
+    - name: Build
+      shell: bash
+      run: make build
+
+    - name: Test
+      shell: bash
+      run: go test -race -shuffle=on ./...

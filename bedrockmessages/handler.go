@@ -20,7 +20,7 @@ const (
 	// $ld:ai:sdk:usage.
 	PackageName = "github.com/launchdarkly/go-ai-sdk/bedrockmessages"
 	// PackageVersion is this package's release version.
-	PackageVersion = "0.1.0"
+	PackageVersion = "0.1.0" // x-release-please-version
 	// SpanName is the root span name for Bedrock handlers. Its gen_ai.operation.name is also "invoke_agent".
 	SpanName = bedrockwire.SpanName
 	// GenAISystem is the gen_ai.system and gen_ai.provider.name value.

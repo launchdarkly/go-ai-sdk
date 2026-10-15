@@ -35,7 +35,7 @@ const (
 	// and $ld:ai:sdk:usage.
 	PackageName = "github.com/launchdarkly/go-ai-sdk/claudeagents"
 	// PackageVersion is this package's release version.
-	PackageVersion = "0.1.0"
+	PackageVersion = "0.1.0" // x-release-please-version
 	// SpanName is the documented root span name.
 	SpanName = "claude.query"
 	// DefaultMaxSteps bounds the agent loop when neither Options.MaxSteps nor

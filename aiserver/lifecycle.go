@@ -28,7 +28,7 @@ import (
 
 const (
 	PackageName    = "github.com/launchdarkly/go-ai-sdk/aiserver"
-	PackageVersion = "0.1.0"
+	PackageVersion = "0.1.0" // x-release-please-version
 	sdkLanguage    = "go"
 )
 

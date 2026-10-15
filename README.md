@@ -120,11 +120,17 @@ content.
 
 ```bash
 go mod download   # fetch dependencies
-go build ./...    # build every package from source
-go test -race ./...
-go vet ./...
-gofmt -l .
+make build        # build every package, including the examples
+make test         # go test -race ./...
+make lint         # gofmt check + go vet
 ```
+
+`.env.example` lists the environment variables the SDK and the examples read; the SDK does not load a `.env` file itself, so export them in your shell or with your own tooling.
+Contributor and architecture notes are in [AGENTS.md](AGENTS.md).
+
+## License
+
+Apache 2.0. See [LICENSE](LICENSE).
 
 Examples run against a real LaunchDarkly environment — see
 [examples/README.md](examples/README.md).

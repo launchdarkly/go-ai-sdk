@@ -26,7 +26,7 @@ const (
 	// $ld:ai:sdk:usage.
 	PackageName = "github.com/launchdarkly/go-ai-sdk/langchainagents"
 	// PackageVersion is this package's release version.
-	PackageVersion = "0.1.0"
+	PackageVersion = "0.1.0" // x-release-please-version
 	// SpanName is the handler's root span. There is no separate
 	// streaming span name, so streaming uses the same name.
 	SpanName = "langchain.agent"

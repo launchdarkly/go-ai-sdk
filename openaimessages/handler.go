@@ -23,7 +23,7 @@ const (
 	// PackageName is the Go import path, registered for `$ld:ai:sdk:info`.
 	PackageName = "github.com/launchdarkly/go-ai-sdk/openaimessages"
 	// PackageVersion is this package's release version.
-	PackageVersion = "0.1.0"
+	PackageVersion = "0.1.0" // x-release-please-version
 	// SpanName is the root span name for both the blocking and streaming paths.
 	SpanName = "openai.messages"
 	// maxSteps bounds the tool loop, matching the JavaScript and Python handlers.

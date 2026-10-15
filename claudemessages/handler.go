@@ -20,7 +20,7 @@ import (
 
 const (
 	PackageName    = "github.com/launchdarkly/go-ai-sdk/claudemessages"
-	PackageVersion = "0.1.0"
+	PackageVersion = "0.1.0" // x-release-please-version
 	// SpanName is the documented root span name.
 	SpanName = "claude.messages"
 	// maxSteps bounds the tool loop. 10 matches the

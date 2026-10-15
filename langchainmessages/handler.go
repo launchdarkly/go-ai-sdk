@@ -23,7 +23,7 @@ const (
 	// $ld:ai:sdk:usage.
 	PackageName = "github.com/launchdarkly/go-ai-sdk/langchainmessages"
 	// PackageVersion is this package's release version.
-	PackageVersion = "0.1.0"
+	PackageVersion = "0.1.0" // x-release-please-version
 	// SpanName is the blocking root span name.
 	SpanName = "langchain.invoke"
 	// StreamSpanName is the streaming root span name.
