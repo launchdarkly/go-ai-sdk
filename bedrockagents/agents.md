@@ -43,7 +43,7 @@ func BedrockGraph(key string, opts aiserver.GraphOptions, handlerOpts Options) (
 `init()` registers `PackageName`/`PackageVersion` for `$ld:ai:sdk:info`. Usage helpers:
 `bedrock-agents.createBedrockAgentsHandler` (`NewHandler`), `bedrock-agents.bedrockAgents` (`BedrockAgents`),
 `bedrock-agents.bedrockGraph` (`BedrockGraph`). Each reports first, then uses the non-reporting `build`,
-`aiserver.ConfigInternal` or `aiserver.GraphInternal`, so one call emits only its own helper.
+`internal/sdkapi.Config` or `internal/sdkapi.Graph`, so one call emits only its own helper.
 
 ## Implementation details
 
@@ -71,7 +71,7 @@ func BedrockGraph(key string, opts aiserver.GraphOptions, handlerOpts Options) (
 - **ModelOptions** — called once per handler call and merged into every turn (`copyFields`, by field name);
   `ModelId`, `Messages`, `System` are protected; `ToolConfig` only contributes `ToolChoice` when the handler sends
   tools; an `OutputConfig` without `TextFormat` keeps the handler's.
-- **BedrockGraph** — replaces `opts.Handlers` with the one handler and calls `aiserver.GraphInternal` through the
+- **BedrockGraph** — replaces `opts.Handlers` with the one handler and calls `internal/sdkapi.Graph` through the
   `graphInternal` variable, which tests swap to observe the forwarded options.
 
 ## OTel setup

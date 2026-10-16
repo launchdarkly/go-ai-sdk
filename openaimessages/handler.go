@@ -17,6 +17,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
 const (
@@ -68,7 +69,7 @@ func newHandler(opts Options) *aiserver.ProviderHandler {
 		c = &nc
 	}
 	h := &handler{client: c}
-	return aiserver.CreateHandlerInternal(ProvidesFor, h.invoke, h.stream, opts.CaptureContent)
+	return sdkapi.CreateHandler(ProvidesFor, h.invoke, h.stream, opts.CaptureContent)
 }
 
 // InvokeOptions are the optional arguments to OpenAIMessages.
@@ -89,7 +90,7 @@ func OpenAIMessages(ctx context.Context, configKey, userInput string, userCtx ld
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}
-	return aiserver.ConfigInternal(aiserver.ConfigArgs{
+	return sdkapi.Config(aiserver.ConfigArgs{
 		Key: configKey, Handlers: []*aiserver.ProviderHandler{newHandler(opts.Handler)},
 		ToolHandlers: opts.ToolHandlers, Registry: opts.Registry, SkipJudges: opts.SkipJudges,
 	}).Invoke(ctx, userInput, userCtx, aiserver.WithVariables(opts.Variables))

@@ -45,7 +45,7 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
 `init()` registers the package. Usage helpers: `langchain-agents.createLangChainAgentsHandler`,
 `langchain-agents.langchainAgents`, `langchain-agents.langchainGraph`,
 `langchain-agents.toLangGraph`; wrappers then use the non-reporting `newHandler`,
-`aiserver.ConfigInternal` / `aiserver.GraphInternal`.
+`internal/sdkapi.Config` / `internal/sdkapi.Graph`.
 
 ## Implementation details
 

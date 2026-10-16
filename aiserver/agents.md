@@ -34,9 +34,9 @@ experimental entry point).
 // lifecycle
 InitClient, InitWithClient, GetClient, Shutdown, SetLogger, InitOptions, LDClient
 // configs
-Config, ConfigInternal, ConfigArgs, AIConfig, InspectConfig, InspectResult
+Config, ConfigArgs, AIConfig, InspectConfig, InspectResult
 // graphs
-Graph, GraphInternal, ResolveGraph, AgentGraph, GraphDefinition, GraphNode, GraphEdge,
+Graph, ResolveGraph, AgentGraph, GraphDefinition, GraphNode, GraphEdge,
 GraphOptions, GraphResponse, GraphStreamEvent, GraphTopology, RouteResult, RunNodeOptions,
 TraverseVisitor, MaxGraphCacheSize, TrackGraphEvent
 // errors
@@ -46,7 +46,7 @@ CallOption, CallOptions, NewCallOptions, WithVariables, WithHistory, EventType,
 EventChunk, EventDone, EventNodeStart, EventNodeDone, EventHandoff
 // handlers
 ProviderHandler, ProvidesFor, Mode, ModeMessages, ModeAgent, WildcardProvider,
-CreateHandler, CreateHandlerInternal, InvokeFunc, StreamFunc, HandlerRequest,
+CreateHandler, InvokeFunc, StreamFunc, HandlerRequest,
 HandlerResult, HandlerStreamEvent, ToolHandler, ToolFunc, NativeTool, WrapToolHandlers
 // handler kit
 ComposePrompt, Prompt, WithOutputFormat, OutputFormatInstruction, ContentText, ImageURL,

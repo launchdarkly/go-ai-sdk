@@ -33,7 +33,7 @@ func LangChainMessages(ctx, configKey, userInput string, userCtx ldcontext.Conte
 `init()` calls `aiserver.RegisterAiSdkPackage(PackageName, PackageVersion)`. `NewHandler` reports
 `langchain-messages.createLangChainHandler`, `LangChainMessages` reports
 `langchain-messages.langchainMessages`; both then use the non-reporting `newHandler` and
-`aiserver.ConfigInternal`.
+`internal/sdkapi.Config`.
 
 ## Implementation details
 

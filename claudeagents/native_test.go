@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
 const serverSearch = `{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"x"}},
@@ -267,7 +268,7 @@ func TestClaudeGraph(t *testing.T) {
 	}
 	e := setup(t, flags, sse(nil, "lookup", 1, 1), sse([]string{"ok"}, "", 1, 1)) // graph() streams each node
 	stubCalled := false
-	stub := aiserver.CreateHandlerInternal(ProvidesFor, func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
+	stub := sdkapi.CreateHandler(ProvidesFor, func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
 		stubCalled = true
 		return aiserver.HandlerResult{Output: "stub"}, nil
 	}, nil, false)
