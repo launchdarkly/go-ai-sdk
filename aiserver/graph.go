@@ -3,6 +3,7 @@ package aiserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iter"
 	"regexp"
@@ -523,18 +524,23 @@ func (d *GraphDefinition) Route(ctx context.Context, n *GraphNode, input string,
 	return res, err
 }
 
-// resolveDefinition fetches the topology and every node config. Any node that
-// fails to resolve disables the whole graph; the error is logged.
-func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Context, opts GraphOptions) *GraphDefinition {
+// resolveDefinition fetches the topology and every node config. A missing
+// root or a disabled node is a turned-off graph: Enabled false, nil error.
+// Init, evaluation, parse, and node-resolution failures are errors. Either
+// way the returned definition is non-nil and safe to use.
+func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Context, opts GraphOptions) (*GraphDefinition, error) {
 	def := &GraphDefinition{Key: key, userCtx: userCtx, opts: opts, nodes: map[string]*GraphNode{}}
+	off := func() *GraphDefinition {
+		def.nodes, def.edges, def.Root = map[string]*GraphNode{}, nil, nil
+		return def
+	}
 	c, err := InitClient(ctx, InitOptions{})
 	if err != nil {
-		sdkLogger().Error("graph resolution failed", "graph", key, "error", err)
-		return def
+		return off(), err
 	}
 	v, evalErr := c.JSONVariation(key, userCtx, ldvalue.ObjectBuild().Build())
 	if evalErr != nil {
-		sdkLogger().Error("graph flag evaluation failed; graph disabled", "graph", key, "error", evalErr)
+		return off(), fmt.Errorf("graph %q: %w", key, evalErr)
 	}
 	raw, _ := variationToAny(v).(map[string]any)
 	meta := &VariationMeta{}
@@ -543,9 +549,15 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 	}
 	def.trackData = newTrackData(key, AiConfig{}, *meta, key)
 	var topo GraphTopology
-	b, _ := json.Marshal(raw)
-	if err := json.Unmarshal(b, &topo); err != nil || topo.Root == "" {
-		return def
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return off(), errorf("graph %q: malformed topology: %w", key, err)
+	}
+	if err := json.Unmarshal(b, &topo); err != nil {
+		return off(), errorf("graph %q: malformed topology: %w", key, err)
+	}
+	if topo.Root == "" {
+		return off(), nil // flag off or missing: the graph is turned off
 	}
 	keys := []string{topo.Root}
 	seen := map[string]bool{topo.Root: true}
@@ -567,10 +579,11 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 	}
 	for _, k := range keys {
 		cfg, nmeta, err := extractVariation(ctx, k, userCtx, nil, false)
+		if errors.Is(err, ErrConfigDisabled) {
+			return off(), nil // a turned-off node turns the graph off
+		}
 		if err != nil {
-			sdkLogger().Error("graph node failed to resolve; graph disabled", "graph", key, "node", k, "error", err)
-			def.nodes, def.edges = map[string]*GraphNode{}, nil
-			return def
+			return off(), fmt.Errorf("graph %q node %q: %w", key, k, err)
 		}
 		def.nodes[k] = &GraphNode{Key: k, Config: cfg, Meta: nmeta}
 	}
@@ -579,12 +592,14 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 	}
 	def.Enabled = true
 	def.Root = def.nodes[topo.Root]
-	return def
+	return def, nil
 }
 
 // ResolveGraph resolves a graph flag into a definition without executing it,
-// for framework-native runners. Branch on Enabled before traversing.
-func ResolveGraph(ctx context.Context, key string, userCtx ldcontext.Context, opts GraphOptions) *GraphDefinition {
+// for framework-native runners. A turned-off graph or node is Enabled false
+// with a nil error; any other failure is an error, and the definition is still
+// non-nil and disabled.
+func ResolveGraph(ctx context.Context, key string, userCtx ldcontext.Context, opts GraphOptions) (*GraphDefinition, error) {
 	reportUsage("client.resolveGraph", "", "")
 	return resolveDefinition(ctx, key, userCtx, opts)
 }
@@ -606,7 +621,7 @@ func Graph(key string, opts GraphOptions) *AgentGraph {
 
 // definition resolves the graph and node flags on every call, so flag changes,
 // including disabling the graph, reach a reused AgentGraph on its next run.
-func (g *AgentGraph) definition(ctx context.Context, userCtx ldcontext.Context) *GraphDefinition {
+func (g *AgentGraph) definition(ctx context.Context, userCtx ldcontext.Context) (*GraphDefinition, error) {
 	return resolveDefinition(ctx, g.key, userCtx, g.opts)
 }
 
@@ -653,7 +668,11 @@ func (g *AgentGraph) stream(ctx context.Context, input string, userCtx ldcontext
 			yield(GraphStreamEvent{}, errorf("graph %q requires handlers; pass Handlers or use ResolveGraph with a framework-native runner", g.key))
 			return
 		}
-		def := g.definition(ctx, userCtx)
+		def, err := g.definition(ctx, userCtx)
+		if err != nil {
+			yield(GraphStreamEvent{}, err)
+			return
+		}
 		if !def.Enabled {
 			yield(GraphStreamEvent{}, fmt.Errorf("%w: %s", ErrGraphDisabled, g.key))
 			return
