@@ -233,11 +233,12 @@ type ProviderHandler struct {
 // CreateHandler attaches providesFor and captureContent to a handler.
 func CreateHandler(pf ProvidesFor, invoke InvokeFunc, stream StreamFunc, captureContent bool) *ProviderHandler {
 	reportUsage("client.createHandler", "", "")
-	return CreateHandlerInternal(pf, invoke, stream, captureContent)
+	return createHandler(pf, invoke, stream, captureContent)
 }
 
-// CreateHandlerInternal is the non-reporting variant used by handler packages.
-func CreateHandlerInternal(pf ProvidesFor, invoke InvokeFunc, stream StreamFunc, captureContent bool) *ProviderHandler {
+// createHandler is CreateHandler without the usage report. Handler packages
+// call internal/sdkapi.CreateHandler, which builds the same struct.
+func createHandler(pf ProvidesFor, invoke InvokeFunc, stream StreamFunc, captureContent bool) *ProviderHandler {
 	return &ProviderHandler{ProvidesFor: pf, CaptureContent: captureContent, Invoke: invoke, Stream: stream}
 }
 

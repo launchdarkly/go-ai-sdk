@@ -36,7 +36,7 @@ func BedrockMessages(ctx context.Context, configKey, userInput string, userCtx l
 
 `init()` registers `PackageName`/`PackageVersion` for `$ld:ai:sdk:info`. `NewHandler` reports
 `bedrock-messages.createBedrockMessagesHandler` and `BedrockMessages` reports `bedrock-messages.bedrockMessages`;
-both then use the non-reporting `build` and `aiserver.ConfigInternal`.
+both then use the non-reporting `build` and `internal/sdkapi.Config`.
 
 ## Implementation details
 

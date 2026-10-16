@@ -89,7 +89,7 @@ func (r *recordingHandler) handler() *ProviderHandler {
 			}
 		}
 	}
-	return CreateHandlerInternal(ProvidesFor{"P", ModeAgent}, invoke, stream, false)
+	return createHandler(ProvidesFor{"P", ModeAgent}, invoke, stream, false)
 }
 
 func (r *recordingHandler) keys() []string {
@@ -335,7 +335,7 @@ func TestGraphModelSelectedHandoff(t *testing.T) {
 
 func TestGraphHandoffFailure(t *testing.T) {
 	f := withFake(t, multiEdge())
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeAgent}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeAgent}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		if fn, ok := req.ToolHandlers["__handoff_support"].(ToolFunc); ok {
 			_, _ = fn(ctx, nil)
 		}
@@ -442,7 +442,7 @@ func TestGraphStreamAbandonAndErrors(t *testing.T) {
 func TestGraphJudge(t *testing.T) {
 	withFake(t, twoNode(map[string]any{"gj": enabledConfig("P", "judge", nil)}))
 	var reqs []HandlerRequest
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeAgent}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeAgent}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 		if req.Variables["response_to_evaluate"] != nil {
 			reqs = append(reqs, req)
 			return HandlerResult{Output: `{"score":0.9,"reasoning":"fine"}`}, nil
@@ -548,7 +548,7 @@ func TestGraphSpanStatusOnEveryPath(t *testing.T) {
 	t.Run("node panic", func(t *testing.T) {
 		f := withFake(t, twoNode(nil))
 		exp := withSpans(t)
-		h := CreateHandlerInternal(ProvidesFor{"P", ModeAgent}, func(context.Context, HandlerRequest) (HandlerResult, error) { panic("node bug") }, nil, false)
+		h := createHandler(ProvidesFor{"P", ModeAgent}, func(context.Context, HandlerRequest) (HandlerResult, error) { panic("node bug") }, nil, false)
 		if r := run(func() { _, _ = Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}}).Invoke(bg, "q", userCtx) }); r == nil {
 			t.Fatal("the panic was swallowed")
 		}
@@ -620,7 +620,7 @@ func TestGraphRoutingNormalizesHandlerMode(t *testing.T) {
 	})
 	var served []string
 	mk := func(mode Mode, tag string) *ProviderHandler {
-		return CreateHandlerInternal(ProvidesFor{"P", mode}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+		return createHandler(ProvidesFor{"P", mode}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 			served = append(served, tag+":"+req.Variables[VarLD].(TrackData).ConfigKey)
 			return HandlerResult{Output: "out"}, nil
 		}, nil, false)

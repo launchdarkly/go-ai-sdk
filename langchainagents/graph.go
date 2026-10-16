@@ -20,6 +20,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
 // LangChainGraph returns aiserver's model-driven graph runner with this
@@ -28,7 +29,7 @@ import (
 func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph {
 	aiserver.ReportUsage("langchain-agents.langchainGraph", PackageName, PackageVersion)
 	options.Handlers = []*aiserver.ProviderHandler{newHandler(handler)}
-	return aiserver.GraphInternal(key, options)
+	return sdkapi.Graph(key, options)
 }
 
 // NativeGraphOptions configure ToLangGraph.

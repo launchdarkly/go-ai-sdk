@@ -24,7 +24,7 @@ func judgedConfig(extra map[string]any) map[string]any {
 // spanJudgeHandler answers like a model that calls tool "lookup" when it has
 // one, and returns a fixed verdict for judge calls, opening a real HandlerRun.
 func spanJudgeHandler(verdict string, capture bool, judgeErr error, judgeReqs *[]HandlerRequest) *ProviderHandler {
-	return CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+	return createHandler(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		if req.Variables["response_to_evaluate"] == nil {
 			if fn, ok := req.ToolHandlers["lookup"].(ToolFunc); ok {
 				if _, err := fn(ctx, map[string]any{"q": "x"}); err != nil {
