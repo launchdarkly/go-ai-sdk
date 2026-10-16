@@ -95,7 +95,11 @@ func twoNode() *fakeLD {
 var user = ldcontext.New("u-1")
 
 func resolve(key string) *aiserver.GraphDefinition {
-	return aiserver.ResolveGraph(bg, key, user, aiserver.GraphOptions{})
+	def, err := aiserver.ResolveGraph(bg, key, user, aiserver.GraphOptions{})
+	if err != nil {
+		panic(err)
+	}
+	return def
 }
 
 // models returns a ModelFactory serving one fake model per node key.
@@ -399,8 +403,11 @@ func TestToLangGraphFailureAndNoContext(t *testing.T) {
 func TestToLangGraphInvalid(t *testing.T) {
 	ld := &fakeLD{}
 	installClient(t, ld)
-	disabled := resolve("missing-graph")
-	if _, err := ToLangGraph(disabled, nil).Invoke(bg, "x"); !errors.Is(err, aiserver.ErrGraphDisabled) || !strings.Contains(err.Error(), "missing-graph") {
+	_, err := aiserver.ResolveGraph(bg, "missing-graph", user, aiserver.GraphOptions{})
+	if err == nil || !strings.Contains(err.Error(), "missing-graph") {
+		t.Fatalf("missing graph err = %v", err)
+	}
+	if _, err := ToLangGraph(&aiserver.GraphDefinition{Key: "missing-graph"}, nil).Invoke(bg, "x"); !errors.Is(err, aiserver.ErrGraphDisabled) || !strings.Contains(err.Error(), "missing-graph") {
 		t.Errorf("disabled = %v", err)
 	}
 	if _, err := ToLangGraph(&aiserver.GraphDefinition{Key: "rootless", Enabled: true}, nil).Invoke(bg, "x"); !errors.Is(err, ErrNoRoot) || !strings.Contains(err.Error(), "rootless") {

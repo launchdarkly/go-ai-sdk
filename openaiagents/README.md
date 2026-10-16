@@ -85,7 +85,10 @@ Native graph adapter (one multi-agent run with handoffs):
 
 ```go
 userCtx := ldcontext.New("user-123")
-def := aiserver.ResolveGraph(ctx, "support-graph", userCtx, aiserver.GraphOptions{})
+def, err := aiserver.ResolveGraph(ctx, "support-graph", userCtx, aiserver.GraphOptions{})
+if err != nil {
+	log.Fatal(err)
+}
 out, err := openaiagents.ToOpenAIAgents(def, &openaiagents.NativeGraphOptions{
 	ToolHandlers: tools,
 	Context:      userCtx, // omit to track no events

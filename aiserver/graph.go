@@ -517,18 +517,17 @@ func (d *GraphDefinition) Route(ctx context.Context, n *GraphNode, input string,
 	return res, err
 }
 
-// resolveDefinition fetches the topology and every node config. Any node that
-// fails to resolve disables the whole graph; the error is logged.
-func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Context, opts GraphOptions) *GraphDefinition {
+// resolveDefinition fetches the topology and every node config. A disabled
+// node, a missing root, or an evaluation failure is an error.
+func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Context, opts GraphOptions) (*GraphDefinition, error) {
 	def := &GraphDefinition{Key: key, userCtx: userCtx, opts: opts, nodes: map[string]*GraphNode{}}
 	c, err := InitClient(ctx, InitOptions{})
 	if err != nil {
-		sdkLogger().Error("graph resolution failed", "graph", key, "error", err)
-		return def
+		return nil, err
 	}
 	v, evalErr := c.JSONVariation(key, userCtx, ldvalue.ObjectBuild().Build())
 	if evalErr != nil {
-		sdkLogger().Error("graph flag evaluation failed; graph disabled", "graph", key, "error", evalErr)
+		return nil, fmt.Errorf("graph %q: %w", key, evalErr)
 	}
 	raw, _ := variationToAny(v).(map[string]any)
 	meta := &VariationMeta{}
@@ -537,9 +536,15 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 	}
 	def.trackData = newTrackData(key, AiConfig{}, *meta, key)
 	var topo GraphTopology
-	b, _ := json.Marshal(raw)
-	if err := json.Unmarshal(b, &topo); err != nil || topo.Root == "" {
-		return def
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil, errorf("graph %q: malformed topology: %w", key, err)
+	}
+	if err := json.Unmarshal(b, &topo); err != nil {
+		return nil, errorf("graph %q: malformed topology: %w", key, err)
+	}
+	if topo.Root == "" {
+		return nil, errorf("graph %q has no root", key)
 	}
 	keys := []string{topo.Root}
 	seen := map[string]bool{topo.Root: true}
@@ -562,9 +567,7 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 	for _, k := range keys {
 		cfg, nmeta, err := extractVariation(ctx, k, userCtx)
 		if err != nil {
-			sdkLogger().Error("graph node failed to resolve; graph disabled", "graph", key, "node", k, "error", err)
-			def.nodes, def.edges = map[string]*GraphNode{}, nil
-			return def
+			return nil, fmt.Errorf("graph %q node %q: %w", key, k, err)
 		}
 		def.nodes[k] = &GraphNode{Key: k, Config: cfg, Meta: nmeta}
 	}
@@ -573,12 +576,12 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 	}
 	def.Enabled = true
 	def.Root = def.nodes[topo.Root]
-	return def
+	return def, nil
 }
 
 // ResolveGraph resolves a graph flag into a definition without executing it,
-// for framework-native runners. Branch on Enabled before traversing.
-func ResolveGraph(ctx context.Context, key string, userCtx ldcontext.Context, opts GraphOptions) *GraphDefinition {
+// for framework-native runners. A non-nil error means the graph did not resolve.
+func ResolveGraph(ctx context.Context, key string, userCtx ldcontext.Context, opts GraphOptions) (*GraphDefinition, error) {
 	reportUsage("client.resolveGraph", "", "")
 	return resolveDefinition(ctx, key, userCtx, opts)
 }
@@ -613,23 +616,23 @@ func GraphInternal(key string, opts GraphOptions) *AgentGraph {
 // definition resolves once per distinct context content (equal contexts
 // share an entry), bounded by MaxGraphCacheSize. Only enabled definitions
 // are cached.
-func (g *AgentGraph) definition(ctx context.Context, userCtx ldcontext.Context) *GraphDefinition {
+func (g *AgentGraph) definition(ctx context.Context, userCtx ldcontext.Context) (*GraphDefinition, error) {
 	b, _ := json.Marshal(userCtx)
 	k := string(b)
 	g.mu.Lock()
 	if d, ok := g.cache[k]; ok {
 		g.mu.Unlock()
-		return d
+		return d, nil
 	}
 	g.mu.Unlock()
-	d := resolveDefinition(ctx, g.key, userCtx, g.opts)
-	if !d.Enabled {
-		return d // a disabled or failed resolution may be transient; resolve again next call
+	d, err := resolveDefinition(ctx, g.key, userCtx, g.opts)
+	if err != nil {
+		return nil, err // a failed resolution may be transient; resolve again next call
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if existing, ok := g.cache[k]; ok {
-		return existing
+		return existing, nil
 	}
 	if len(g.order) >= MaxGraphCacheSize {
 		delete(g.cache, g.order[0])
@@ -637,7 +640,7 @@ func (g *AgentGraph) definition(ctx context.Context, userCtx ldcontext.Context) 
 	}
 	g.cache[k] = d
 	g.order = append(g.order, k)
-	return d
+	return d, nil
 }
 
 func (g *AgentGraph) cacheLen() int {
@@ -689,7 +692,11 @@ func (g *AgentGraph) stream(ctx context.Context, input string, userCtx ldcontext
 			yield(GraphStreamEvent{}, errorf("graph %q requires handlers; pass Handlers or use ResolveGraph with a framework-native runner", g.key))
 			return
 		}
-		def := g.definition(ctx, userCtx)
+		def, err := g.definition(ctx, userCtx)
+		if err != nil {
+			yield(GraphStreamEvent{}, err)
+			return
+		}
 		if !def.Enabled {
 			yield(GraphStreamEvent{}, fmt.Errorf("%w: %s", ErrGraphDisabled, g.key))
 			return

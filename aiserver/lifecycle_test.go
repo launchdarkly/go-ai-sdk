@@ -188,11 +188,11 @@ func TestInspectConfigRecoversOnceKeyAvailable(t *testing.T) {
 	t.Setenv("LD_SDK_KEY", "")
 	f := &fakeLD{variations: map[string]any{"cfg": enabledConfig("P", "", nil)}}
 	withLDFactory(t, func(string) (LDClient, error) { return f, nil })
-	if r := InspectConfig(bg, "cfg", userCtx); r.Enabled {
+	if r, err := InspectConfig(bg, "cfg", userCtx); err == nil || r.Enabled {
 		t.Fatal("expected fallback without a key")
 	}
 	t.Setenv("LD_SDK_KEY", "now-set")
-	if r := InspectConfig(bg, "cfg", userCtx); !r.Enabled {
+	if r, err := InspectConfig(bg, "cfg", userCtx); err != nil || !r.Enabled {
 		t.Error("inspectConfig did not recover after the key appeared")
 	}
 	for _, e := range f.tracks {

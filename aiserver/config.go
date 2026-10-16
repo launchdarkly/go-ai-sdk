@@ -234,18 +234,23 @@ type InspectResult struct {
 	Meta    *VariationMeta
 }
 
-// InspectConfig reads a variation without invoking a model. It never errors.
-func InspectConfig(ctx context.Context, key string, userCtx ldcontext.Context) InspectResult {
+// InspectConfig reads a variation without invoking a model. A turned-off
+// variation is Enabled false and a nil error. Init, evaluation, and parse
+// failures are errors.
+func InspectConfig(ctx context.Context, key string, userCtx ldcontext.Context) (InspectResult, error) {
 	reportUsage("client.inspectConfig", "", "")
 	raw, meta, err := readVariation(ctx, key, userCtx)
-	if err != nil || meta == nil {
-		return InspectResult{}
+	if err != nil {
+		return InspectResult{}, err
 	}
 	res := InspectResult{Enabled: meta.Enabled, Meta: meta}
-	if meta.Enabled {
-		if cfg, err := ParseAiConfig(raw); err == nil {
-			res.Config = &cfg
-		}
+	if !meta.Enabled {
+		return res, nil
 	}
-	return res
+	cfg, err := ParseAiConfig(raw)
+	if err != nil {
+		return res, errorf("invalid AI config for %q: %w", key, err)
+	}
+	res.Config = &cfg
+	return res, nil
 }

@@ -171,8 +171,8 @@ if errors.Is(err, aiserver.ErrConfigDisabled) {
 |---|---|
 | `Config(ConfigArgs) *AIConfig` | Bind a config key; `.Invoke(ctx, input, ldctx, ...CallOption) (ProviderResponse, error)` / `.Stream(ctx, input, ldctx, ...CallOption) iter.Seq2[StreamEvent, error]` |
 | `Graph(key, GraphOptions) *AgentGraph` | Model-driven multi-agent router; `.Invoke` / `.Stream` |
-| `ResolveGraph(ctx, key, ldctx, GraphOptions) *GraphDefinition` | Topology + node configs for native runners |
-| `InspectConfig(ctx, key, ldctx) InspectResult` | Read a variation without invoking a model; never errors |
+| `ResolveGraph(ctx, key, ldctx, GraphOptions) (*GraphDefinition, error)` | Topology + node configs for native runners |
+| `InspectConfig(ctx, key, ldctx) (InspectResult, error)` | Read a variation without invoking a model. A turned-off variation is `Enabled == false` and a nil error |
 | `CreateHandler(ProvidesFor, invoke, stream, captureContent) *ProviderHandler` | Build a custom handler |
 | `BuildJudgeTasks` / `RunJudge` | Deferred judge evaluation on your own goroutine |
 | `InitClient` / `InitWithClient` / `GetClient` / `Shutdown` | Lifecycle |

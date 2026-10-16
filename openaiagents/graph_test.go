@@ -49,7 +49,11 @@ var user = ldcontext.New("u-1")
 
 func resolve(t *testing.T, ld *fakeLD, key string) *aiserver.GraphDefinition {
 	t.Helper()
-	return aiserver.ResolveGraph(bg, key, user, aiserver.GraphOptions{})
+	def, err := aiserver.ResolveGraph(bg, key, user, aiserver.GraphOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return def
 }
 
 func handlersFor(calls *[]string) map[string]aiserver.ToolHandler {
@@ -306,7 +310,11 @@ func TestToOpenAIAgentsErrors(t *testing.T) {
 	t.Run("disabled, rootless and nil definitions", func(t *testing.T) {
 		ld := &fakeLD{variations: map[string]map[string]any{}}
 		installClient(t, ld)
-		_, err := ToOpenAIAgents(resolve(t, ld, "off-graph"), nil).Invoke(bg, "q")
+		_, err := aiserver.ResolveGraph(bg, "off-graph", user, aiserver.GraphOptions{})
+		if err == nil || !strings.Contains(err.Error(), "off-graph") {
+			t.Fatalf("off-graph err = %v", err)
+		}
+		_, err = ToOpenAIAgents(&aiserver.GraphDefinition{Key: "off-graph"}, nil).Invoke(bg, "q")
 		if !errors.Is(err, aiserver.ErrGraphDisabled) || !strings.Contains(err.Error(), "off-graph") {
 			t.Errorf("disabled err = %v", err)
 		}
