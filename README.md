@@ -73,7 +73,18 @@ for ev, err := range cfg.Stream(ctx, "Hello", user) {
 agents := []*aiserver.ProviderHandler{claudeagents.NewHandler(claudeagents.Options{}), openaiagents.NewHandler(openaiagents.Options{})}
 out, err := aiserver.Graph("travel-agent-flow", aiserver.GraphOptions{Handlers: agents}).
 	Invoke(ctx, "Plan a week in Lisbon", user)
+
+// 4. A registry: build handlers and tools once, then share them.
+registry := aiserver.NewRegistry(aiserver.RegistryEntries{
+	Handlers: []*aiserver.ProviderHandler{claude, openai},
+	Tools:    map[string]aiserver.ToolHandler{"get-weather": aiserver.ToolFunc(getWeather)},
+})
+resp, err = aiserver.Config(aiserver.ConfigArgs{Key: "summariser", Registry: registry}).Invoke(ctx, "Hi", user)
+out, err = aiserver.Graph("travel-agent-flow", aiserver.GraphOptions{Registry: registry}).Invoke(ctx, "Plan a week in Lisbon", user)
 ```
+
+`ResolveGraph` takes the same `GraphOptions.Registry`. Handlers and tools passed
+directly on a call take precedence over the registry's.
 
 Failures are sentinel errors for `errors.Is`: `ErrNotInitialized`,
 `ErrConfigNotFound`, `ErrConfigDisabled`, `ErrNoHandler`, `ErrGraphDisabled`
