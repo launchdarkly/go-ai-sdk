@@ -120,13 +120,13 @@ func (m *Anthropic) params(messages []MessageContent, o CallOptions) (anthropic.
 			if err != nil {
 				return p, err
 			}
-			p.Messages = append(p.Messages, anthropic.NewUserMessage(blocks...))
+			p.Messages = appendAnthropic(p.Messages, anthropic.MessageParamRoleUser, blocks)
 		case ChatMessageTypeAI:
 			blocks, err := anthropicAssistantBlocks(msg.Parts)
 			if err != nil {
 				return p, err
 			}
-			p.Messages = append(p.Messages, anthropic.NewAssistantMessage(blocks...))
+			p.Messages = appendAnthropic(p.Messages, anthropic.MessageParamRoleAssistant, blocks)
 		default:
 			return p, fmt.Errorf("llms: anthropic: role %q not supported", msg.Role)
 		}
@@ -153,6 +153,18 @@ func (m *Anthropic) params(messages []MessageContent, o CallOptions) (anthropic.
 		p.Tools = append(p.Tools, anthropicTool(t.Function))
 	}
 	return p, nil
+}
+
+// appendAnthropic adds a turn, folding it into the previous one when both
+// have the same role. Anthropic requires every tool_use id to be answered in
+// the single user message that follows, and the handlers send one tool
+// message per parallel call.
+func appendAnthropic(msgs []anthropic.MessageParam, role anthropic.MessageParamRole, blocks []anthropic.ContentBlockParamUnion) []anthropic.MessageParam {
+	if n := len(msgs); n > 0 && msgs[n-1].Role == role {
+		msgs[n-1].Content = append(msgs[n-1].Content, blocks...)
+		return msgs
+	}
+	return append(msgs, anthropic.MessageParam{Role: role, Content: blocks})
 }
 
 func anthropicTool(f *FunctionDefinition) anthropic.ToolUnionParam {

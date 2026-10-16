@@ -54,8 +54,8 @@ func TestAnthropicRequest(t *testing.T) {
 		t.Errorf("system = %s", sys)
 	}
 	got := b["messages"].([]any)
-	if len(got) != 4 {
-		t.Fatalf("messages = %d, want 4 (no merging)", len(got))
+	if len(got) != 3 {
+		t.Fatalf("messages = %d, want 3 (the tool result and the next human turn share one user message)", len(got))
 	}
 	user := got[0].(map[string]any)["content"].([]any)
 	if len(user) != 4 || user[1].(map[string]any)["source"].(map[string]any)["data"] != "AQI=" ||
@@ -69,8 +69,10 @@ func TestAnthropicRequest(t *testing.T) {
 		t.Errorf("tool_use block = %v (empty arguments must be {})", tu)
 	}
 	tr := got[2].(map[string]any)
-	if tr["role"] != "user" || tr["content"].([]any)[0].(map[string]any)["tool_use_id"] != "tu_1" {
-		t.Errorf("tool result message = %v", tr)
+	trBlocks := tr["content"].([]any)
+	if tr["role"] != "user" || len(trBlocks) != 2 || trBlocks[0].(map[string]any)["tool_use_id"] != "tu_1" ||
+		trBlocks[1].(map[string]any)["text"] != "thanks" {
+		t.Errorf("tool result message = %v (tool_result first, then the human text)", tr)
 	}
 	tool := b["tools"].([]any)[0].(map[string]any)
 	if tool["name"] != "lookup" || tool["description"] != "d" || !reflect.DeepEqual(tool["input_schema"].(map[string]any)["required"], []any{"q"}) {
@@ -78,6 +80,36 @@ func TestAnthropicRequest(t *testing.T) {
 	}
 	if !reflect.DeepEqual(b["stop_sequences"], []any{"END"}) {
 		t.Errorf("stop_sequences = %v", b["stop_sequences"])
+	}
+}
+
+// Parallel tool calls: the handlers append one tool message per call, and
+// Anthropic requires every tool_use id to be answered in the single user
+// message that follows the assistant turn.
+func TestAnthropicMergesParallelToolResults(t *testing.T) {
+	f, url := newFake(t, "application/json", anthropicReply)
+	msgs := []MessageContent{
+		TextParts(ChatMessageTypeHuman, "weather in Paris and Rome?"),
+		{Role: ChatMessageTypeAI, Parts: []ContentPart{
+			ToolCall{ID: "tu_1", FunctionCall: &FunctionCall{Name: "w", Arguments: `{"c":"Paris"}`}},
+			ToolCall{ID: "tu_2", FunctionCall: &FunctionCall{Name: "w", Arguments: `{"c":"Rome"}`}},
+		}},
+		{Role: ChatMessageTypeTool, Parts: []ContentPart{ToolCallResponse{ToolCallID: "tu_1", Content: "sunny"}}},
+		{Role: ChatMessageTypeTool, Parts: []ContentPart{ToolCallResponse{ToolCallID: "tu_2", Content: "rain"}}},
+	}
+	if _, err := newTestAnthropic(t, url).GenerateContent(bg, msgs); err != nil {
+		t.Fatal(err)
+	}
+	got := f.bodies[0]["messages"].([]any)
+	if len(got) != 3 {
+		mb, _ := json.Marshal(got)
+		t.Fatalf("messages = %s, want 3: both tool results in one user message", mb)
+	}
+	last := got[2].(map[string]any)
+	blocks := last["content"].([]any)
+	if last["role"] != "user" || len(blocks) != 2 ||
+		blocks[0].(map[string]any)["tool_use_id"] != "tu_1" || blocks[1].(map[string]any)["tool_use_id"] != "tu_2" {
+		t.Errorf("tool results message = %v", last)
 	}
 }
 
