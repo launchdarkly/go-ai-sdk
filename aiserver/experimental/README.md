@@ -117,7 +117,8 @@ A skill revoked in LaunchDarkly is removed from disk within the debounce window 
 ### The skills one AI Config uses
 
 ```go
-res := aiserver.InspectConfig(ctx, "my-agent", ldcontext.New("user-1"))
+res, err := aiserver.InspectConfig(ctx, "my-agent", ldcontext.New("user-1"))
+if err != nil { return err }
 refs, err := experimental.SkillRefs(res.Config) // an error, never [], when the config failed to resolve
 if err != nil { return err }
 report, err := experimental.WriteSkills(refs, "/etc/agent/skills", nil)

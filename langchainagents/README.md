@@ -97,7 +97,10 @@ Native LangGraph runner: the resolved graph becomes one langgraphgo `StateGraph`
 
 ```go
 user := ldcontext.New("user-1")
-def := aiserver.ResolveGraph(ctx, "support-graph", user, aiserver.GraphOptions{})
+def, err := aiserver.ResolveGraph(ctx, "support-graph", user, aiserver.GraphOptions{})
+if err != nil {
+	log.Fatal(err)
+}
 out, err := langchainagents.ToLangGraph(def, &langchainagents.NativeGraphOptions{
 	ToolHandlers: tools,
 	Context:      user, // without it, no LaunchDarkly events are tracked

@@ -96,7 +96,10 @@ Native adapter: every child node becomes a sub-agent tool of its parent, and the
 the run.
 
 ```go
-def := aiserver.ResolveGraph(ctx, "support-graph", ldcontext.New("user-123"), aiserver.GraphOptions{})
+def, err := aiserver.ResolveGraph(ctx, "support-graph", ldcontext.New("user-123"), aiserver.GraphOptions{})
+if err != nil {
+	log.Fatal(err)
+}
 out, err := claudeagents.ToClaudeAgents(def, &claudeagents.AdapterOptions{ToolHandlers: tools}).
 	Invoke(ctx, "I was double charged")
 ```
