@@ -2,10 +2,9 @@
 // (providesFor */agent), plus the LangChainGraph wrapper and the ToLangGraph
 // native graph adapter.
 //
-// It is built on two community Go ports: github.com/tmc/langchaingo (models,
-// messages, tool calling) and github.com/smallnest/langgraphgo (StateGraph,
-// Command, the AddMessages reducer). The agent is a ReAct loop on a
-// langgraphgo StateGraph, the Go equivalent of create_react_agent.
+// Models, messages and tool calling come from github.com/tmc/langchaingo.
+// The agent is a ReAct loop on internal/stategraph, the Go equivalent of
+// create_react_agent.
 package langchainagents
 
 import (
@@ -14,11 +13,11 @@ import (
 	"iter"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
-	"github.com/smallnest/langgraphgo/graph"
 	"github.com/tmc/langchaingo/llms"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
 )
 
 const (
@@ -53,7 +52,7 @@ var (
 	// ErrNilGraph is returned by the native graph runner for a nil definition.
 	ErrNilGraph = errors.New("langchainagents: agent graph definition is nil")
 	// ErrNodeName is returned by the native graph runner when a node key,
-	// sanitized for langgraphgo, is END or matches another node's name.
+	// sanitized for stategraph, is END or matches another node's name.
 	ErrNodeName = errors.New("langchainagents: node name collision")
 )
 
@@ -156,7 +155,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 	a := &reactAgent{
 		model: model, tools: tools, system: p.System, opts: langchainwire.CallOptions(cfg.Model.Parameters),
 		modelName: cfg.Model.Name, run: r, onText: onText,
-		exec: func(ctx context.Context, tc llms.ToolCall) (llms.MessageContent, *graph.Command, error) {
+		exec: func(ctx context.Context, tc llms.ToolCall) (llms.MessageContent, *stategraph.Command, error) {
 			m, err := langchainwire.RunTool(ctx, r, fns, tc)
 			return m, nil, err
 		},

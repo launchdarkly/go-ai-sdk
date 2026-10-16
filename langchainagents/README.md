@@ -1,10 +1,9 @@
 # langchainagents
 
 LangChain agent handler for the LaunchDarkly AI SDK for Go, plus the `LangChainGraph`
-wrapper and the `ToLangGraph` native graph adapter. Built on two community Go ports:
-[langchaingo](https://github.com/tmc/langchaingo) v0.1.15 (models, messages, tool calling)
-and [langgraphgo](https://github.com/smallnest/langgraphgo) v0.8.5 (`StateGraph`, `Command`,
-the `AddMessages` reducer). Neither is an official LangChain package.
+wrapper and the `ToLangGraph` native graph adapter. Models, messages and tool calling come from the community Go port
+[langchaingo](https://github.com/tmc/langchaingo) v0.1.15, which is not an official LangChain
+package. Graphs run on the SDK's own state-graph runner.
 
 ```bash
 go get github.com/launchdarkly/go-ai-sdk/langchainagents
@@ -93,7 +92,7 @@ out, err := langchainagents.LangChainGraph("support-graph",
 	Invoke(ctx, "I was double charged", ldcontext.New("user-1"))
 ```
 
-Native LangGraph runner: the resolved graph becomes one langgraphgo `StateGraph`.
+Native LangGraph runner: the resolved graph becomes one state graph on the SDK's own runner.
 
 ```go
 user := ldcontext.New("user-1")

@@ -14,7 +14,6 @@ require (
 	github.com/launchdarkly/go-sdk-common/v3 v3.6.0
 	github.com/launchdarkly/go-server-sdk/v7 v7.19.1
 	github.com/openai/openai-go/v3 v3.77.0
-	github.com/smallnest/langgraphgo v0.8.5
 	github.com/tmc/langchaingo v0.1.15
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.47.0
@@ -74,4 +73,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
+	sigs.k8s.io/yaml v1.4.0 // indirect
 )

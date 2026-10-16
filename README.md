@@ -29,11 +29,11 @@ Requires Go 1.26.
 | [`claudeagents`](claudeagents) | 1 | Anthropic agent handler, `ClaudeGraph`, `ToClaudeAgents` — `{Anthropic, agent}` |
 | [`openaiagents`](openaiagents) | 1 | OpenAI agent handler, `OpenAIGraph`, `ToOpenAIAgents` — `{OpenAI, agent}` |
 | [`bedrockagents`](bedrockagents) | 1 | Bedrock agent handler, `BedrockGraph` — `{Bedrock, agent}` |
-| [`langchainagents`](langchainagents) | 1 | langchaingo + langgraphgo agent handler, `LangChainGraph`, `ToLangGraph` — `{*, agent}` |
+| [`langchainagents`](langchainagents) | 1 | langchaingo agent handler, `LangChainGraph`, `ToLangGraph` — `{*, agent}` |
 | [`examples`](examples) | — | Integration entry point |
 
-`langchainmessages` and `langchainagents` use community Go ports of LangChain
-and LangGraph (`tmc/langchaingo`, `smallnest/langgraphgo`). `claudeagents` runs the
+`langchainmessages` and `langchainagents` use the community Go port of LangChain
+(`tmc/langchaingo`); graphs run on the SDK's own state-graph runner. `claudeagents` runs the
 Claude Code built-in tools on the host itself (see its README's security note). Each
 package README lists what its Go version does differently.
 

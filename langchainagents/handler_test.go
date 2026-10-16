@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
-	"github.com/smallnest/langgraphgo/graph"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/anthropic"
 	"go.opentelemetry.io/otel/codes"
@@ -16,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
 )
 
 const (
@@ -134,7 +134,7 @@ func TestAgentCreationAPI(t *testing.T) {
 	}
 	var got []seen
 	orig := createAgent
-	createAgent = func(a *reactAgent) (*graph.StateRunnable[any], error) {
+	createAgent = func(a *reactAgent) (*stategraph.Runnable, error) {
 		var names []string
 		for _, t := range a.tools {
 			names = append(names, t.Function.Name)
@@ -625,7 +625,7 @@ func TestSdkInfoRegistered(t *testing.T) {
 	t.Errorf("no $ld:ai:sdk:info for %s: %v", PackageName, ld.events("$ld:ai:sdk:info"))
 }
 
-// A panicking tool ends the run's root and tool spans ERROR. langgraphgo
+// A panicking tool ends the run's root and tool spans ERROR. stategraph
 // recovers a node panic as the node's error, so the call returns an error.
 func TestToolPanicEndsSpans(t *testing.T) {
 	c := instr("I")
