@@ -56,7 +56,7 @@ CallableTools, ToolResultString, SetLDSpanAttributes
 BuildJudgeTasks, BuildJudgeTasksArgs, RunJudge, JudgeTask, JudgeResult, JudgeRunResult,
 FormattingInstructions
 // registry, utils, telemetry
-Registry, RegistryEntries, NewRegistry, Compose, GlobalRegistry, ParseAiConfig, ParseTemplate,
+Registry, RegistryEntries, NewRegistry, Compose, ParseAiConfig, ParseTemplate,
 ParseUsage, NormalizeMode, ParseJSONWithPossibleFences, WithConversationID,
 ConversationIDSpanProcessor, ContextIdentity, ContextToMap, Track, RegisterAiSdkPackage,
 ReportUsage, TracerPrefix, PackageName, PackageVersion

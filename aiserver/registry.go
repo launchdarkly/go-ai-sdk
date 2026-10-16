@@ -23,9 +23,6 @@ func NewRegistry(initial RegistryEntries) *Registry {
 	return r
 }
 
-// GlobalRegistry is what handler packages' convenience `Register` funcs use.
-var GlobalRegistry = NewRegistry(RegistryEntries{})
-
 // Register appends handlers and tools. A duplicate providesFor or tool key
 // logs a warning and the last one wins.
 func (r *Registry) Register(e RegistryEntries) {
