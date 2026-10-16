@@ -20,7 +20,7 @@ LaunchDarkly), `OTEL_EXPORTER_OTLP_ENDPOINT`, `LD_SERVICE_NAME`,
 
 | Scenario | Demonstrates | Reference flag |
 |---|---|---|
-| `agent` | `Config().Invoke` through the global registry | `launch-darkly-documentation-summarizer` |
+| `agent` | `Config().Invoke` through the examples' registry | `launch-darkly-documentation-summarizer` |
 | `history` | `Invoke` with prior conversation turns | same |
 | `conversation` | several turns under one `gen_ai.conversation.id`, inline judge scores on stderr | same |
 | `streaming` | `Config().Stream` | same |
@@ -45,7 +45,7 @@ an official LangGraph; with a missing or disabled graph flag it exits 1 with
 | File | Purpose |
 |---|---|
 | `main.go` | Scenario dispatch, client init and shutdown, exit codes |
-| `register.go` | Registers every handler and tool in `aiserver.GlobalRegistry` (`web-search` → `claudeagents.ClaudeWebSearch`; `langchainagents` as the `{*, agent}` fallback) |
+| `register.go` | Builds the `registry` every scenario uses from every handler and tool (`web-search` → `claudeagents.ClaudeWebSearch`; `langchainagents` as the `{*, agent}` fallback) |
 | `tools.go` | Tool implementations, keyed exactly as the flag variations name them |
 | `scenarios.go` | One function per scenario |
 | `utils.go` | `newContext`, `newMultiContext`, `newConversationID`, `writeOutput` (→ `output/`), `solidColorPNGBase64` |

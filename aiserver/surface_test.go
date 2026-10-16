@@ -18,7 +18,7 @@ var rootSurface = []string{
 	"ContentText", "ContextIdentity", "ContextToMap", "ConversationIDSpanProcessor", "CreateHandler",
 	"CreateHandlerInternal", "DefaultOTLPEndpoint", "ErrConfigDisabled", "ErrConfigNotFound", "ErrGraphDisabled",
 	"ErrNoHandler", "ErrNotInitialized", "EventChunk", "EventDone", "EventHandoff", "EventNodeDone", "EventNodeStart",
-	"EventType", "FormattingInstructions", "GetClient", "GlobalRegistry", "Graph", "GraphDefinition", "GraphEdge",
+	"EventType", "FormattingInstructions", "GetClient", "Graph", "GraphDefinition", "GraphEdge",
 	"GraphInternal", "GraphNode", "GraphOptions", "GraphResponse", "GraphSpanName", "GraphStreamEvent",
 	"GraphTopology", "GraphTopologyEdge", "HandlerRequest", "HandlerResult", "HandlerRun", "HandlerSpanOptions",
 	"HandlerStreamEvent", "ImageSource", "ImageURL", "InitClient", "InitOptions", "InitWithClient", "InputDetails",

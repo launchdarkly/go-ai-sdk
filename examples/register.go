@@ -26,9 +26,9 @@ var exampleTools = map[string]aiserver.ToolHandler{
 	"fetch-launchdarkly-documentation": aiserver.ToolFunc(fetchLDDocumentation),
 }
 
-// register puts every handler in this module and every example tool in the
-// global registry. Go has no import side effects across packages, so main
-// calls it explicitly instead of a side-effect import.
+// registry holds every handler in this module and every example tool.
+var registry *aiserver.Registry
+
 func register() {
 	handlers := []*aiserver.ProviderHandler{
 		openaimessages.NewHandler(openaimessages.Options{}),
@@ -50,5 +50,5 @@ func register() {
 	} else {
 		fmt.Fprintln(os.Stderr, "bedrock-agents not registered:", err)
 	}
-	aiserver.GlobalRegistry.Register(aiserver.RegistryEntries{Handlers: handlers, Tools: exampleTools})
+	registry = aiserver.NewRegistry(aiserver.RegistryEntries{Handlers: handlers, Tools: exampleTools})
 }
