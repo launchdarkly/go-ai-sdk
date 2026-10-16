@@ -118,8 +118,9 @@ LaunchDarkly endpoints), `OTLPEndpoint`, `ServiceName`, `Environment`, `WaitFor`
 
 Initialization paths:
 
-- **Lazy** — `Config(...).Invoke` and `InspectConfig` call `InitClient` with no
-  options on first use.
+- **Lazy** — the first `Config(...)` or `Graph(...)` call, `ResolveGraph` or
+  `InspectConfig` calls `InitClient` with an empty `InitOptions`, so every
+  setting comes from the environment variables above.
 - **Explicit** — `InitClient(ctx, opts)` to pass options or fail fast at startup.
 - **Bring your own client** — `InitWithClient(ctx, ldClient, opts)` with any value
   that satisfies `aiserver.LDClient` (a `*ldclient.LDClient` does).
