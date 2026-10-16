@@ -25,15 +25,17 @@ Requires Go 1.26.
 | [`claudemessages`](claudemessages) | 1 | Anthropic Messages API handler — `{Anthropic, messages}` |
 | [`openaimessages`](openaimessages) | 1 | OpenAI Responses API handler — `{OpenAI, messages}` |
 | [`bedrockmessages`](bedrockmessages) | 1 | Amazon Bedrock Converse handler — `{Bedrock, messages}` |
-| [`langchainmessages`](langchainmessages) | 1 | langchaingo handler for any provider — `{*, messages}` |
+| [`langchainmessages`](langchainmessages) | 1 | LangChain-style handler for any provider — `{*, messages}` |
 | [`claudeagents`](claudeagents) | 1 | Anthropic agent handler, `ClaudeGraph`, `ToClaudeAgents` — `{Anthropic, agent}` |
 | [`openaiagents`](openaiagents) | 1 | OpenAI agent handler, `OpenAIGraph`, `ToOpenAIAgents` — `{OpenAI, agent}` |
 | [`bedrockagents`](bedrockagents) | 1 | Bedrock agent handler, `BedrockGraph` — `{Bedrock, agent}` |
-| [`langchainagents`](langchainagents) | 1 | langchaingo agent handler, `LangChainGraph`, `ToLangGraph` — `{*, agent}` |
+| [`langchainagents`](langchainagents) | 1 | LangChain-style agent handler, `LangChainGraph`, `ToLangGraph` — `{*, agent}` |
+| [`llms`](llms) | 1 | Chat-model interface and built-in OpenAI / Anthropic / Bedrock models for the LangChain handlers |
 | [`examples`](examples) | — | Integration entry point |
 
-`langchainmessages` and `langchainagents` use the community Go port of LangChain
-(`tmc/langchaingo`); graphs run on the SDK's own state-graph runner. `claudeagents` runs the
+LangChain publishes no official Go SDK. `langchainmessages` and `langchainagents` keep the
+LangChain handler contract (the `*` fallback for any provider) on the SDK's own `llms` package
+and state-graph runner, with no community port. `claudeagents` runs the
 Claude Code built-in tools on the host itself (see its README's security note). Each
 package README lists what its Go version does differently.
 

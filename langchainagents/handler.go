@@ -2,8 +2,8 @@
 // (providesFor */agent), plus the LangChainGraph wrapper and the ToLangGraph
 // native graph adapter.
 //
-// Models, messages and tool calling come from github.com/tmc/langchaingo.
-// The agent is a ReAct loop on internal/stategraph, the Go equivalent of
+// Models, messages and tool calling come from the SDK's llms package. The
+// agent is a ReAct loop on internal/stategraph, the Go equivalent of
 // create_react_agent.
 package langchainagents
 
@@ -13,11 +13,11 @@ import (
 	"iter"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
-	"github.com/tmc/langchaingo/llms"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
+	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
 const (
@@ -58,7 +58,7 @@ var (
 
 func init() { aiserver.RegisterAiSdkPackage(PackageName, PackageVersion) }
 
-// ModelFactory builds the langchaingo model for one call from the evaluated
+// ModelFactory builds the llms model for one call from the evaluated
 // AI Config, so the model can see config.model.parameters and name.
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
 
@@ -68,7 +68,7 @@ type Options struct {
 	// Model is used for every call when set.
 	Model llms.Model
 	// ModelFactory is called per request when Model is nil. When both are nil
-	// the handler builds a langchaingo model from config.provider.name:
+	// the handler builds a built-in llms model from config.provider.name:
 	// "anthropic", "bedrock", or OpenAI for anything else.
 	ModelFactory ModelFactory
 	// CaptureContent is attached to the handler so the client core can gate
@@ -127,9 +127,6 @@ func (r runResult) rawUsage() map[string]any {
 // run builds the ReAct agent for req and runs it; onText is nil when
 // blocking.
 func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText func(string) bool) (runResult, error) {
-	// Mark an explicit temperature of 0 before any span or model context is
-	// derived from ctx, so the Bedrock client middleware sees it.
-	ctx = langchainwire.MarkExplicitZeroTemperature(ctx, req.Config.Model.Parameters)
 	req.Config = langchainwire.ModelConfig(req.Config)
 	cfg := req.Config
 

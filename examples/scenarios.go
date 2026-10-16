@@ -194,8 +194,8 @@ func nativeGraph(ctx context.Context, key, input string) error {
 	return writeOutput(resp)
 }
 
-// nativeGraphLangChain resolves the graph and runs it as a langgraphgo
-// StateGraph through langchainagents.ToLangGraph. A disabled or missing
+// nativeGraphLangChain resolves the graph and runs it as one state graph
+// through langchainagents.ToLangGraph. A disabled or missing
 // graph is ToLangGraph's error to report.
 func nativeGraphLangChain(ctx context.Context, key, input string) error {
 	user := newContext()

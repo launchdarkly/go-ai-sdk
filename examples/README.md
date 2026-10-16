@@ -36,8 +36,8 @@ Failure cases exit 1 with one `Error: …` line, e.g.
 `go run ./examples agent doesnt-exist "hi"` and
 `go run ./examples graph travel-agent-flow-wrong-key "hi"`.
 
-`native-graph-langchain` uses the community `langchaingo` port, not
-an official LangChain; with a missing or disabled graph flag it exits 1 with
+`native-graph-langchain` runs on the SDK's own `llms` models and state-graph runner (there is
+no official LangChain for Go); with a missing or disabled graph flag it exits 1 with
 `ToLangGraph`'s `ErrGraphDisabled` error.
 
 ## Files

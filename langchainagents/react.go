@@ -8,12 +8,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/tmc/langchaingo/llms"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
+	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
 // This file is the Go equivalent of LangGraph's create_react_agent /

@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
-	"github.com/tmc/langchaingo/llms"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -20,6 +19,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
+	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
 // LangChainGraph returns aiserver's model-driven graph runner with this
@@ -262,7 +262,6 @@ func (r *graphRun) nodeFunc(n *aiserver.GraphNode) func(context.Context, any) (a
 		td := n.TrackData(r.g.def.Key, r.runID)
 		start := time.Now()
 		cfg := langchainwire.ModelConfig(n.Config)
-		ctx = langchainwire.MarkExplicitZeroTemperature(ctx, cfg.Model.Parameters)
 
 		in := messagesOf(state)
 		if n == r.g.def.Root {

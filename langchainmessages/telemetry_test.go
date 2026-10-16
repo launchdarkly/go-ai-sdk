@@ -5,12 +5,12 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/tmc/langchaingo/llms"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
 func okA() map[string]aiserver.ToolHandler {

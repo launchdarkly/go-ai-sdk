@@ -1,9 +1,10 @@
 # langchainagents
 
 LangChain agent handler for the LaunchDarkly AI SDK for Go, plus the `LangChainGraph`
-wrapper and the `ToLangGraph` native graph adapter. Models, messages and tool calling come from the community Go port
-[langchaingo](https://github.com/tmc/langchaingo) v0.1.15, which is not an official LangChain
-package. Graphs run on the SDK's own state-graph runner.
+wrapper and the `ToLangGraph` native graph adapter. Models, messages and tool calling come
+from the SDK's own [`llms`](../llms) package, and graphs run on the SDK's own state-graph
+runner. LangChain publishes no official Go SDK, so this package does not depend on a
+community port.
 
 ```bash
 go get github.com/launchdarkly/go-ai-sdk/langchainagents
@@ -55,9 +56,9 @@ func main() {
 Single handler with `aiserver.Config` and an injected model:
 
 ```go
-import "github.com/tmc/langchaingo/llms/openai"
+import "github.com/launchdarkly/go-ai-sdk/llms"
 
-llm, err := openai.New() // reads OPENAI_API_KEY
+llm, err := llms.NewOpenAI(llms.OpenAIOptions{Model: "gpt-4o"}) // reads OPENAI_API_KEY
 if err != nil {
 	return err
 }
@@ -129,11 +130,11 @@ default), `ErrNoToolHandler`, `ErrEmptyResponse`, `ErrNoRoot`, `ErrNilGraph`,
 |---|---|
 | `Options.Model` / `NativeGraphOptions.ModelFactory` | the model you supply |
 | `Options.ModelFactory` | `ModelFactory(config)` per call |
-| neither | built from lowercased `provider.name`: `anthropic` → `llms/anthropic`, `bedrock` → `llms/bedrock` (model id prefixed with `model.region`), anything else → `llms/openai` |
+| neither | built from lowercased `provider.name`: `anthropic` → `llms.NewAnthropic` (Messages API), `bedrock` → `llms.NewBedrock` (Converse API; model id prefixed with `model.region`), anything else → `llms.NewOpenAI` (Chat Completions, so any OpenAI-compatible endpoint works through `OPENAI_BASE_URL`) |
 
-`config.model.parameters` maps to langchaingo call options (`max_tokens`, `temperature`,
-`top_p`, `top_k`, `seed`, `frequency_penalty`, `presence_penalty`, `stop`).
-`config.model.custom` is never read.
+`config.model.parameters` maps to `llms` call options (`max_tokens`, `temperature`,
+`top_p`, `top_k`, `seed`, `frequency_penalty`, `presence_penalty`, `stop`). An explicit `0`
+is sent; an unset value is left to the provider's default. `config.model.custom` is never read.
 
 ## Telemetry
 
@@ -149,7 +150,8 @@ The handler's root span is `langchain.agent` (blocking and streaming), with `cha
 | `LD_SDK_KEY` | `aiserver` lazy init | Required unless you call `aiserver.InitWithClient` |
 | `OPENAI_API_KEY` | built-in OpenAI model | Required for OpenAI / fallback providers without an injected model |
 | `ANTHROPIC_API_KEY` | built-in Anthropic model | Required for `provider.name = Anthropic` without an injected model |
-| `OPENAI_BASE_URL` / `OPENAI_ORGANIZATION` | built-in OpenAI model | Optional |
+| `OPENAI_BASE_URL` (or `OPENAI_API_BASE`) / `OPENAI_ORGANIZATION` / `OPENAI_MODEL` | built-in OpenAI model | Optional |
 | AWS credential chain (`AWS_REGION`, `AWS_PROFILE`, `AWS_BEARER_TOKEN_BEDROCK`, ...) | built-in Bedrock model | Required for `provider.name = Bedrock` without an injected model |
 
-The package itself reads no environment variables; langchaingo and the core client do.
+The handler package reads no environment variables itself; the built-in `llms` models and the
+core client do.

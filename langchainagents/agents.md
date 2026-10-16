@@ -3,8 +3,7 @@
 ## Role and tier
 
 Tier 1 handler package. `ProvidesFor = {"*", "agent"}`: the wildcard fallback for any
-agent-mode variation. Built on the community ports
-`github.com/tmc/langchaingo` v0.1.15; graphs run on the internal `internal/stategraph` runner. Also
+agent-mode variation. Built on the SDK's own `llms` package; graphs run on the internal `internal/stategraph` runner. Also
 exports the `LangChainGraph` wrapper and the `ToLangGraph` native adapter.
 
 ## File map
@@ -20,8 +19,8 @@ exports the `LangChainGraph` wrapper and the `ToLangGraph` native adapter.
 | `README.md` | User docs. |
 | `agents.md` | This file. |
 
-Shared langchaingo plumbing (model routing, Bedrock zero-temperature fix, message/tool
-conversion, usage keys, one model turn, one tool call) lives in
+Shared `llms` plumbing (model routing, message/tool conversion, usage keys, one model turn,
+one tool call) lives in
 [`internal/langchainwire`](../internal/langchainwire), also used by `langchainmessages`.
 
 ## Public exports
@@ -115,8 +114,8 @@ to pre-warm.
 | Dependency | Why |
 |---|---|
 | `github.com/launchdarkly/go-ai-sdk/aiserver` | Handler contract, prompt composition, span helpers, graph definition, tracking. |
-| `github.com/launchdarkly/go-ai-sdk/internal/langchainwire` | langchaingo plumbing shared with `langchainmessages`. |
-| `github.com/tmc/langchaingo/llms` | `llms.Model`, message and tool types (provider models via langchainwire). |
+| `github.com/launchdarkly/go-ai-sdk/internal/langchainwire` | `llms` plumbing shared with `langchainmessages`. |
+| `github.com/launchdarkly/go-ai-sdk/llms` | `llms.Model`, message and tool types, built-in models (routed via langchainwire). Replaces langchaingo (AIC-3609). |
 | `github.com/launchdarkly/go-ai-sdk/internal/stategraph` | `Graph`, `Command`, `END`: the state-graph runner (replaces langgraphgo, AIC-3609). |
 | `github.com/google/uuid` | Per-run id for graph tracking. |
 | `go.opentelemetry.io/otel` | `ld.ai.graph` span. |
