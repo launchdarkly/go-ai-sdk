@@ -4,25 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
-	"github.com/smallnest/langgraphgo/graph"
-	"github.com/tmc/langchaingo/llms"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
+	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
 // This file is the Go equivalent of LangGraph's create_react_agent /
-// LangChain's createAgent. langgraphgo ships one (prebuilt.CreateAgent)
-// but its package imports github.com/smallnest/goskills and langchaingo's
-// tools package (go.starlark.net), neither of which is in this module's
-// go.sum, so the same agent is built here on langgraphgo's StateGraph: an
-// "agent" node calls the model, a "tools" node (the ToolNode equivalent)
-// runs the requested tools, and a tools condition loops between them until
-// the model answers without tool calls.
+// LangChain's createAgent, built on internal/stategraph: an "agent" node
+// calls the model, a "tools" node (the ToolNode equivalent) runs the
+// requested tools, and a tools condition loops between them until the model
+// answers without tool calls.
 
 const (
 	messagesKey = "messages"
@@ -30,35 +28,52 @@ const (
 	agentNode   = "agent"
 	toolsNode   = "tools"
 	// recursionLimit bounds node executions per graph run, LangGraph's
-	// default recursion_limit; langgraphgo has none of its own.
+	// default recursion_limit; stategraph has none of its own.
 	recursionLimit = 25
 )
 
 // errStopped means the stream consumer stopped iterating mid-turn.
 var errStopped = errors.New("langchainagents: stream abandoned by consumer")
 
-// messagesSchema is the WorkflowState equivalent: one `messages`
-// channel merged by langgraphgo's AddMessages reducer; any other key is
-// overwritten. State values are map[string]any carried as `any`, because
-// langgraphgo recognises a node's *graph.Command only when the state type
-// is an interface.
-type messagesSchema struct{ m *graph.MapSchema }
+// messagesSchema is the WorkflowState equivalent: `messages` is appended to
+// (LangGraph's add_messages, for messages without ids) and any other key is
+// overwritten. Each update returns a new map, so a state a node was given is
+// never changed under it. State is map[string]any carried as `any`.
+type messagesSchema struct{}
 
-func newMessagesSchema() messagesSchema {
-	m := graph.NewMapSchema()
-	m.RegisterReducer(messagesKey, graph.AddMessages)
-	return messagesSchema{m}
-}
+func newMessagesSchema() messagesSchema { return messagesSchema{} }
 
-func (s messagesSchema) Init() any { return s.m.Init() }
+func (messagesSchema) Init() any { return map[string]any{} }
 
-func (s messagesSchema) Update(current, update any) (any, error) {
+func (messagesSchema) Update(current, update any) (any, error) {
 	u, ok := update.(map[string]any)
 	if !ok { // a Command without an Update
 		return current, nil
 	}
 	c, _ := current.(map[string]any)
-	return s.m.Update(c, u)
+	next := make(map[string]any, len(c)+len(u))
+	maps.Copy(next, c)
+	for k, v := range u {
+		if k != messagesKey {
+			next[k] = v
+			continue
+		}
+		var add []llms.MessageContent
+		switch m := v.(type) {
+		case []llms.MessageContent:
+			add = m
+		case llms.MessageContent:
+			add = []llms.MessageContent{m}
+		default:
+			return nil, fmt.Errorf("langchainagents: %q update is %T, not []llms.MessageContent", messagesKey, v)
+		}
+		if cur, ok := next[messagesKey].([]llms.MessageContent); ok {
+			next[messagesKey] = append(cur, add...)
+		} else {
+			next[messagesKey] = add
+		}
+	}
+	return next, nil
 }
 
 func messagesOf(state any) []llms.MessageContent {
@@ -67,22 +82,22 @@ func messagesOf(state any) []llms.MessageContent {
 	return msgs
 }
 
-// stateGraph is the part of *graph.StateGraph[any] this package uses; tests
+// stateGraph is the part of *stategraph.Graph this package uses; tests
 // wrap the real constructor to observe the topology it builds.
 type stateGraph interface {
 	AddNode(name, description string, fn func(context.Context, any) (any, error))
 	AddEdge(from, to string)
 	AddConditionalEdge(from string, condition func(context.Context, any) string)
 	SetEntryPoint(name string)
-	SetSchema(schema graph.StateSchema[any])
-	Compile() (*graph.StateRunnable[any], error)
+	SetSchema(schema stategraph.Schema)
+	Compile() (*stategraph.Runnable, error)
 }
 
-var newStateGraph = func() stateGraph { return graph.NewStateGraph[any]() }
+var newStateGraph = func() stateGraph { return stategraph.New() }
 
 // toolExec runs one tool call and returns the tool message; a handoff also
 // returns the Command that routes the enclosing graph.
-type toolExec func(ctx context.Context, tc llms.ToolCall) (llms.MessageContent, *graph.Command, error)
+type toolExec func(ctx context.Context, tc llms.ToolCall) (llms.MessageContent, *stategraph.Command, error)
 
 // reactAgent is what createReactAgent compiles: model, tools and system
 // prompt (create_react_agent's model, tools, prompt), plus the run's hooks.
@@ -111,13 +126,13 @@ type reactAgent struct {
 // createAgent is the agent factory; tests replace it to observe its input.
 var createAgent = createReactAgent
 
-func createReactAgent(a *reactAgent) (*graph.StateRunnable[any], error) {
+func createReactAgent(a *reactAgent) (*stategraph.Runnable, error) {
 	g := newStateGraph()
 	g.SetSchema(newMessagesSchema())
 	g.AddNode(agentNode, "Calls the model", a.agentStep)
 	g.SetEntryPoint(agentNode)
 	if len(a.tools) == 0 {
-		g.AddEdge(agentNode, graph.END)
+		g.AddEdge(agentNode, stategraph.END)
 		return g.Compile()
 	}
 	g.AddNode(toolsNode, "Runs the requested tools", a.toolsStep)
@@ -194,7 +209,7 @@ func (a *reactAgent) toolsStep(ctx context.Context, state any) (any, error) {
 		}
 		out = append(out, m)
 		if cmd != nil && target == "" {
-			target, _ = cmd.Goto.(string)
+			target = cmd.Goto
 		}
 	}
 	update := map[string]any{messagesKey: out}
@@ -203,7 +218,7 @@ func (a *reactAgent) toolsStep(ctx context.Context, state any) (any, error) {
 	}
 	// A handoff ends this agent; the caller routes the enclosing graph.
 	update[gotoKey] = target
-	return &graph.Command{Update: update, Goto: graph.END}, nil
+	return &stategraph.Command{Update: update, Goto: stategraph.END}, nil
 }
 
 // toolsCondition is LangGraph's tools_condition: run the tools when the
@@ -213,7 +228,7 @@ func toolsCondition(_ context.Context, state any) string {
 	if len(msgs) > 0 && len(toolCalls(msgs[len(msgs)-1])) > 0 {
 		return toolsNode
 	}
-	return graph.END
+	return stategraph.END
 }
 
 func toolCalls(m llms.MessageContent) []llms.ToolCall {

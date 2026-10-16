@@ -3,15 +3,16 @@
 ## Role and tier
 
 Tier 1 handler package. `ProvidesFor = {"*", "messages"}`: the wildcard fallback for any
-messages-mode variation. Built on `github.com/tmc/langchaingo` v0.1.15, a
-community Go port of LangChain, not the official LangChain JS/Python packages.
+messages-mode variation. Built on the SDK's own [`llms`](../llms) package (model interface plus
+built-in OpenAI Chat Completions, Anthropic Messages and Bedrock Converse models). LangChain has
+no official Go SDK, and the community ports were removed (AIC-3609).
 
 ## File map
 
 | File | Responsibility |
 |---|---|
-| `handler.go` | Factory, convenience wrapper, tool loop, streaming. Model routing, the Bedrock zero-temperature fix, prompt/tool mapping and usage extraction live in [`internal/langchainwire`](../internal/langchainwire), shared with `langchainagents`. |
-| `bedrock_zero_test.go` | Explicit `temperature: 0` reaches a fake Bedrock endpoint through the real handler. |
+| `handler.go` | Factory, convenience wrapper, tool loop, streaming. Model routing, prompt/tool mapping and usage extraction live in [`internal/langchainwire`](../internal/langchainwire), shared with `langchainagents`. |
+| `bedrock_zero_test.go` | Explicit `temperature: 0` reaches a fake Bedrock Converse endpoint through the real handler. |
 | `handler_test.go` | Handler tests: prompt paths, history and images, tools, tool loop, telemetry, errors, streaming, structured output, wrapper, usage reporting. |
 | `fake_test.go` | Fake `llms.Model` (scripted turns, records messages and call options) and recording fake LD client. |
 | `README.md` | User docs. |
@@ -85,20 +86,19 @@ either one at startup to pre-warm before the first request.
 | Dependency | Why |
 |---|---|
 | `github.com/launchdarkly/go-ai-sdk/aiserver` | Handler contract, prompt composition, span helpers, usage reporting. |
-| `github.com/tmc/langchaingo/llms` | `llms.Model` interface, message and tool types. |
-| `github.com/tmc/langchaingo/llms/{anthropic,openai,bedrock}` | Built-in models routed by `provider.name`. |
+| `github.com/launchdarkly/go-ai-sdk/llms` | `llms.Model` interface, message and tool types, and the built-in models routed by `provider.name`. |
 | `github.com/launchdarkly/go-sdk-common/v3/ldcontext` | `LangChainMessages` context argument. |
 
 ## Common pitfalls
 
 - **An injected `Options.Model` is used for every provider.** It ignores `config.model.name`
   unless your model reads it; use `ModelFactory` when the config should pick the model.
-- **langchaingo's Anthropic model rejects URL images** (`llms.ImageURLContent`); only base64
-  history images reach Anthropic. OpenAI accepts both.
+- **Bedrock Converse takes inline images only.** An `https://` image URL fails on the built-in
+  Bedrock model; `data:` URLs and base64 images work. OpenAI and Anthropic accept both.
 - **OpenAI JSON mode needs the word "JSON" in the prompt.** The handler adds the schema
   instruction for this; a custom model that sets JSON mode on its own must do the same.
-- **The OpenAI client sends tool-call deltas through the text `StreamingFunc`.** The handler
-  drops chunks that decode as a tool-call JSON array; a text reply that is literally such an
-  array would be dropped too.
+- **`StreamingFunc` receives text only.** The built-in models merge streamed tool calls into
+  the final response; a custom model must not send tool-call deltas through it, or they are
+  streamed to the caller as text.
 - **Anthropic returns one `ContentChoice` per content block, each carrying the full message
   usage.** Summing usage across choices would multiply it; the handler reads one.

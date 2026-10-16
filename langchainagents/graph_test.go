@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
-	"github.com/smallnest/langgraphgo/graph"
-	"github.com/tmc/langchaingo/llms"
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
+	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
 // spyGraph records the builder calls made on a real StateGraph and
@@ -43,7 +43,7 @@ func (s *spyGraph) AddConditionalEdge(from string, c func(context.Context, any) 
 	s.stateGraph.AddConditionalEdge(from, c)
 }
 func (s *spyGraph) SetEntryPoint(n string) { s.entry = n; s.stateGraph.SetEntryPoint(n) }
-func (s *spyGraph) SetSchema(sc graph.StateSchema[any]) {
+func (s *spyGraph) SetSchema(sc stategraph.Schema) {
 	_, s.schema = sc.(messagesSchema)
 	s.stateGraph.SetSchema(sc)
 }
@@ -131,7 +131,7 @@ func TestToLangGraphTopology(t *testing.T) {
 	if !reflect.DeepEqual(g.nodes, []string{"triage", "billing"}) || g.entry != "triage" || !g.schema {
 		t.Errorf("nodes %v entry %q schema %v", g.nodes, g.entry, g.schema)
 	}
-	if !slices.Contains(g.edges, [2]string{"billing", graph.END}) || !slices.Contains(g.edges, [2]string{"triage", "billing"}) {
+	if !slices.Contains(g.edges, [2]string{"billing", stategraph.END}) || !slices.Contains(g.edges, [2]string{"triage", "billing"}) {
 		t.Errorf("edges = %v", g.edges)
 	}
 
@@ -182,7 +182,7 @@ func TestToLangGraphTwoHandoffs(t *testing.T) {
 	if _, err := r.build(bg); err != nil {
 		t.Fatal(err)
 	}
-	if g := graphs()[0]; !slices.Contains(g.edges, [2]string{"hub", graph.END}) || len(g.nodes) != 3 {
+	if g := graphs()[0]; !slices.Contains(g.edges, [2]string{"hub", stategraph.END}) || len(g.nodes) != 3 {
 		t.Errorf("multi-child edges %v nodes %v", g.edges, g.nodes)
 	}
 }
@@ -411,7 +411,7 @@ func TestToLangGraphInvalid(t *testing.T) {
 	}
 }
 
-// Node keys that sanitize to langgraphgo's END sentinel, or to another
+// Node keys that sanitize to stategraph's END sentinel, or to another
 // node's name, are rejected before any model runs.
 func TestToLangGraphNodeNameCollision(t *testing.T) {
 	for name, flags := range map[string]map[string]map[string]any{
@@ -496,8 +496,8 @@ func TestToLangGraphCycle(t *testing.T) {
 	}
 }
 
-// the real langgraphgo StateGraph (no spy) with a fake
-// model. The messages channel must merge through the AddMessages reducer
+// the real stategraph runner (no spy) with a fake
+// model. The messages channel must merge through the messages reducer
 // across nodes, or the second model turn would not see the tool result.
 func TestToLangGraphRealStateGraph(t *testing.T) {
 	installClient(t, &fakeLD{variations: map[string]map[string]any{"g": graphFlag("solo", nil), "solo": node("Solo", "m", "lookup")}})

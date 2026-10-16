@@ -1,7 +1,8 @@
-// Package langchainmessages is the LangChain messages handler for aiserver,
-// built on github.com/tmc/langchaingo (providesFor */messages). One handler
-// serves any provider: the config's provider.name picks a langchaingo model,
-// or the caller injects one.
+// Package langchainmessages is the LangChain messages handler for aiserver
+// (providesFor */messages), built on the SDK's llms package. One handler
+// serves any provider: the config's provider.name picks a built-in llms model
+// (Anthropic, Bedrock, or OpenAI Chat Completions for anything else), or the
+// caller injects one.
 package langchainmessages
 
 import (
@@ -12,10 +13,10 @@ import (
 	"strings"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
-	"github.com/tmc/langchaingo/llms"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
+	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
 const (
@@ -49,7 +50,7 @@ var (
 
 func init() { aiserver.RegisterAiSdkPackage(PackageName, PackageVersion) }
 
-// ModelFactory builds the langchaingo model for one call from the evaluated
+// ModelFactory builds the llms model for one call from the evaluated
 // AI Config, so the model can see config.model.parameters and name.
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
 
@@ -58,7 +59,7 @@ type Options struct {
 	// Model is used for every call when set.
 	Model llms.Model
 	// ModelFactory is called per request when Model is nil. When both are nil
-	// the handler builds a langchaingo model from config.provider.name:
+	// the handler builds a built-in llms model from config.provider.name:
 	// "anthropic", "bedrock", or OpenAI for anything else.
 	ModelFactory ModelFactory
 	// CaptureContent is attached to the handler so the client core can gate
@@ -130,9 +131,6 @@ func (r runResult) rawUsage() map[string]any {
 
 // run is the tool loop shared by both paths; onText is nil when blocking.
 func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText func(string) bool) (runResult, error) {
-	// Mark an explicit temperature of 0 before any span or model context is
-	// derived from ctx, so the Bedrock client middleware sees it.
-	ctx = langchainwire.MarkExplicitZeroTemperature(ctx, req.Config.Model.Parameters)
 	req.Config = langchainwire.ModelConfig(req.Config)
 	cfg := req.Config
 	streaming := onText != nil
