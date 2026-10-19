@@ -32,9 +32,9 @@ func graphFlags(rootExtra map[string]any) map[string]any {
 
 func resolve(t *testing.T) *aiserver.GraphDefinition {
 	t.Helper()
-	def := aiserver.ResolveGraph(bg, "g", user, aiserver.GraphOptions{})
-	if !def.Enabled {
-		t.Fatal("graph did not resolve")
+	def, err := aiserver.ResolveGraph(bg, "g", user, aiserver.GraphOptions{})
+	if err != nil || !def.Enabled {
+		t.Fatal(err)
 	}
 	return def
 }
@@ -234,9 +234,9 @@ func TestToClaudeAgentsFailure(t *testing.T) {
 
 func TestToClaudeAgentsDisabled(t *testing.T) {
 	setup(t, map[string]any{})
-	def := aiserver.ResolveGraph(bg, "missing", user, aiserver.GraphOptions{})
-	if _, err := ToClaudeAgents(def, nil).Invoke(bg, "q"); !errors.Is(err, aiserver.ErrGraphDisabled) {
-		t.Errorf("want ErrGraphDisabled, got %v", err)
+	_, err := aiserver.ResolveGraph(bg, "missing", user, aiserver.GraphOptions{})
+	if err == nil {
+		t.Fatal("missing graph resolved")
 	}
 	if _, err := ToClaudeAgents(nil, nil).Invoke(bg, "q"); !errors.Is(err, aiserver.ErrGraphDisabled) {
 		t.Errorf("nil def: %v", err)
@@ -396,7 +396,10 @@ func TestToClaudeAgentsPayloads(t *testing.T) {
 // a definition without a context tracks nothing.
 func TestToClaudeAgentsNoContext(t *testing.T) {
 	e := setup(t, graphFlags(nil), toolResp("mcp__subagents__leaf", `{"input":"sub"}`), textResp("leaf", 1, 1), textResp("done", 1, 1))
-	def := aiserver.ResolveGraph(bg, "g", ldcontext.Context{}, aiserver.GraphOptions{})
+	def, err := aiserver.ResolveGraph(bg, "g", ldcontext.Context{}, aiserver.GraphOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := ToClaudeAgents(def, &AdapterOptions{Handler: e.opts}).Invoke(bg, "q"); err != nil {
 		t.Fatal(err)
 	}

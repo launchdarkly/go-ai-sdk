@@ -181,9 +181,9 @@ func graphHistory(ctx context.Context, key, _ string) error {
 
 // nativeGraph resolves a graph and runs it with the Claude native adapter.
 func nativeGraph(ctx context.Context, key, input string) error {
-	def := aiserver.ResolveGraph(ctx, key, newContext(), aiserver.GraphOptions{Registry: registry})
-	if !def.Enabled {
-		return fmt.Errorf("%w: %s", aiserver.ErrGraphDisabled, key)
+	def, err := aiserver.ResolveGraph(ctx, key, newContext(), aiserver.GraphOptions{Registry: registry})
+	if err != nil {
+		return err
 	}
 	resp, err := claudeagents.ToClaudeAgents(def, &claudeagents.AdapterOptions{ToolHandlers: exampleTools}).
 		Invoke(ctx, input, aiserver.WithVariables(map[string]any{"user_id": "user-123"}))
@@ -199,7 +199,10 @@ func nativeGraph(ctx context.Context, key, input string) error {
 // graph is ToLangGraph's error to report.
 func nativeGraphLangChain(ctx context.Context, key, input string) error {
 	user := newContext()
-	def := aiserver.ResolveGraph(ctx, key, user, aiserver.GraphOptions{Registry: registry})
+	def, err := aiserver.ResolveGraph(ctx, key, user, aiserver.GraphOptions{Registry: registry})
+	if err != nil {
+		return err
+	}
 	resp, err := langchainagents.ToLangGraph(def, &langchainagents.NativeGraphOptions{ToolHandlers: exampleTools, Context: user}).
 		Invoke(ctx, input, aiserver.WithVariables(map[string]any{"user_id": "user-123"}))
 	if err != nil {
