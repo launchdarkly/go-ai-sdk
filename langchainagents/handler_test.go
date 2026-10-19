@@ -8,14 +8,13 @@ import (
 	"testing"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
-	"github.com/smallnest/langgraphgo/graph"
-	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/llms/anthropic"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
+	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
 const (
@@ -134,7 +133,7 @@ func TestAgentCreationAPI(t *testing.T) {
 	}
 	var got []seen
 	orig := createAgent
-	createAgent = func(a *reactAgent) (*graph.StateRunnable[any], error) {
+	createAgent = func(a *reactAgent) (*stategraph.Runnable, error) {
 		var names []string
 		for _, t := range a.tools {
 			names = append(names, t.Function.Name)
@@ -596,7 +595,7 @@ func TestEmptyResponseAfterToolResultRetries(t *testing.T) {
 	c := instr("I")
 	c.Tools = threeTools()
 	tools := map[string]aiserver.ToolHandler{"a": fn(func(map[string]any) (any, error) { return "ok", nil })}
-	h, f, _ := setup(t, toolTurn("a", nil), scripted{err: anthropic.ErrEmptyResponse}, textTurn("final", 1, 1))
+	h, f, _ := setup(t, toolTurn("a", nil), scripted{err: llms.ErrEmptyResponse}, textTurn("final", 1, 1))
 	res, err := h.Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "q", ToolHandlers: tools})
 	if err != nil || res.Output != "final" {
 		t.Fatalf("got %q %v", res.Output, err)
@@ -606,7 +605,7 @@ func TestEmptyResponseAfterToolResultRetries(t *testing.T) {
 		t.Errorf("retry ends with %v", last)
 	}
 
-	h, f, _ = setup(t, scripted{err: anthropic.ErrEmptyResponse}, textTurn("never", 1, 1))
+	h, f, _ = setup(t, scripted{err: llms.ErrEmptyResponse}, textTurn("never", 1, 1))
 	if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "q"}); err == nil || f.count() != 1 {
 		t.Errorf("empty first turn: err %v, %d calls", err, f.count())
 	}
@@ -625,7 +624,7 @@ func TestSdkInfoRegistered(t *testing.T) {
 	t.Errorf("no $ld:ai:sdk:info for %s: %v", PackageName, ld.events("$ld:ai:sdk:info"))
 }
 
-// A panicking tool ends the run's root and tool spans ERROR. langgraphgo
+// A panicking tool ends the run's root and tool spans ERROR. stategraph
 // recovers a node panic as the node's error, so the call returns an error.
 func TestToolPanicEndsSpans(t *testing.T) {
 	c := instr("I")

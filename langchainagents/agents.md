@@ -3,8 +3,7 @@
 ## Role and tier
 
 Tier 1 handler package. `ProvidesFor = {"*", "agent"}`: the wildcard fallback for any
-agent-mode variation. Built on the community ports
-`github.com/tmc/langchaingo` v0.1.15 and `github.com/smallnest/langgraphgo` v0.8.5. Also
+agent-mode variation. Built on the SDK's own `llms` package; graphs run on the internal `internal/stategraph` runner. Also
 exports the `LangChainGraph` wrapper and the `ToLangGraph` native adapter.
 
 ## File map
@@ -12,16 +11,16 @@ exports the `LangChainGraph` wrapper and the `ToLangGraph` native adapter.
 | File | Responsibility |
 |---|---|
 | `handler.go` | Factory, options, convenience wrapper, the handler run (prompt, spans, model, tools) for blocking and streaming. |
-| `react.go` | `createReactAgent`: the create_react_agent equivalent on a langgraphgo `StateGraph` (agent node, tools node, tools condition), the `messages`/AddMessages state schema, the `stateGraph` test seam. |
-| `graph.go` | `LangChainGraph`, `ToLangGraph` / `LangGraph.Invoke`: one outer `StateGraph` node per `GraphNode`, handoff tools returning `graph.Command`, per-node and graph tracking, the `ld.ai.graph` span. |
+| `react.go` | `createReactAgent`: the create_react_agent equivalent on a `stategraph.Graph` (agent node, tools node, tools condition), the `messages` append schema, the `stateGraph` test seam. |
+| `graph.go` | `LangChainGraph`, `ToLangGraph` / `LangGraph.Invoke`: one outer `stategraph.Graph` node per `GraphNode`, handoff tools returning `stategraph.Command`, per-node and graph tracking, the `ld.ai.graph` span. |
 | `handler_test.go` | Handler tests: factory, prompt, tools, tool loop, telemetry, errors, streaming, structured output, history, model routing, usage reporting. |
-| `graph_test.go` | `LangChainGraph` and `ToLangGraph` tests, including one against the real langgraphgo `StateGraph`. |
+| `graph_test.go` | `LangChainGraph` and `ToLangGraph` tests, including one against the real `stategraph` runner. |
 | `fake_test.go` | Fake `llms.Model` (scripted turns, records calls), recording fake LD client, tracer setup. |
 | `README.md` | User docs. |
 | `agents.md` | This file. |
 
-Shared langchaingo plumbing (model routing, Bedrock zero-temperature fix, message/tool
-conversion, usage keys, one model turn, one tool call) lives in
+Shared `llms` plumbing (model routing, message/tool conversion, usage keys, one model turn,
+one tool call) lives in
 [`internal/langchainwire`](../internal/langchainwire), also used by `langchainmessages`.
 
 ## Public exports
@@ -64,16 +63,16 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
   span through `aiserver.StartHandlerRun`.
 - **Agent graph** — `createReactAgent` compiles `agent` (model call) → tools condition →
   `tools` → `agent` …, ending at `END` when the model answers without tool calls. State is
-  `map[string]any{"messages": []llms.MessageContent}` carried as `any`: langgraphgo only
-  recognises a node's `*graph.Command` when the state type is an interface. 25 node executions
-  max (`ErrRecursionLimit`); langgraphgo has no limit of its own.
-- **ToLangGraph** — the outer `StateGraph` has one node per `GraphNode` (`Traverse` order),
-  entry point = root (langgraphgo has no `START`; `SetEntryPoint` is the equivalent), an edge to
+  `map[string]any{"messages": []llms.MessageContent}` carried as `any`; `messages` is appended to, other keys
+  are overwritten. 25 node executions max (`ErrRecursionLimit`); `stategraph` has no limit of
+  its own.
+- **ToLangGraph** — the outer `stategraph.Graph` has one node per `GraphNode` (`Traverse` order),
+  entry point = root (`SetEntryPoint` is LangGraph's `START`), an edge to
   `END` for terminal and multi-child nodes, an edge to the child for single-child nodes. Each node
-  function runs that node's ReAct agent (its own inner `StateGraph`, which holds the ToolNode
+  function runs that node's ReAct agent (its own inner `stategraph.Graph`, which holds the ToolNode
   equivalent) over the graph's messages. A `transfer_to_<target>` tool returns
-  `&graph.Command{Goto: target}`; the inner graph ends, and the outer node returns a `Command`
-  with the new messages, which langgraphgo uses instead of the static edge. History is read by
+  `&stategraph.Command{Goto: target}`; the inner graph ends, and the outer node returns a `Command`
+  with the new messages, which the runner follows instead of the static edge. History is read by
   the root node only and never enters the shared state. Node names are sanitized keys; a name
   equal to `END` or shared by two nodes fails with `ErrNodeName` (`AddNode` would silently replace).
 - **Tracking (ToLangGraph, only with `NativeGraphOptions.Context`)** — per first node visit
@@ -93,8 +92,8 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
   run with the node's association and the context identity, and `chat` / `execute_tool` children
   (handoff and NativeTool calls included).
 - **Streaming** — `llms.WithStreamingFunc` deltas are `chunk` events; `done.output` joins every
-  turn's text. Node functions run on langgraphgo goroutines, so `yield` is called from one; the
-  executor waits for the node, so calls never overlap.
+  turn's text. Node functions run on the caller's goroutine, one at a time, so
+  `yield` is never called concurrently.
 
 ## OTel setup
 
@@ -115,22 +114,15 @@ to pre-warm.
 | Dependency | Why |
 |---|---|
 | `github.com/launchdarkly/go-ai-sdk/aiserver` | Handler contract, prompt composition, span helpers, graph definition, tracking. |
-| `github.com/launchdarkly/go-ai-sdk/internal/langchainwire` | langchaingo plumbing shared with `langchainmessages`. |
-| `github.com/tmc/langchaingo/llms` | `llms.Model`, message and tool types (provider models via langchainwire). |
-| `github.com/smallnest/langgraphgo/graph` | `StateGraph`, `Command`, `END`, `MapSchema`, `AddMessages`. Not `prebuilt`: see below. |
+| `github.com/launchdarkly/go-ai-sdk/internal/langchainwire` | `llms` plumbing shared with `langchainmessages`. |
+| `github.com/launchdarkly/go-ai-sdk/llms` | `llms.Model`, message and tool types, built-in models (routed via langchainwire). Replaces langchaingo (AIC-3609). |
+| `github.com/launchdarkly/go-ai-sdk/internal/stategraph` | `Graph`, `Command`, `END`: the state-graph runner (replaces langgraphgo, AIC-3609). |
 | `github.com/google/uuid` | Per-run id for graph tracking. |
 | `go.opentelemetry.io/otel` | `ld.ai.graph` span. |
 | `github.com/launchdarkly/go-sdk-common/v3/ldcontext` | Context arguments. |
 
 ## Common pitfalls
 
-- **`langgraphgo/prebuilt` cannot be imported** in this module: it pulls
-  `github.com/smallnest/goskills` and langchaingo `tools` (go.starlark.net), which are not in
-  go.sum. That is why `react.go` builds the ReAct graph itself; do not "simplify" it to
-  `prebuilt.CreateAgent` without updating go.mod/go.sum.
-- **A `*graph.Command` from a node is ignored unless the state type is an interface.**
-  langgraphgo type-asserts `any(result).(*Command)`; with `StateGraph[map[string]any]` a handoff
-  would silently fall through to the static edge.
 - **No tracking without `NativeGraphOptions.Context`.** The zero context means "do not track",
   matching the JS/Python `context` option; spans are still emitted.
 - **A handed-off node sees the source node's `transfer_to_*` tool call** in its messages but not

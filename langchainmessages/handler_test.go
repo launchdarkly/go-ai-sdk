@@ -2,6 +2,7 @@ package langchainmessages
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -11,8 +12,6 @@ import (
 	"testing"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
-	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/llms/anthropic"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
+	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
 var bg = context.Background()
@@ -441,9 +441,8 @@ func TestErrors(t *testing.T) {
 
 // streaming: deltas, the tool loop and done.
 func TestStreamToolLoop(t *testing.T) {
-	toolChunk := `[{"id":"call_a","type":"function","function":{"name":"a","arguments":""}}]`
 	h, _, exp := setup(t,
-		streamTurn([]string{"Let me ", "check. ", toolChunk}, 3, 2, toolCall("a", map[string]any{"city": "Paris"})),
+		streamTurn([]string{"Let me ", "check. "}, 3, 2, toolCall("a", map[string]any{"city": "Paris"})),
 		streamTurn([]string{"It is ", "sunny."}, 5, 4))
 	var gotArgs map[string]any
 	var calls []string
@@ -659,7 +658,7 @@ func TestModelParametersAndFactory(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := f.calls[0].opts
-	if o.Temperature != 0.2 || o.MaxTokens != 99 || !reflect.DeepEqual(o.StopWords, []string{"END"}) || o.Seed != 0 {
+	if o.Temperature == nil || *o.Temperature != 0.2 || o.MaxTokens != 99 || !reflect.DeepEqual(o.StopWords, []string{"END"}) || o.Seed != nil {
 		t.Errorf("call options = %+v", o)
 	}
 	if seen.Model.Name != "us.anthropic.claude" {
@@ -679,11 +678,11 @@ func TestModelParametersAndFactory(t *testing.T) {
 	}
 }
 
-// Built-in routing: provider.name picks the langchaingo model.
+// Built-in routing: provider.name picks the built-in llms model.
 func TestDefaultModelRouting(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test")
 	m, err := langchainwire.DefaultModel(bg, cfg(nil), nil)
-	if _, ok := m.(*anthropic.LLM); err != nil || !ok {
+	if _, ok := m.(*llms.Anthropic); err != nil || !ok {
 		t.Errorf("anthropic route: %T %v", m, err)
 	}
 
@@ -708,8 +707,18 @@ func TestDefaultModelRouting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(body, `"response_format":{"type":"json_schema"`) || !strings.Contains(body, `"model":"gpt-4o"`) {
-		t.Errorf("openai request body = %s", body)
+	var sent struct {
+		Model          string `json:"model"`
+		ResponseFormat struct {
+			Type       string `json:"type"`
+			JSONSchema struct {
+				Schema map[string]any `json:"schema"`
+			} `json:"json_schema"`
+		} `json:"response_format"`
+	}
+	if err := json.Unmarshal([]byte(body), &sent); err != nil || sent.Model != "gpt-4o" || sent.ResponseFormat.Type != "json_schema" ||
+		!reflect.DeepEqual(sent.ResponseFormat.JSONSchema.Schema, c.OutputFormat) { // the schema is sent verbatim
+		t.Errorf("openai request body = %s (err %v)", body, err)
 	}
 	if !reflect.DeepEqual(res.Output, map[string]any{"name": "Al"}) || res.Usage["input_tokens"] != float64(7) || res.Usage["output_tokens"] != float64(3) {
 		t.Errorf("openai result = %#v usage %v", res.Output, res.Usage)
@@ -788,7 +797,7 @@ func TestLangChainMessagesWrapper(t *testing.T) {
 	}
 }
 
-// the wrapper works with nil options, building the default langchaingo
+// the wrapper works with nil options, building the default llms
 // model for the variation's provider (OpenAI here, against OPENAI_BASE_URL).
 func TestLangChainMessagesNilOptions(t *testing.T) {
 	var body string
