@@ -177,7 +177,7 @@ func TestWrappedToolsPreserveResults(t *testing.T) {
 	// Through the recorder and the tracking wrapper together, as a handler sees it.
 	var gotV any
 	var gotErr error
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		gotV, _ = req.ToolHandlers["ok"].(ToolFunc)(ctx, map[string]any{"a": 1.0})
 		_, gotErr = req.ToolHandlers["fail"].(ToolFunc)(ctx, nil)
 		return HandlerResult{Output: "done"}, nil
@@ -400,7 +400,7 @@ func tokenEvents(f *fakeLD) int {
 }
 
 func streamHandler(provider string, out string, usage map[string]any, err error, called *int) *ProviderHandler {
-	return CreateHandlerInternal(ProvidesFor{provider, ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
+	return createHandler(ProvidesFor{provider, ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
 		return HandlerResult{Output: `{"score":1,"reasoning":"judged"}`}, nil
 	}, func(_ context.Context, req HandlerRequest) iter.Seq2[HandlerStreamEvent, error] {
 		return func(yield func(HandlerStreamEvent, error) bool) {
@@ -469,7 +469,7 @@ func TestSkipJudgesWithoutJudgeConfiguration(t *testing.T) {
 func TestStructuredObjectOutputReturnedAsIs(t *testing.T) {
 	withFake(t, map[string]any{"cfg": enabledConfig("P", "", map[string]any{"outputFormat": map[string]any{"type": "object"}})})
 	out := map[string]any{"answer": 42.0}
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
 		return HandlerResult{Output: out}, nil
 	}, nil, false)
 	resp, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, "q", userCtx)
@@ -491,7 +491,7 @@ func TestInlineJudgeVariablesAreExact(t *testing.T) {
 		"judge": enabledConfig("P", "judge", nil),
 	})
 	var judgeVars map[string]any
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		if _, isJudge := req.Variables["message_history"]; isJudge {
 			judgeVars = req.Variables
 			return HandlerResult{Output: `{"score":1,"reasoning":"r"}`}, nil
@@ -521,7 +521,7 @@ func TestGraphJudgeTrajectoryScope(t *testing.T) {
 	withFake(t, twoNode(map[string]any{"root-node": root, "leaf-node": leaf,
 		"judge": enabledConfig("P", "judge", nil), "gj": enabledConfig("P", "judge", nil)}))
 	histories := map[string]string{}
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeAgent}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeAgent}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		if mh, isJudge := req.Variables["message_history"].(string); isJudge {
 			histories[req.Variables[VarLD].(TrackData).ConfigKey] = mh
 			return HandlerResult{Output: `{"score":1,"reasoning":"r"}`}, nil
@@ -602,7 +602,7 @@ func TestConfigStreamTrackingJudgesAndRouting(t *testing.T) {
 
 	// Judge results ride on done.
 	var seenVars map[string]any
-	judged := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
+	judged := createHandler(ProvidesFor{"P", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
 		return HandlerResult{Output: `{"score":0.4,"reasoning":"meh"}`}, nil
 	}, func(_ context.Context, req HandlerRequest) iter.Seq2[HandlerStreamEvent, error] {
 		seenVars = req.Variables
@@ -653,7 +653,7 @@ func TestGraphStreamParity(t *testing.T) {
 
 	// Fallback to Invoke for a handler without Stream, with a graph judge.
 	f.tracks = nil
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeAgent}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeAgent}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 		if req.Variables["response_to_evaluate"] != nil {
 			return HandlerResult{Output: `{"score":0.8,"reasoning":"good"}`}, nil
 		}
@@ -825,7 +825,7 @@ func TestNativeToolOutOfTrajectory(t *testing.T) {
 		"judge": enabledConfig("P", "judge", nil),
 	})
 	var history string
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		if mh, isJudge := req.Variables["message_history"].(string); isJudge {
 			history = mh
 			return HandlerResult{Output: `{"score":1,"reasoning":"r"}`}, nil
@@ -865,7 +865,7 @@ func TestNativeToolOutOfTrajectory(t *testing.T) {
 func TestFailedInvocationKeepsItsTrajectory(t *testing.T) {
 	withFake(t, nil)
 	boom := errors.New("model crashed")
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		_, _ = req.ToolHandlers["lookup"].(ToolFunc)(ctx, map[string]any{"q": "x"})
 		return HandlerResult{}, boom
 	}, nil, false)

@@ -1,6 +1,9 @@
 package claudeagents
 
-import "github.com/launchdarkly/go-ai-sdk/aiserver"
+import (
+	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
+)
 
 // GraphOptions are aiserver.GraphOptions without Handlers: ClaudeGraph binds
 // its own handler and the caller cannot override it.
@@ -17,7 +20,7 @@ type GraphOptions struct {
 // handler, this package's agent handler, pre-bound (claudeGraph).
 func ClaudeGraph(key string, opts GraphOptions, handler Options) *aiserver.AgentGraph {
 	aiserver.ReportUsage("claude-agents.claudeGraph", PackageName, PackageVersion)
-	return aiserver.GraphInternal(key, aiserver.GraphOptions{
+	return sdkapi.Graph(key, aiserver.GraphOptions{
 		Handlers:     []*aiserver.ProviderHandler{newHandler(handler)},
 		ToolHandlers: opts.ToolHandlers, GraphJudge: opts.GraphJudge, Registry: opts.Registry,
 	})

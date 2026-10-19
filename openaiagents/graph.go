@@ -17,6 +17,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
 // OpenAIGraph returns aiserver's model-driven graph runner with this
@@ -26,7 +27,7 @@ import (
 func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph {
 	aiserver.ReportUsage("openai-agents.openaiGraph", PackageName, PackageVersion)
 	options.Handlers = []*aiserver.ProviderHandler{newHandler(handler)}
-	return aiserver.GraphInternal(key, options)
+	return sdkapi.Graph(key, options)
 }
 
 // NativeGraphOptions configure ToOpenAIAgents.

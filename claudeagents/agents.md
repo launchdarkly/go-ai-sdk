@@ -13,7 +13,7 @@ built-in `NativeTool` sentinels.
 | File | Responsibility |
 | --- | --- |
 | `handler.go` | Factory, convenience wrapper, tool partitioning, the agent loop, streaming, span calls. |
-| `graph.go` | `ClaudeGraph`: `aiserver.GraphInternal` with exactly this package's handler. |
+| `graph.go` | `ClaudeGraph`: `internal/sdkapi.Graph` with exactly this package's handler. |
 | `native.go` | `ToClaudeAgents`: sub-agent tools built in `ReverseTraverse`, graph span and graph events. |
 | `params.go` | `model.parameters` → Messages API (`thinking`, `output_config.effort` / `.format`, `anthropic-beta`, `fallbackModel`); the JS `FORWARDED_QUERY_OPTION_KEYS` allowlist. |
 | `builtins.go` | The ten Claude Code built-in `NativeTool` sentinels. |

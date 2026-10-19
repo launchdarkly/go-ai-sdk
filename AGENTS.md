@@ -40,8 +40,8 @@ type HandlerRequest struct {
 
 `ProvidesFor` is required for routing: the core matches the variation's
 `provider.name` and normalised mode (`agent`, else `messages`). Build handlers
-with `CreateHandler` (applications) or `CreateHandlerInternal` (SDK packages,
-which report their own helper usage instead).
+with `CreateHandler` (applications). SDK packages call `internal/sdkapi`,
+which does not report usage; they report their own helper usage instead.
 
 A handler must: compose its prompt with `aiserver.ComposePrompt`; offer only
 config tools that have a `ToolFunc` (`CallableTools`); run the tool loop and
@@ -84,7 +84,7 @@ evaluates every referenced node config; any disabled node disables the graph.
 `GraphDefinition` exposes `Root`, `GetNode`, `GetChildNodes`,
 `GetParentNodes`, `TerminalNodes`, `EdgesFrom`, `Traverse` (root first),
 `ReverseTraverse` (leaves first, root last), `RunNode` and `Route`. Agent
-packages build `XxxGraph` wrappers on `GraphInternal` and native runners on
+packages build `XxxGraph` wrappers on `internal/sdkapi.Graph` and native runners on
 `ResolveGraph`, emitting graph events with `TrackGraphEvent`.
 
 ## OTel setup

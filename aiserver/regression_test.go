@@ -18,7 +18,7 @@ import (
 func TestGraphJudgeFailureTracksOnlyFailure(t *testing.T) {
 	f := withFake(t, twoNode(map[string]any{"gj": enabledConfig("P", "judge", nil)}))
 	boom := errors.New("judge provider down")
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeAgent}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeAgent}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 		if req.Variables["response_to_evaluate"] != nil {
 			return HandlerResult{}, boom
 		}
@@ -59,13 +59,13 @@ func TestGraphJudgeUsesItsOwnProvidersHandler(t *testing.T) {
 	v["leaf-node"].(map[string]any)["provider"] = map[string]any{"name": "OpenAI"}
 	withFake(t, v)
 	var openaiJudged, anthropicJudged int
-	openai := CreateHandlerInternal(ProvidesFor{"OpenAI", ModeAgent}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+	openai := createHandler(ProvidesFor{"OpenAI", ModeAgent}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 		if req.Variables["response_to_evaluate"] != nil {
 			openaiJudged++
 		}
 		return HandlerResult{Output: "final"}, nil
 	}, nil, false)
-	anthropic := CreateHandlerInternal(ProvidesFor{"Anthropic", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
+	anthropic := createHandler(ProvidesFor{"Anthropic", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
 		anthropicJudged++
 		return HandlerResult{Output: `{"score":0.5,"reasoning":"ok"}`}, nil
 	}, nil, false)
@@ -90,7 +90,7 @@ func TestRunJudgeVariablesAreExactlyTheJudgeKeys(t *testing.T) {
 	t.Cleanup(func() { _ = Shutdown(bg) })
 	setClientForTest(&fakeLD{})
 	var got map[string]any
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeMessages}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 		got = req.Variables
 		return HandlerResult{Output: `{"score":1,"reasoning":"r"}`}, nil
 	}, nil, false)
@@ -168,7 +168,7 @@ func TestTrajectoryToolOrderIsDeterministic(t *testing.T) {
 		"judge": enabledConfig("P", "judge", nil),
 	})
 	var histories []string
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		if mh, ok := req.Variables["message_history"].(string); ok {
 			histories = append(histories, mh)
 			return HandlerResult{Output: `{"score":1,"reasoning":"r"}`}, nil

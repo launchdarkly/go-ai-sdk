@@ -14,12 +14,12 @@ import (
 // A new or removed root name fails here, so it shows in review.
 var rootSurface = []string{
 	"AIConfig", "AgentGraph", "AiConfig", "BuildJudgeTasks", "BuildJudgeTasksArgs", "CallOption", "CallOptions",
-	"CallableTools", "Compose", "ComposePrompt", "Config", "ConfigArgs", "ConfigInternal", "ContentBlock",
+	"CallableTools", "Compose", "ComposePrompt", "Config", "ConfigArgs", "ContentBlock",
 	"ContentText", "ContextIdentity", "ContextToMap", "ConversationIDSpanProcessor", "CreateHandler",
-	"CreateHandlerInternal", "DefaultOTLPEndpoint", "ErrConfigDisabled", "ErrConfigNotFound", "ErrGraphDisabled",
+	"DefaultOTLPEndpoint", "ErrConfigDisabled", "ErrConfigNotFound", "ErrGraphDisabled",
 	"ErrNoHandler", "ErrNotInitialized", "EventChunk", "EventDone", "EventHandoff", "EventNodeDone", "EventNodeStart",
 	"EventType", "FormattingInstructions", "GetClient", "Graph", "GraphDefinition", "GraphEdge",
-	"GraphInternal", "GraphNode", "GraphOptions", "GraphResponse", "GraphSpanName", "GraphStreamEvent",
+	"GraphNode", "GraphOptions", "GraphResponse", "GraphSpanName", "GraphStreamEvent",
 	"GraphTopology", "GraphTopologyEdge", "HandlerRequest", "HandlerResult", "HandlerRun", "HandlerSpanOptions",
 	"HandlerStreamEvent", "ImageSource", "ImageURL", "InitClient", "InitOptions", "InitWithClient", "InputDetails",
 	"InspectConfig", "InspectResult", "InvokeFunc", "JudgeConfiguration", "JudgeRef", "JudgeResult",

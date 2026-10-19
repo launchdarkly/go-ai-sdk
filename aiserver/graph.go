@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkcall"
 	"github.com/launchdarkly/go-ai-sdk/internal/trajectory"
 )
 
@@ -82,6 +83,9 @@ type GraphOptions struct {
 	GraphJudge string
 	// Registry supplies handlers and tools; local values take precedence.
 	Registry *Registry
+	// SDKCall suppresses $ld:ai:sdk:usage for this graph. Only internal/sdkapi
+	// can build a non-zero token. Applications leave it zero.
+	SDKCall sdkcall.Token
 }
 
 // RunNodeOptions are per-node options for RunNode and Route.
@@ -586,9 +590,8 @@ func ResolveGraph(ctx context.Context, key string, userCtx ldcontext.Context, op
 // AgentGraph is the value Graph returns: a model-driven router bound to a
 // graph flag key.
 type AgentGraph struct {
-	key      string
-	opts     GraphOptions
-	internal bool
+	key  string
+	opts GraphOptions
 
 	mu    sync.Mutex
 	cache map[string]*GraphDefinition
@@ -601,13 +604,6 @@ type AgentGraph struct {
 // the step cap.
 func Graph(key string, opts GraphOptions) *AgentGraph {
 	return &AgentGraph{key: key, opts: opts, cache: map[string]*GraphDefinition{}}
-}
-
-// GraphInternal is the non-reporting Graph for handler-package wrappers.
-func GraphInternal(key string, opts GraphOptions) *AgentGraph {
-	g := Graph(key, opts)
-	g.internal = true
-	return g
 }
 
 // definition resolves once per distinct context content (equal contexts
@@ -652,7 +648,7 @@ func (g *AgentGraph) cacheLen() int {
 func (g *AgentGraph) Invoke(ctx context.Context, input string, userCtx ldcontext.Context, opts ...CallOption) (GraphResponse, error) {
 	co := NewCallOptions(opts...)
 	variables, history := co.Variables, co.History
-	if !g.internal {
+	if !g.opts.SDKCall.Marked() {
 		reportUsage("client.graph.invoke", "", "")
 	}
 	var out GraphResponse
@@ -677,7 +673,7 @@ func (g *AgentGraph) Invoke(ctx context.Context, input string, userCtx ldcontext
 func (g *AgentGraph) Stream(ctx context.Context, input string, userCtx ldcontext.Context, opts ...CallOption) iter.Seq2[GraphStreamEvent, error] {
 	co := NewCallOptions(opts...)
 	variables, history := co.Variables, co.History
-	if !g.internal {
+	if !g.opts.SDKCall.Marked() {
 		reportUsage("client.graph.stream", "", "")
 	}
 	return g.stream(ctx, input, userCtx, variables, history)
