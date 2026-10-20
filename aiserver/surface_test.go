@@ -23,7 +23,7 @@ var rootSurface = []string{
 	"GraphTopology", "GraphTopologyEdge", "HandlerRequest", "HandlerResult", "HandlerRun", "HandlerSpanOptions",
 	"HandlerStreamEvent", "ImageSource", "ImageURL", "InitClient", "InitOptions", "InitWithClient", "InputDetails",
 	"InspectConfig", "InspectResult", "InvokeFunc", "JudgeConfiguration", "JudgeRef", "JudgeResult",
-	"JudgeRunResult", "JudgeTask", "LDClient", "MaxGraphCacheSize", "Message", "Mode", "ModeAgent", "ModeMessages",
+	"JudgeRunResult", "JudgeTask", "LDClient", "Message", "Mode", "ModeAgent", "ModeMessages",
 	"Model", "NativeTool", "NewCallOptions", "NewRegistry", "NormalizeMode", "OutputFormatInstruction",
 	"PackageName", "PackageVersion", "ParseAiConfig", "ParseJSONWithPossibleFences", "ParseTemplate", "ParseUsage",
 	"Prompt", "ProviderHandler", "ProviderResponse", "ProvidesFor", "RegisterAiSdkPackage", "Registry",
