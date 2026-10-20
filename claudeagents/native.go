@@ -18,6 +18,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/anthropicwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
 )
 
 // SubAgentToolPrefix prefixes each sub-agent tool name, matching the
@@ -123,11 +124,14 @@ func (r *graphRun) execute(ctx context.Context, input string, history []aiserver
 		sa := &subAgent{node: n}
 		taken := map[string]bool{}
 		for _, e := range r.def.EdgesFrom(n.Key) {
-			if child, ok := acc[e.TargetKey].(*subAgent); ok { // absent on a cycle back-edge
-				name := subAgentToolName(child.node.Key, taken)
-				taken[name] = true
-				sa.tools = append(sa.tools, r.subAgentTool(n, e, child, name))
+			child, ok := acc[e.TargetKey].(*subAgent)
+			if !ok { // absent only on a cycle back-edge; drop it so the graph still builds
+				bridge.Logger().Warn("dropping cyclic edge", "graph", r.def.Key, "source", n.Key, "target", e.TargetKey)
+				continue
 			}
+			name := subAgentToolName(child.node.Key, taken)
+			taken[name] = true
+			sa.tools = append(sa.tools, r.subAgentTool(n, e, child, name))
 		}
 		return sa, nil
 	})

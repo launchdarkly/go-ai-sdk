@@ -247,50 +247,36 @@ func (d *GraphDefinition) Traverse(ctx context.Context, fn TraverseVisitor) (any
 	return acc[d.Root.Key], nil
 }
 
-// ReverseTraverse visits nodes leaf-first, the root always last, and
-// returns the root's result.
+// ReverseTraverse visits every child before its parents (post-order from the
+// root, each node once, the root last) and returns the root's result.
 func (d *GraphDefinition) ReverseTraverse(ctx context.Context, fn TraverseVisitor) (any, error) {
 	if d.Root == nil {
 		return nil, nil
 	}
-	var frontier []string
-	for _, n := range d.TerminalNodes() {
-		frontier = append(frontier, n.Key)
-	}
-	if len(frontier) == 0 {
-		return nil, nil
-	}
 	acc := map[string]any{}
 	visited := map[string]bool{}
-	for i := 0; len(frontier) > 0 && i < maxTraversalDepth; i++ {
-		var next []string
-		for _, k := range frontier {
-			if visited[k] {
-				continue
-			}
-			visited[k] = true
-			if k == d.Root.Key {
-				continue
-			}
-			v, err := fn(ctx, d.nodes[k], acc)
-			if err != nil {
-				return nil, err
-			}
-			acc[k] = v
-			for _, p := range d.GetParentNodes(k) {
-				if !visited[p.Key] {
-					next = append(next, p.Key)
-				}
+	var visit func(k string) error
+	visit = func(k string) error {
+		if visited[k] {
+			return nil
+		}
+		visited[k] = true
+		for _, c := range d.GetChildNodes(k) {
+			if err := visit(c.Key); err != nil {
+				return err
 			}
 		}
-		frontier = next
+		v, err := fn(ctx, d.nodes[k], acc)
+		if err != nil {
+			return err
+		}
+		acc[k] = v
+		return nil
 	}
-	v, err := fn(ctx, d.Root, acc)
-	if err != nil {
+	if err := visit(d.Root.Key); err != nil {
 		return nil, err
 	}
-	acc[d.Root.Key] = v
-	return v, nil
+	return acc[d.Root.Key], nil
 }
 
 // TrackData returns the graph-level track data (graphKey set) for adapters.
