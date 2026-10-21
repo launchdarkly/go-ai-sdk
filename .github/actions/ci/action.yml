@@ -1,12 +1,15 @@
 name: CI
-description: Format check, vet and test the Go module
+description: Format check, vet, vulnerability check and test the Go module
 
 runs:
   using: composite
   steps:
     - uses: actions/setup-go@v5
       with:
-        go-version-file: go.mod
+        # Latest 1.26 patch, not go.mod's 1.26.0 minimum: govulncheck flags stdlib CVEs fixed in later patches.
+        # ponytail: bump this when go.mod moves to a new minor version.
+        go-version: '1.26.x'
+        check-latest: true
 
     - name: Format check
       shell: bash
@@ -19,6 +22,10 @@ runs:
     - name: Build
       shell: bash
       run: make build
+
+    - name: Vulnerability check
+      shell: bash
+      run: make vulncheck
 
     - name: Test
       shell: bash
