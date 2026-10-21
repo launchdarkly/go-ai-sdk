@@ -154,6 +154,42 @@ func TestResolveGraphTopology(t *testing.T) {
 	}
 }
 
+func TestReverseTraverseVisitsEveryChildBeforeItsParent(t *testing.T) {
+	edges := func(m map[string][]string) map[string]any {
+		out := map[string]any{}
+		for k, ts := range m {
+			var es []any
+			for _, t := range ts {
+				es = append(es, map[string]any{"key": t})
+			}
+			out[k] = es
+		}
+		return out
+	}
+	withFake(t, map[string]any{
+		// Uneven depths: P has a terminal child and a deeper one.
+		"uneven": map[string]any{"root": "root", "edges": edges(map[string][]string{"root": {"P"}, "P": {"T1", "Q"}, "Q": {"T2"}})},
+		// Cycle: each node is visited exactly once.
+		"cyclic": map[string]any{"root": "root", "edges": edges(map[string][]string{"root": {"A"}, "A": {"B"}, "B": {"A", "T"}})},
+		"root":   nodeCfg("r"), "P": nodeCfg("p"), "Q": nodeCfg("q"), "T1": nodeCfg("t1"), "T2": nodeCfg("t2"),
+		"A": nodeCfg("a"), "B": nodeCfg("b"), "T": nodeCfg("t"),
+	})
+	for key, want := range map[string][]string{
+		"uneven": {"T1", "T2", "Q", "P", "root"},
+		"cyclic": {"T", "B", "A", "root"},
+	} {
+		var order []string
+		visit := func(_ context.Context, n *GraphNode, _ map[string]any) (any, error) {
+			order = append(order, n.Key)
+			return n.Key, nil
+		}
+		v, err := ResolveGraph(bg, key, userCtx, GraphOptions{}).ReverseTraverse(bg, visit)
+		if err != nil || v != "root" || !reflect.DeepEqual(order, want) {
+			t.Errorf("%s: reverse order = %v (%v, %v), want %v", key, order, v, err, want)
+		}
+	}
+}
+
 func TestDisabledNodeDisablesGraphAndLogs(t *testing.T) {
 	var buf bytes.Buffer
 	SetLogger(slog.New(slog.NewTextHandler(&buf, nil)))

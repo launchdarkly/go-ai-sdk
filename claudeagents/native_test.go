@@ -1,8 +1,10 @@
 package claudeagents
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"reflect"
 	"slices"
 	"strings"
@@ -406,5 +408,30 @@ func TestToClaudeAgentsNoContext(t *testing.T) {
 		if !strings.HasPrefix(c.Event, "$ld:ai:sdk:") {
 			t.Errorf("tracked %s without a context", c.Event)
 		}
+	}
+}
+
+// A cycle back-edge (B -> A, with A still unbuilt) is dropped with a warning.
+func TestToClaudeAgentsCycleBackEdgeDropped(t *testing.T) {
+	var buf bytes.Buffer
+	aiserver.SetLogger(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { aiserver.SetLogger(nil) })
+	edge := func(k string) []any { return []any{map[string]any{"key": k}} }
+	e := setup(t, map[string]any{
+		"g": map[string]any{
+			"root":    "root",
+			"edges":   map[string]any{"root": edge("A"), "A": edge("B"), "B": edge("A")},
+			"_ldMeta": map[string]any{"enabled": true, "variationKey": "gv", "version": 1},
+		},
+		"root": agentVariation("root inst", nil), "A": agentVariation("a", nil), "B": agentVariation("b", nil),
+	}, textResp("done", 1, 1))
+	if _, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts}).Invoke(bg, "q"); err != nil {
+		t.Fatal(err)
+	}
+	if got := toolNames(e.api.reqs()[0]); !slices.Contains(got, "mcp__subagents__A") {
+		t.Errorf("root tools = %v", got)
+	}
+	if out := buf.String(); !strings.Contains(out, "dropping cyclic edge") || !strings.Contains(out, "source=B target=A") {
+		t.Errorf("log = %q", out)
 	}
 }
