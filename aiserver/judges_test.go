@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -196,5 +197,58 @@ func TestPickJudgeHandlerCollapse(t *testing.T) {
 	got := collapseMessages(AiConfig{Messages: []Message{{Role: "system", Text: "a"}, {Role: "user", Text: "b"}}})
 	if got.Instructions != "a\n\nb" || got.Messages != nil {
 		t.Errorf("collapse = %+v", got)
+	}
+}
+
+// A deferred judge result is tracked under the evaluated config, with exactly
+// the payload the inline path sends (AIC-3576).
+func TestDeferredJudgeTrackDataMatchesInline(t *testing.T) {
+	parent := enabledConfig("P", "", judgedConfig(nil))
+	parent["_ldMeta"] = map[string]any{"enabled": true, "variationKey": "v1", "version": 3, "modelKey": "parent-model", "modelVersion": 7}
+	judge := enabledConfig("P", "judge", map[string]any{"evaluationMetricKey": "quality"})
+	judge["_ldMeta"] = map[string]any{"enabled": true, "variationKey": "j1", "version": 5, "mode": "judge", "modelKey": "judge-model", "modelVersion": 2}
+	f := withFake(t, map[string]any{"cfg": parent, "judge": judge})
+	h := stubHandler("P", ModeMessages, `{"score":0.8,"reasoning":"good"}`, nil, nil)
+	args := ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}
+
+	if _, err := Config(args).Invoke(bg, "question", userCtx); err != nil {
+		t.Fatal(err)
+	}
+	q := f.events("quality")
+	if len(q) != 1 {
+		t.Fatalf("metric events = %v", q)
+	}
+	inline := q[0].Data
+
+	args.SkipJudges = true
+	resp, err := Config(args).Invoke(bg, "question", userCtx)
+	if err != nil || len(resp.JudgeTasks) != 1 {
+		t.Fatalf("tasks=%v err=%v", resp.JudgeTasks, err)
+	}
+	res, err := RunJudge(bg, resp.JudgeTasks[0], []*ProviderHandler{h})
+	if err != nil || res == nil {
+		t.Fatalf("res=%v err=%v", res, err)
+	}
+	want := resp.TrackData
+	want.JudgeConfigKey = "judge"
+	if !reflect.DeepEqual(res.TrackData, want) {
+		t.Errorf("deferred trackData = %+v, want parent's %+v", res.TrackData, want)
+	}
+
+	// Same keys and values as the inline payload; only the per-invocation runId differs.
+	b, _ := json.Marshal(res.TrackData)
+	var deferred map[string]any
+	_ = json.Unmarshal(b, &deferred)
+	delete(deferred, "runId")
+	delete(inline, "runId")
+	if !reflect.DeepEqual(deferred, inline) {
+		t.Errorf("deferred %v != inline %v", deferred, inline)
+	}
+
+	// A graph judge's task carries the graphKey in its parent trackData; it survives.
+	task := resp.JudgeTasks[0]
+	task.ParentTrackData.GraphKey = "g1"
+	if res, _ := RunJudge(bg, task, []*ProviderHandler{h}); res == nil || res.TrackData.GraphKey != "g1" {
+		t.Errorf("graphKey lost: %+v", res)
 	}
 }
