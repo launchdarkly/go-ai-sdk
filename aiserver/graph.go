@@ -25,8 +25,6 @@ import (
 const (
 	// maxTraversalDepth bounds graph walks and BFS expansion (cycle guard).
 	maxTraversalDepth = 100
-	// MaxGraphCacheSize bounds the per-instance resolved-graph cache.
-	MaxGraphCacheSize = 512
 	// GraphSpanName is the graph-level span.
 	GraphSpanName = "ld.ai.graph"
 )
@@ -592,10 +590,6 @@ func ResolveGraph(ctx context.Context, key string, userCtx ldcontext.Context, op
 type AgentGraph struct {
 	key  string
 	opts GraphOptions
-
-	mu    sync.Mutex
-	cache map[string]*GraphDefinition
-	order []string
 }
 
 // Graph returns a model-driven graph runner. It starts at the root, lets the
@@ -603,43 +597,13 @@ type AgentGraph struct {
 // into the next. It stops on a terminal answer, a leaf, a revisited node, or
 // the step cap.
 func Graph(key string, opts GraphOptions) *AgentGraph {
-	return &AgentGraph{key: key, opts: opts, cache: map[string]*GraphDefinition{}}
+	return &AgentGraph{key: key, opts: opts}
 }
 
-// definition resolves once per distinct context content (equal contexts
-// share an entry), bounded by MaxGraphCacheSize. Only enabled definitions
-// are cached.
+// definition resolves the graph and node flags on every call, so flag changes,
+// including disabling the graph, reach a reused AgentGraph on its next run.
 func (g *AgentGraph) definition(ctx context.Context, userCtx ldcontext.Context) *GraphDefinition {
-	b, _ := json.Marshal(userCtx)
-	k := string(b)
-	g.mu.Lock()
-	if d, ok := g.cache[k]; ok {
-		g.mu.Unlock()
-		return d
-	}
-	g.mu.Unlock()
-	d := resolveDefinition(ctx, g.key, userCtx, g.opts)
-	if !d.Enabled {
-		return d // a disabled or failed resolution may be transient; resolve again next call
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if existing, ok := g.cache[k]; ok {
-		return existing
-	}
-	if len(g.order) >= MaxGraphCacheSize {
-		delete(g.cache, g.order[0])
-		g.order = g.order[1:]
-	}
-	g.cache[k] = d
-	g.order = append(g.order, k)
-	return d
-}
-
-func (g *AgentGraph) cacheLen() int {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return len(g.cache)
+	return resolveDefinition(ctx, g.key, userCtx, g.opts)
 }
 
 // Invoke runs the graph and returns the final node's response and the
@@ -691,7 +655,7 @@ func (g *AgentGraph) stream(ctx context.Context, input string, userCtx ldcontext
 			return
 		}
 		runTD := def.trackData
-		runTD.RunID = uuid.NewString() // the definition is cached; each run gets its own id
+		runTD.RunID = uuid.NewString() // each run gets its own id
 
 		spanCtx, span := otel.Tracer(TracerPrefix+"/aiserver").Start(ctx, GraphSpanName)
 		span.SetAttributes(attribute.String("ld.ai.graph.key", g.key))

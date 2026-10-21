@@ -11,7 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -238,29 +237,47 @@ func TestGraphCycleGuard(t *testing.T) {
 	}
 }
 
-func TestGraphCachingAndIsolation(t *testing.T) {
+func TestGraphResolvesEachCallAndIsolation(t *testing.T) {
 	f := withFake(t, twoNode(nil))
 	rh := &recordingHandler{}
 	g := Graph("g", GraphOptions{Handlers: []*ProviderHandler{rh.handler()}})
-	a := ldcontext.New("u1")
-	b := ldcontext.New("u1") // distinct value, equal content
-	if _, err := g.Invoke(bg, "", a, WithVariables(map[string]any{"v": "first"})); err != nil {
+	if _, err := g.Invoke(bg, "", userCtx, WithVariables(map[string]any{"v": "first"})); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Invoke(bg, "", b); err != nil {
+	if _, err := g.Invoke(bg, "", userCtx); err != nil {
 		t.Fatal(err)
 	}
-	if f.calls["root-node"] != 1 || f.calls["g"] != 1 || g.cacheLen() != 1 {
-		t.Errorf("node variations re-resolved: %v, cache=%d", f.calls, g.cacheLen())
+	if f.calls["root-node"] != 2 || f.calls["g"] != 2 {
+		t.Errorf("flags not re-resolved per call: %v", f.calls)
 	}
 	if v := rh.calls[2].Req.Variables["v"]; v != nil {
 		t.Errorf("variables leaked into second call: %v", v)
 	}
-	for i := range MaxGraphCacheSize + 5 {
-		_, _ = g.Invoke(bg, "", ldcontext.New("ctx-"+string(rune('a'+i%26))+strings.Repeat("x", i)))
+}
+
+// A reused Graph sees flag changes, including the kill switch, on the next call (TESTING.md §3.11).
+func TestGraphSeesFlagChanges(t *testing.T) {
+	f := withFake(t, map[string]any{"g": map[string]any{"root": "only"}, "only": nodeCfg("v1")})
+	rh := &recordingHandler{}
+	g := Graph("g", GraphOptions{Handlers: []*ProviderHandler{rh.handler()}})
+	if _, err := g.Invoke(bg, "", userCtx); err != nil {
+		t.Fatal(err)
 	}
-	if n := g.cacheLen(); n > MaxGraphCacheSize {
-		t.Errorf("cache grew to %d", n)
+	f.variations["only"] = nodeCfg("v2")
+	if _, err := g.Invoke(bg, "", userCtx); err != nil {
+		t.Fatal(err)
+	}
+	if got := rh.calls[1].Req.Config.Instructions; got != "v2" {
+		t.Errorf("second call instructions = %q, want v2", got)
+	}
+	f.variations["g"] = map[string]any{}
+	if _, err := g.Invoke(bg, "", userCtx); !errors.Is(err, ErrGraphDisabled) {
+		t.Errorf("disabled graph invoke err = %v", err)
+	}
+	for _, err := range g.Stream(bg, "", userCtx) {
+		if !errors.Is(err, ErrGraphDisabled) {
+			t.Errorf("disabled graph stream err = %v", err)
+		}
 	}
 }
 

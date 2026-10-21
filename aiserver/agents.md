@@ -38,7 +38,7 @@ Config, ConfigArgs, AIConfig, InspectConfig, InspectResult
 // graphs
 Graph, ResolveGraph, AgentGraph, GraphDefinition, GraphNode, GraphEdge,
 GraphOptions, GraphResponse, GraphStreamEvent, GraphTopology, RouteResult, RunNodeOptions,
-TraverseVisitor, MaxGraphCacheSize, TrackGraphEvent
+TraverseVisitor, TrackGraphEvent
 // errors
 ErrNotInitialized, ErrConfigNotFound, ErrConfigDisabled, ErrNoHandler, ErrGraphDisabled
 // call options and events
