@@ -1,4 +1,4 @@
-package skills
+package aiserver
 
 import (
 	"maps"
@@ -49,9 +49,9 @@ var integrityReasonCodes = []integrityReasonCode{
 }
 
 func emit(signal string, properties map[string]any) {
-	stateMu.Lock()
+	skillStateMu.Lock()
 	e := emitter
-	stateMu.Unlock()
+	skillStateMu.Unlock()
 	defer func() {
 		if r := recover(); r != nil {
 			currentLogger().Warn("skills telemetry emitter panicked; ignoring", "panic", r)

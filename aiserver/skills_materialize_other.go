@@ -1,6 +1,6 @@
 //go:build !unix
 
-package skills
+package aiserver
 
 // supportsDirFD is false where there is no *at() family. Materialization
 // refuses to run rather than fall back to path-based checks: Windows is not a

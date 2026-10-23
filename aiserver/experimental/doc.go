@@ -5,10 +5,8 @@
 //
 // Current experimental features:
 //
-//   - Agent Skills (skills.go): version-pinned skill references on AI Configs,
-//     verified skill content from a SkillStore, materialization to disk, the
-//     FDv2 delivery transport, and a watcher that keeps disk in sync.
+//   - Evaluations from Code (evaluations.go).
 //
-// When a feature is promoted to core, its names here stay as deprecated
-// aliases of the aiserver names until the next major release.
+// When a feature is promoted to core, its names move to package aiserver and
+// leave this package. Agent Skills has been promoted: use the aiserver names.
 package experimental

@@ -3,10 +3,7 @@ package aiserver
 import (
 	"encoding/json"
 	"math"
-	"regexp"
 )
-
-var skillKeyRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 func isObject(v any) (map[string]any, bool) {
 	m, ok := v.(map[string]any)

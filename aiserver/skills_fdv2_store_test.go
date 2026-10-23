@@ -1,6 +1,6 @@
 //go:build unix
 
-package skills
+package aiserver
 
 import (
 	"context"
@@ -504,7 +504,7 @@ func TestFDv2Absences(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range pkgs["skills"].Files {
+	for _, f := range pkgs["aiserver"].Files {
 		for name := range f.Scope.Objects {
 			if strings.Contains(name, "NoSkillPayload") || strings.Contains(name, "PayloadUnavailable") {
 				t.Fatalf("%s must not exist", name)
@@ -1003,7 +1003,7 @@ func TestFDv2BeforeFirstPayloadWriteAllDeletesNothing(t *testing.T) {
 // standard library.
 func TestFDv2ImportsOnlyTheStandardLibrary(t *testing.T) {
 	fset := token.NewFileSet()
-	for _, file := range []string{"fdv2_reader.go", "fdv2_store.go"} {
+	for _, file := range []string{"skills_fdv2_reader.go", "skills_fdv2_store.go"} {
 		f, err := parser.ParseFile(fset, file, nil, parser.ImportsOnly)
 		if err != nil {
 			t.Fatal(err)
