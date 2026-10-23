@@ -1,6 +1,6 @@
 //go:build unix
 
-package skills
+package aiserver
 
 import (
 	"context"
@@ -13,8 +13,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
 
 func tamperedRaw(key string) map[string]any {
@@ -172,11 +170,11 @@ func TestSignalShapeIndependentOfLayer(t *testing.T) {
 
 func TestMaterializedRevokedAndAllowlist(t *testing.T) {
 	rec, logs := setup(t)
-	fake := &fakeLD{}
-	if _, err := aiserver.InitWithClient(context.Background(), fake, aiserver.InitOptions{}); err != nil {
+	fake := &fakeSkillsLD{}
+	if _, err := InitWithClient(context.Background(), fake, InitOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = aiserver.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	fake.tracks = nil
 	root := t.TempDir()
 	store := NewInMemorySkillStore(map[string]any{"a": rawSkill("a", 1, "a1"), "b": rawSkill("b", 1, "b1"), "t": tamperedRaw("t")})
@@ -185,7 +183,7 @@ func TestMaterializedRevokedAndAllowlist(t *testing.T) {
 	_, _ = GetSkill("t", 0)
 	_, _ = GetSkills([]SkillKey{"a", "b"})
 	_, _ = AllSkills()
-	_, _ = SkillRefs(&aiserver.AiConfig{Raw: map[string]any{"skills": []any{}}})
+	_, _ = SkillRefs(&AiConfig{Raw: map[string]any{"skills": []any{}}})
 	if _, err := WriteSkills([]SkillKey{"a", "b"}, root, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +274,7 @@ func (panickingEmitter) Record(string, map[string]any) { panic("emitter exploded
 func TestThrowingAndDefaultEmitterNeverBreakOperations(t *testing.T) {
 	for name, e := range map[string]telemetryEmitter{"panicking": panickingEmitter{}, "default": nil} {
 		_, _ = setup(t)
-		SetEmitterForTesting(e)
+		setSkillEmitterForTesting(e)
 		SetSkillStore(NewInMemorySkillStore(map[string]any{"t": tamperedRaw("t"), "a": rawSkill("a", 1, "a")}))
 		if got, _ := GetSkill("t", 0); got != nil {
 			t.Fatalf("%s: tampered skill returned", name)
@@ -291,7 +289,7 @@ func TestThrowingAndDefaultEmitterNeverBreakOperations(t *testing.T) {
 // the panic is caught and logged at WARN, never propagated or silent.
 func TestPanickingEmitterIsLoggedAtWarn(t *testing.T) {
 	_, logs := setup(t)
-	SetEmitterForTesting(panickingEmitter{})
+	setSkillEmitterForTesting(panickingEmitter{})
 	SetSkillStore(NewInMemorySkillStore(map[string]any{"t": tamperedRaw("t")}))
 	if got, _ := GetSkill("t", 0); got != nil {
 		t.Fatal("tampered skill returned")

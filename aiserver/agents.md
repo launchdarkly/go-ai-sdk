@@ -25,8 +25,8 @@ handler packages they use.
 | `handlerkit.go` | Shared handler building blocks: `ComposePrompt`, span tree (`HandlerRun`), usage attributes |
 
 Internal packages: `internal/trajectory`, `internal/judging`
-(judge message history and verdict parsing), `internal/bridge` (hooks to the
-experimental entry point).
+(judge message history and verdict parsing), `internal/bridge` (shutdown hooks and
+the shared logger, used by Agent Skills and the experimental entry point).
 
 ## Public exports
 
@@ -70,9 +70,9 @@ ReportUsage, TracerPrefix, PackageName, PackageVersion
   `lifecycleMu`; a failed call stores nothing and closes any client it built,
   so the next call retries. `stateMu` guards the client only briefly, so
   `GetClient` and tracking never wait on a slow initialization.
-- `Shutdown` swaps state out under the lock, runs experimental hooks (panics
-  recovered), shuts the tracer provider down, then flushes and closes the
-  client. Calling it twice is a no-op.
+- `Shutdown` swaps state out under the lock, runs the bridge shutdown hooks
+  (Agent Skills state, experimental features; panics recovered), shuts the
+  tracer provider down, then flushes and closes the client. Calling it twice is a no-op.
 - `$ld:ai:sdk:info` is sent once per registered package per client;
   `$ld:ai:sdk:usage` once per helper per client, held until a client exists.
 
@@ -118,6 +118,79 @@ reuse an LD client you already built.
 | `github.com/launchdarkly/go-sdk-common/v3` | `ldcontext`, `ldvalue` |
 | `go.opentelemetry.io/otel` (+ `sdk`, `otlptracehttp`) | Spans, tracer provider, OTLP export |
 | `github.com/google/uuid` | Run ids |
+| `golang.org/x/sys` | `*at()` filesystem calls for skill materialization |
+
+## Agent Skills
+
+Part of the core client. Not a handler: no `providesFor`. All logic and tests live in the
+`skills_*.go` files of this package; `skills_public_test.go` exercises the exported names from
+outside the package. The names are pinned in `surface_test.go`'s `rootSurface`.
+Skills report no `$ld:ai:sdk:usage` helper: they have no usage ID, and JS and Python send none. Add
+an ID only once it is shared with the JS and Python SDKs.
+
+| File | Responsibility |
+| --- | --- |
+| `skills_types.go` | Immutable value types (unexported fields + getters), closed sets, on-disk constants. |
+| `skills_store.go` | `SkillStore` seam and optional halves, `Listener`, module state, `SetSkillStore`, `clearSkillState` (registered with `bridge.OnShutdown`), readiness probe. |
+| `skills_telemetry.go` | The only place signals and integrity log records are built (three signals, ten reason codes). |
+| `skills_verify.go` | `verifyRawSkill` (shape → size → encoding → hash), `resolveFromStore` (the one retrieval path: key check, then version check), `newestByKey`. |
+| `skills_accessors.go`, `skills_memstore.go` | `SkillRefs`, `GetSkill*`, `AllSkills`; `InMemorySkillStore` and the shared `objectSet`. |
+| `skills_writeskills.go` | Options, the availability gate, request resolution (`"*"` enumerates raw objects; never `AllSkills`). |
+| `skills_materialize_unix.go` | Root validation, manifest load/rewrite, write/adopt/update, prune. `skills_materialize_other.go` refuses non-POSIX. |
+| `skills_safefs_unix.go` | Descriptor-pinned primitives on `golang.org/x/sys/unix` and the `fsOps` interception hooks. |
+| `skills_fdv2_reader.go`, `skills_fdv2_store.go` | Pure FDv2 protocol reader; transport (HTTP, SSE, backoff, lifecycle). Standard library only. |
+| `skills_watch.go` | Watcher goroutine: trailing debounce, context cancellation, detach on close. |
+
+```go
+// skills exports (skills_*.go)
+SkillReference SkillKey SkillRequest SkillInput Skill SkillFields SkillOutcome SkillOutcomeReason
+ReconcileAction ReconcileActionKind ReconcileReport OnUnavailable SkillStore ListenerStore
+ListenerRemover InitializationProber Listener InMemorySkillStore FDv2SkillStore FDv2SkillStoreOptions
+FDv2Mode StoreDiagnostics WriteSkillsOptions WatchSkillsOptions SkillWatcher
+SkillFilename ManifestFilename ManifestVersion Reason* Action* OnUnavailableKeep OnUnavailableRaise
+FDv2ModeStream FDv2ModePoll ErrNoSkillStore ErrInvalidArgument ErrSkillsUnavailable
+ErrStoreNotWatchable ErrUnsupportedKind ErrStoreClosed ErrUnsupportedPlatform
+NewSkillReference NewSkill NewSkillOutcome NewListener NewInMemorySkillStore NewFDv2SkillStore
+SetSkillStore SkillRefs GetSkill GetSkillResult GetSkills AllSkills WriteSkills WriteAllSkills
+WatchSkills WatchAllSkills
+```
+
+**Lifecycle.** `InitClient` is not required for skills; a store is configured with `SetSkillStore`
+only (never an `InitOptions` field).
+`Shutdown` clears the store and emitter through the bridge hook; it does not close an
+`FDv2SkillStore`.
+
+**OTel.** Skills emit no spans and never call `client.track`, not even `$ld:ai:sdk:usage`. The
+tracer provider is set up by `InitClient`.
+
+**Security posture (non-relaxable).** The root is pinned once per reconcile; every read and write
+under it is `*at()`-relative, so swapping a directory for a symlink cannot redirect anything. The
+manifest read and the adoption comparison read share one no-follow, non-blocking, `fstat`-checked,
+`len+1`-bounded primitive (`readRegularAt`). Only manifest-listed paths under a matching key are
+overwritten or pruned; a corrupt manifest or incomplete retrieval suppresses all deletion. Content is
+re-verified immediately before writing. The SDK never parses `Skill.Content`; do not add a reader.
+
+**Telemetry seam.** Private emitter (`setSkillEmitterForTesting`), default no-op, `language` = `go`. Store
+keys and hashes are shape-checked and redacted before reaching any signal or record.
+
+| Dependency | Why |
+| --- | --- |
+| `golang.org/x/sys/unix` | `Openat`, `Mkdirat`, `Renameat`, `Unlinkat`, `Fstatat`, `Fchmod`, `Mkfifo` (tests). Already in `go.mod`. |
+| standard library | Everything else, including the FDv2 transport. |
+
+**Common pitfalls.**
+
+- Calling `WriteAllSkills` before `WaitForSkills` returns true does not prune (it reports
+  unavailable) — but a hand-written store without `IsInitialized` is treated as ready, so its empty
+  answer reads as "every skill revoked".
+- No `removed` action does not mean nothing is stale: a run with a manifest or retrieval error
+  prunes nothing. Check `report.OK()`.
+- One watcher (or one `WriteSkills` at a time) per root; interleaved reconciles lose manifest entries.
+- `Listener` is a pointer so `RemoveListener` can find it; wrapping the same func twice makes two
+  listeners.
+- Tests that touch `fsOps`, the umask or module state must not run in parallel.
+
+Check: `gofmt -l aiserver && go vet ./aiserver/... && go test -race ./aiserver/...`.
 
 ## Common pitfalls
 

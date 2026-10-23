@@ -1,4 +1,4 @@
-package skills
+package aiserver
 
 import (
 	"context"
@@ -90,21 +90,21 @@ type noopEmitter struct{}
 func (noopEmitter) Record(string, map[string]any) {}
 
 var (
-	stateMu sync.Mutex
-	store   SkillStore
-	emitter telemetryEmitter = noopEmitter{}
-	logger  *slog.Logger
+	skillStateMu sync.Mutex
+	store        SkillStore
+	emitter      telemetryEmitter = noopEmitter{}
+	logger       *slog.Logger
 )
 
 func init() {
-	// Experimental state is reached by core only through this hook.
-	bridge.OnShutdown(func(context.Context) { ClearState() })
+	// Shutdown clears skills state through this bridge hook.
+	bridge.OnShutdown(func(context.Context) { clearSkillState() })
 }
 
 // SetSkillStore configures the store the accessors and WriteSkills read
 // from. It applies on every call, including after the client exists. A nil
 // store (or a typed nil pointer) is ignored and never clears a configured
-// store; aiserver.Shutdown does that.
+// store; Shutdown does that.
 //
 // Replacing a store does not close the previous one, and a running watcher
 // stays subscribed to the store it started with.
@@ -112,8 +112,8 @@ func SetSkillStore(s SkillStore) {
 	if isNil(s) {
 		return
 	}
-	stateMu.Lock()
-	defer stateMu.Unlock()
+	skillStateMu.Lock()
+	defer skillStateMu.Unlock()
 	store = s
 }
 
@@ -129,45 +129,46 @@ func isNil(v any) bool {
 	return false
 }
 
-// ClearState drops the configured store and the telemetry emitter. Called by
-// aiserver.Shutdown through the bridge hook, and by tests.
-func ClearState() {
-	stateMu.Lock()
-	defer stateMu.Unlock()
+// clearSkillState drops the configured store and the telemetry emitter. Called by
+// Shutdown through the bridge hook, and by tests.
+func clearSkillState() {
+	skillStateMu.Lock()
+	defer skillStateMu.Unlock()
 	store = nil
 	emitter = noopEmitter{}
 }
 
-// SetEmitterForTesting installs a recording emitter. nil restores the no-op.
-func SetEmitterForTesting(e telemetryEmitter) {
-	stateMu.Lock()
-	defer stateMu.Unlock()
+// setSkillEmitterForTesting installs a recording emitter. nil restores the no-op.
+func setSkillEmitterForTesting(e telemetryEmitter) {
+	skillStateMu.Lock()
+	defer skillStateMu.Unlock()
 	if e == nil {
 		e = noopEmitter{}
 	}
 	emitter = e
 }
 
-// SetLogger replaces the logger. nil restores the SDK logger (aiserver.SetLogger).
-func SetLogger(l *slog.Logger) {
-	stateMu.Lock()
-	defer stateMu.Unlock()
+// setSkillLogger replaces the skills logger. nil restores the SDK logger
+// (SetLogger).
+func setSkillLogger(l *slog.Logger) {
+	skillStateMu.Lock()
+	defer skillStateMu.Unlock()
 	logger = l
 }
 
 func currentLogger() *slog.Logger {
-	stateMu.Lock()
+	skillStateMu.Lock()
 	l := logger
-	stateMu.Unlock()
+	skillStateMu.Unlock()
 	if l == nil {
-		return bridge.Logger()
+		return sdkLogger()
 	}
 	return l
 }
 
 func currentStore() SkillStore {
-	stateMu.Lock()
-	defer stateMu.Unlock()
+	skillStateMu.Lock()
+	defer skillStateMu.Unlock()
 	return store
 }
 

@@ -1,4 +1,4 @@
-package skills
+package aiserver
 
 import (
 	"os"
@@ -8,8 +8,8 @@ import (
 )
 
 // parsing skill content is a security boundary the SDK does not cross,
-// so no YAML package is in the import graph of either skills package, test
-// dependencies included ("in any group"). The graph is the toolchain's own
+// so no YAML package is in the import graph of aiserver, test dependencies
+// included ("in any group"). The graph is the toolchain's own
 // answer, so an indirect dependency counts as much as a direct one.
 func TestNoYAMLPackageInTheTransitiveImportGraph(t *testing.T) {
 	goBin, err := exec.LookPath("go")
@@ -17,8 +17,7 @@ func TestNoYAMLPackageInTheTransitiveImportGraph(t *testing.T) {
 		t.Skip("the go command is not on PATH")
 	}
 	packages := []string{
-		"github.com/launchdarkly/go-ai-sdk/internal/skills",
-		"github.com/launchdarkly/go-ai-sdk/aiserver/experimental",
+		"github.com/launchdarkly/go-ai-sdk/aiserver",
 	}
 	cmd := exec.Command(goBin, append([]string{"list", "-deps", "-test"}, packages...)...)
 	// Offline and read-only: the graph comes from go.mod and the module cache.
@@ -37,7 +36,7 @@ func TestNoYAMLPackageInTheTransitiveImportGraph(t *testing.T) {
 	}
 	for _, dep := range deps {
 		if strings.Contains(strings.ToLower(dep), "yaml") {
-			t.Errorf("%s is in the import graph of the skills packages", dep)
+			t.Errorf("%s is in the import graph of aiserver", dep)
 		}
 	}
 }

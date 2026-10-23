@@ -1,4 +1,4 @@
-package skills
+package aiserver
 
 import (
 	"errors"
@@ -36,9 +36,9 @@ var (
 // noStoreMessage names the setter and both shipped stores. Callers
 // match on "skill store"; keep that phrase.
 const noStoreMessage = "launchdarkly ai skills: no skill store is configured, so skill content " +
-	"cannot be retrieved. Configure one with experimental.SetSkillStore(store): " +
-	"FDv2SkillStore (experimental.NewFDv2SkillStore) receives content from LaunchDarkly, " +
-	"and InMemorySkillStore (experimental.NewInMemorySkillStore) is for local development and testing"
+	"cannot be retrieved. Configure one with aiserver.SetSkillStore(store): " +
+	"FDv2SkillStore (aiserver.NewFDv2SkillStore) receives content from LaunchDarkly, " +
+	"and InMemorySkillStore (aiserver.NewInMemorySkillStore) is for local development and testing"
 
 func invalidArg(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{ErrInvalidArgument}, args...)...)
