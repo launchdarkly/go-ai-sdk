@@ -72,14 +72,14 @@ type Listener = skills.Listener
 // Experimental.
 type InMemorySkillStore = skills.InMemorySkillStore
 
-// FDv2SkillStore is the SkillStore fed by LaunchDarkly delivery. Experimental.
-type FDv2SkillStore = skills.FDv2SkillStore
+// LaunchDarklySkillStore is the SkillStore fed by LaunchDarkly delivery. Experimental.
+type LaunchDarklySkillStore = skills.LaunchDarklySkillStore
 
-// FDv2SkillStoreOptions configure NewFDv2SkillStore. Experimental.
-type FDv2SkillStoreOptions = skills.FDv2SkillStoreOptions
+// LaunchDarklySkillStoreOptions configure NewLaunchDarklySkillStore. Experimental.
+type LaunchDarklySkillStoreOptions = skills.LaunchDarklySkillStoreOptions
 
-// FDv2Mode selects streaming or polling delivery. Experimental.
-type FDv2Mode = skills.FDv2Mode
+// LaunchDarklySkillStoreMode selects streaming or polling delivery. Experimental.
+type LaunchDarklySkillStoreMode = skills.LaunchDarklySkillStoreMode
 
 // StoreDiagnostics are the FDv2 transport counters. Experimental.
 type StoreDiagnostics = skills.StoreDiagnostics
@@ -132,16 +132,16 @@ const (
 	ActionError = skills.ActionError
 )
 
-// OnUnavailable and FDv2Mode values. Experimental.
+// OnUnavailable and LaunchDarklySkillStoreMode values. Experimental.
 const (
 	// OnUnavailableKeep reports unretrievable content and keeps files (default).
 	OnUnavailableKeep = skills.OnUnavailableKeep
 	// OnUnavailableRaise returns ErrSkillsUnavailable instead.
 	OnUnavailableRaise = skills.OnUnavailableRaise
-	// FDv2ModeStream holds a long-lived connection (default).
-	FDv2ModeStream = skills.FDv2ModeStream
-	// FDv2ModePoll polls every PollInterval.
-	FDv2ModePoll = skills.FDv2ModePoll
+	// LaunchDarklySkillStoreModeStream holds a long-lived connection (default).
+	LaunchDarklySkillStoreModeStream = skills.LaunchDarklySkillStoreModeStream
+	// LaunchDarklySkillStoreModePoll polls every PollInterval.
+	LaunchDarklySkillStoreModePoll = skills.LaunchDarklySkillStoreModePoll
 )
 
 // Sentinel errors; match with errors.Is. Experimental.
@@ -156,7 +156,7 @@ var (
 	ErrStoreNotWatchable = skills.ErrStoreNotWatchable
 	// ErrUnsupportedKind: AddListener for a kind other than "skill".
 	ErrUnsupportedKind = skills.ErrUnsupportedKind
-	// ErrStoreClosed: FDv2SkillStore.Start after Close.
+	// ErrStoreClosed: LaunchDarklySkillStore.Start after Close.
 	ErrStoreClosed = skills.ErrStoreClosed
 	// ErrUnsupportedPlatform: materialization needs a POSIX platform.
 	ErrUnsupportedPlatform = skills.ErrUnsupportedPlatform
@@ -186,10 +186,10 @@ func NewInMemorySkillStore(objects map[string]any) *InMemorySkillStore {
 	return skills.NewInMemorySkillStore(objects)
 }
 
-// NewFDv2SkillStore builds a delivery-backed store for a server-side SDK key.
+// NewLaunchDarklySkillStore builds a delivery-backed store for a server-side SDK key.
 // Call Start, then WaitForSkills, then SetSkillStore. Experimental.
-func NewFDv2SkillStore(sdkKey string, opts *FDv2SkillStoreOptions) (*FDv2SkillStore, error) {
-	return skills.NewFDv2SkillStore(sdkKey, opts)
+func NewLaunchDarklySkillStore(sdkKey string, opts *LaunchDarklySkillStoreOptions) (*LaunchDarklySkillStore, error) {
+	return skills.NewLaunchDarklySkillStore(sdkKey, opts)
 }
 
 // SetSkillStore configures the store the accessors and WriteSkills read

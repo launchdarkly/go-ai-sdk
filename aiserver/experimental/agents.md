@@ -99,20 +99,20 @@ live in `internal/skills`; `skills.go` here is aliases plus one-line wrappers. S
 // skills exports (see skills.go)
 SkillReference SkillKey SkillRequest SkillInput Skill SkillFields SkillOutcome SkillOutcomeReason
 ReconcileAction ReconcileActionKind ReconcileReport OnUnavailable SkillStore ListenerStore
-ListenerRemover InitializationProber Listener InMemorySkillStore FDv2SkillStore FDv2SkillStoreOptions
-FDv2Mode StoreDiagnostics WriteSkillsOptions WatchSkillsOptions SkillWatcher
-SkillFilename ManifestFilename ManifestVersion Reason* Action* OnUnavailableKeep OnUnavailableRaise
-FDv2ModeStream FDv2ModePoll ErrNoSkillStore ErrInvalidArgument ErrSkillsUnavailable
-ErrStoreNotWatchable ErrUnsupportedKind ErrStoreClosed ErrUnsupportedPlatform
-NewSkillReference NewSkill NewSkillOutcome NewListener NewInMemorySkillStore NewFDv2SkillStore
-SetSkillStore SkillRefs GetSkill GetSkillResult GetSkills AllSkills WriteSkills WriteAllSkills
-WatchSkills WatchAllSkills
+ListenerRemover InitializationProber Listener InMemorySkillStore LaunchDarklySkillStore
+LaunchDarklySkillStoreOptions LaunchDarklySkillStoreMode StoreDiagnostics WriteSkillsOptions
+WatchSkillsOptions SkillWatcher SkillFilename ManifestFilename ManifestVersion Reason* Action*
+OnUnavailableKeep OnUnavailableRaise LaunchDarklySkillStoreModeStream LaunchDarklySkillStoreModePoll
+ErrNoSkillStore ErrInvalidArgument ErrSkillsUnavailable ErrStoreNotWatchable ErrUnsupportedKind
+ErrStoreClosed ErrUnsupportedPlatform NewSkillReference NewSkill NewSkillOutcome NewListener
+NewInMemorySkillStore NewLaunchDarklySkillStore SetSkillStore SkillRefs GetSkill GetSkillResult
+GetSkills AllSkills WriteSkills WriteAllSkills WatchSkills WatchAllSkills
 ```
 
 **Lifecycle.** `InitClient` is not required for skills; a store is configured with `SetSkillStore`
 only (never an `InitOptions` field).
-`aiserver.Shutdown` clears the store and emitter through the bridge hook; it does not close an
-`FDv2SkillStore`.
+`aiserver.Shutdown` clears the store and emitter through the bridge hook; it does not close a
+`LaunchDarklySkillStore`.
 
 **OTel.** Skills emit no spans and never call `client.track`, not even `$ld:ai:sdk:usage`. The
 tracer provider is set up by `aiserver.InitClient` (see `../agents.md`).

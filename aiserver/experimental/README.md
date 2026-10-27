@@ -93,7 +93,7 @@ content to disk as `<root>/<key>/SKILL.md`. Install with
 ### Keep a directory in sync with LaunchDarkly
 
 ```go
-store, err := experimental.NewFDv2SkillStore(os.Getenv("LD_SDK_KEY"), nil) // server-side sdk- key only
+store, err := experimental.NewLaunchDarklySkillStore(os.Getenv("LD_SDK_KEY"), nil) // server-side sdk- key only
 if err != nil { log.Fatal(err) }
 if _, err := store.Start(); err != nil { log.Fatal(err) }
 defer store.Close()
@@ -152,13 +152,13 @@ wire objects (`key`, `version`, `content`, `contentHash`, optional `name`, `desc
 | `WriteSkills(skills, root, *WriteSkillsOptions)` | `ReconcileReport, error` | Any slice of `Skill`, `*Skill`, `SkillReference`, `SkillKey` (or mixed `[]SkillInput`). |
 | `WriteAllSkills(root, *WriteSkillsOptions)` | `ReconcileReport, error` | Every skill the store holds (the `"*"` key). |
 | `WatchSkills` / `WatchAllSkills(ctx, …, *WatchSkillsOptions)` | `ReconcileReport, *SkillWatcher, error` | Needs a store with `AddListener`; stops on `Close` or when `ctx` is done. |
-| `NewFDv2SkillStore(sdkKey, *FDv2SkillStoreOptions)` | `*FDv2SkillStore, error` | `Start`, `WaitForSkills`, `IsInitialized`, `Failed`, `Diagnostics`, `Close` (final). |
+| `NewLaunchDarklySkillStore(sdkKey, *LaunchDarklySkillStoreOptions)` | `*LaunchDarklySkillStore, error` | `Start`, `WaitForSkills`, `IsInitialized`, `Failed`, `Diagnostics`, `Close` (final). |
 
 - `WriteSkillsOptions`: `NoPrune` (pruning is on by default), `Timeout *time.Duration` (nil = 10s,
   0 = already exhausted, negative is an error), `OnUnavailable` (`keep` default; `raise` returns
   `ErrSkillsUnavailable`). `WatchSkillsOptions` embeds it and adds `Debounce` (0 = 500ms) and
   `OnReconcile`.
-- `FDv2SkillStoreOptions`: `BaseURI` (default `https://sdk.launchdarkly.com`; given alone it serves
+- `LaunchDarklySkillStoreOptions`: `BaseURI` (default `https://sdk.launchdarkly.com`; given alone it serves
   both endpoints), `StreamURI` (default `https://stream.launchdarkly.com`), `Mode` (`stream`
   default, or `poll`), `PollInterval` (30s), `ReadTimeout` (10s poll, 300s stream),
   `InitialBackoff` (1s), `MaxBackoff` (30s). URIs must be `https`; zero means default, negative is
