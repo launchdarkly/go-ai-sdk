@@ -54,7 +54,7 @@ type agent struct {
 	native       map[string]aiserver.Tool        // hosted tools, keyed like tools
 	handlers     map[string]aiserver.ToolHandler // ToolFunc / NativeTool by tool key
 	handoffs     []handoff
-	outputType   *OutputType
+	outputType   *outputType
 }
 
 // handoff is a transfer tool that switches the run to target.

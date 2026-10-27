@@ -137,9 +137,6 @@ func OpenAIAgents(ctx context.Context, configKey, userInput string, userCtx ldco
 
 func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph
 
-type OutputType struct{ Type, Name string; Strict bool; Schema map[string]any }
-func BuildOutputType(outputFormat map[string]any) *OutputType
-
 type NativeGraphOptions struct {
 	ToolHandlers map[string]aiserver.ToolHandler
 	Context      ldcontext.Context
@@ -157,8 +154,9 @@ Behavior:
 - Config tools are sent as function tools only when `ToolHandlers` holds a `ToolFunc` for them; a
   `NativeTool` becomes a hosted tool. A run stops after `max_turns` model turns (default 10) with
   `ErrMaxTurns`.
-- `outputFormat` becomes `BuildOutputType(outputFormat)` sent as `text.format`, and the parsed JSON
-  value is returned. Unparseable output is returned as the raw string. Streaming ignores
+- `outputFormat` is sent as `text.format` (`{"type": "json_schema", "name": "output", "strict":
+  false, "schema": ...}`; the schema root gets `type: "object"` and `required` lists every
+  property), and the parsed JSON value is returned. Unparseable output is returned as the raw string. Streaming ignores
   `outputFormat`.
 - Forwarded `model.parameters`: `temperature`, `top_p`, `max_output_tokens` (also from
   `max_tokens` / `max_completion_tokens`), `parallel_tool_calls`, `tool_choice`, `reasoning`,
