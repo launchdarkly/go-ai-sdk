@@ -81,7 +81,10 @@ out, err := g.Invoke(ctx, "Plan a trip to Lisbon", userCtx)
 ```
 
 `Graph(...).Stream` yields `node_start`, `chunk`, `node_done`, `handoff` and a
-final `done`. Framework-native runners take `aiserver.ResolveGraph(...)`.
+final `done`. A node's own judge scores are on its `node_done` event
+(`JudgeResults`, nil when none produced a result). `done.JudgeResults` holds only
+the graph-level judge (`GraphJudge`), so to collect every score, read each
+`node_done`. Framework-native runners take `aiserver.ResolveGraph(...)`.
 
 ### Registry
 
