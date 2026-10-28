@@ -323,21 +323,12 @@ func selectNodeHandler(n *GraphNode, handlers []*ProviderHandler) (*ProviderHand
 var unsafeToolChars = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
 // routingSuffix and handoffResult are the model-visible routing text for a
-// multi-edge node. The wording is pinned by TESTING.md §3.15a and must stay
-// byte-identical to the TypeScript and Python SDKs. Two constraints shape it:
-//
-//   - It must not invite a node to produce a "final answer" or "final
-//     response" before routing. A pure router has no answer of its own, so
-//     that wording led it to write the target agent's answer (AIC-3601), which
-//     in Stream reaches the caller as chunk events and reaches the target as
-//     the [Previous agent response] block.
-//   - It must keep telling the node to use its own tools first and that the
-//     handoff is "recorded". Nodes with a real tool skipped it when the
-//     handoff result read "Transferring to <key>" (js-ai-sdk#59 /
-//     python-ai-sdk#90).
-//
-// It does not branch on whether the node is a router: the graph schema has no
-// router role, and a node with no tools can still write its own part first.
+// multi-edge node. The wording is pinned by §3.15a of TESTING.md in
+// launchdarkly/ai-sdks-monorepo (AIC-3601); keep it byte-identical to the other
+// SDKs. Do not reintroduce "final answer" or
+// "final response": a pure router has no answer of its own and wrote the
+// target's. Keep "recorded" and "using your available tools first": nodes with
+// a real tool skipped it when the result read "Transferring to <key>".
 const routingSuffix = "\n\nComplete your task using your available tools first. Only once your own part is done, call exactly one transfer tool to route to the next agent. Do not answer the parts of the request that belong to the agent you route to."
 
 // handoffResult is the handoff tool's result. target is the edge's raw
