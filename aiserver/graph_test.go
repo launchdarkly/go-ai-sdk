@@ -591,8 +591,8 @@ func TestGraphJudge(t *testing.T) {
 	}
 }
 
-// verdictHandler answers a judge call with a verdict and any other call like
-// recordingHandler, streaming when the inner handler does.
+// verdictHandler answers a judge call with verdict and passes any other call to
+// inner, streaming when inner does.
 func verdictHandler(inner *ProviderHandler, verdict string) *ProviderHandler {
 	invoke := func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		if req.Variables["response_to_evaluate"] != nil {
@@ -603,21 +603,25 @@ func verdictHandler(inner *ProviderHandler, verdict string) *ProviderHandler {
 	return createHandler(inner.ProvidesFor, invoke, inner.Stream, false)
 }
 
-// A node's own judge results are on its node_done; done keeps only the graph judge.
-func TestGraphStreamNodeJudgeResults(t *testing.T) {
-	leaf := enabledConfig("P", "agent", judgedConfig(map[string]any{"instructions": "leaf work"}))
-	withFake(t, twoNode(map[string]any{"leaf-node": leaf, "judge": enabledConfig("P", "judge", nil)}))
-	h := verdictHandler((&recordingHandler{stream: true}).handler(), `{"score":0.9,"reasoning":"good"}`)
-	events, err := drainGraph(Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}}).Stream(bg, "q", userCtx))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var dones []GraphStreamEvent
+func nodeDones(events []GraphStreamEvent) (dones []GraphStreamEvent) {
 	for _, e := range events {
 		if e.Type == EventNodeDone {
 			dones = append(dones, e)
 		}
 	}
+	return dones
+}
+
+// A node's own judge results are on its node_done; done keeps only the graph judge.
+func TestGraphStreamNodeJudgeResults(t *testing.T) {
+	leaf := enabledConfig("P", "agent", judgedConfig(map[string]any{"instructions": "leaf work"}))
+	withFake(t, twoNode(map[string]any{"leaf-node": leaf, "judge": enabledConfig("P", "judge", nil), "gj": enabledConfig("P", "judge", nil)}))
+	h := verdictHandler((&recordingHandler{stream: true}).handler(), `{"score":0.9,"reasoning":"good"}`)
+	events, err := drainGraph(Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}}).Stream(bg, "q", userCtx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dones := nodeDones(events)
 	if len(dones) != 2 || dones[0].NodeKey != "root-node" || dones[1].NodeKey != "leaf-node" {
 		t.Fatalf("node_done events = %+v", dones)
 	}
@@ -631,19 +635,28 @@ func TestGraphStreamNodeJudgeResults(t *testing.T) {
 		t.Errorf("done = %+v, want no judgeResults", done)
 	}
 
-	// A routing node's judges are on its own node_done too.
+	// With a graph judge as well, done holds only the graph judge's key and the
+	// leaf's node_done still holds the leaf's.
+	events, err = drainGraph(Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}, GraphJudge: "gj"}).Stream(bg, "q", userCtx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done := events[len(events)-1]; len(done.JudgeResults) != 1 || done.JudgeResults["gj"].Score != 0.9 {
+		t.Errorf("done judgeResults = %+v, want only gj", done.JudgeResults)
+	}
+	if dones = nodeDones(events); len(dones) != 2 || len(dones[1].JudgeResults) != 1 || dones[1].JudgeResults["judge"].Score != 0.9 {
+		t.Errorf("leaf node_done judgeResults = %+v, want only judge", dones)
+	}
+
+	// A routing node's judges are on its own node_done too, here through the
+	// blocking-handler fallback.
 	withFake(t, multiEdge())
-	h = verdictHandler((&recordingHandler{stream: true, pick: map[string]string{"router": "billing"}}).handler(), `{"score":1,"reasoning":"routed"}`)
+	h = verdictHandler((&recordingHandler{pick: map[string]string{"router": "billing"}}).handler(), `{"score":1,"reasoning":"routed"}`)
 	events, err = drainGraph(Graph("route", GraphOptions{Handlers: []*ProviderHandler{h}}).Stream(bg, "q", userCtx))
 	if err != nil {
 		t.Fatal(err)
 	}
-	dones = nil
-	for _, e := range events {
-		if e.Type == EventNodeDone {
-			dones = append(dones, e)
-		}
-	}
+	dones = nodeDones(events)
 	if len(dones) != 2 || dones[0].NodeKey != "router" || dones[1].NodeKey != "billing" {
 		t.Fatalf("node_done events = %+v", dones)
 	}

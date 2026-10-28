@@ -495,7 +495,7 @@ func (d *GraphDefinition) streamRoute(ctx context.Context, n *GraphNode, input s
 		res.Next = d.nodes[outgoing[0].TargetKey]
 	}
 	nodeDone := GraphStreamEvent{Type: EventNodeDone, NodeKey: n.Key, Response: done.response, Usage: done.usage}
-	if len(judgeResults) > 0 { // the node's own judges; nil when none produced a result, as on done
+	if len(judgeResults) > 0 { // nil when none produced a result
 		nodeDone.JudgeResults = judgeResults
 	}
 	if !emit(nodeDone) {
