@@ -53,7 +53,7 @@ func TestWatchRequiresAWatchableStore(t *testing.T) {
 	}
 	SetSkillStore(&funcStore{})
 	_, _, err := WatchAllSkills(context.Background(), root, nil)
-	if !errors.Is(err, ErrStoreNotWatchable) || !strings.Contains(err.Error(), "WriteSkills") || !strings.Contains(err.Error(), "FDv2SkillStore") {
+	if !errors.Is(err, ErrStoreNotWatchable) || !strings.Contains(err.Error(), "WriteSkills") || !strings.Contains(err.Error(), "LaunchDarklySkillStore") {
 		t.Fatalf("store without AddListener: %v", err)
 	}
 	SetSkillStore(NewInMemorySkillStore(nil))
@@ -213,7 +213,7 @@ func TestWatchPrunesARevocationDeliveredOverTheStream(t *testing.T) {
 	gate := make(chan struct{})
 	ft.push(fakeResp{body: sse(commitEvents("p", "(p:p:1)", put("a:1", "a"))...), gate: gate,
 		then: sse(commitEvents("p", "(p:p:2)")...), hold: true}) // then the last skill is revoked
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	if !s.WaitForSkills(5 * time.Second) {
 		t.Fatal("no first payload")

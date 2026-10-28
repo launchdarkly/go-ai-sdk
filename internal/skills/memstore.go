@@ -11,7 +11,7 @@ import (
 // objectSet holds raw skill objects keyed by (key, version). An object with no
 // usable version is held under its key alone ("loose") so verification can
 // withhold it with a reason instead of it reading as absent. Shared by
-// InMemorySkillStore and FDv2SkillStore so both answer pins identically.
+// InMemorySkillStore and LaunchDarklySkillStore so both answer pins identically.
 // Not safe for concurrent use; callers lock.
 type objectSet struct {
 	versions map[string]map[int]any

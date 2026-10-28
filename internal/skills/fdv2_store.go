@@ -45,20 +45,20 @@ var maxResponseBytes = 64 * 1024 * 1024
 // override it.
 var backoffResetInterval = 60 * time.Second
 
-// FDv2Mode selects how FDv2SkillStore receives delivery.
-type FDv2Mode string
+// LaunchDarklySkillStoreMode selects how LaunchDarklySkillStore receives delivery.
+type LaunchDarklySkillStoreMode string
 
-// The two delivery modes. The zero value "" means FDv2ModeStream.
+// The two delivery modes. The zero value "" means LaunchDarklySkillStoreModeStream.
 const (
-	// FDv2ModeStream holds a long-lived connection: revocations arrive in seconds.
-	FDv2ModeStream FDv2Mode = "stream"
-	// FDv2ModePoll polls every PollInterval: revocations are one interval late.
-	FDv2ModePoll FDv2Mode = "poll"
+	// LaunchDarklySkillStoreModeStream holds a long-lived connection: revocations arrive in seconds.
+	LaunchDarklySkillStoreModeStream LaunchDarklySkillStoreMode = "stream"
+	// LaunchDarklySkillStoreModePoll polls every PollInterval: revocations are one interval late.
+	LaunchDarklySkillStoreModePoll LaunchDarklySkillStoreMode = "poll"
 )
 
-// FDv2SkillStoreOptions configure NewFDv2SkillStore. Zero values select the
+// LaunchDarklySkillStoreOptions configure NewLaunchDarklySkillStore. Zero values select the
 // defaults; negative durations are an ErrInvalidArgument.
-type FDv2SkillStoreOptions struct {
+type LaunchDarklySkillStoreOptions struct {
 	// BaseURI is the origin for GET /sdk/poll (default
 	// https://sdk.launchdarkly.com). Given without StreamURI it serves both
 	// endpoints, for a relay or private instance. Must be https.
@@ -66,8 +66,8 @@ type FDv2SkillStoreOptions struct {
 	// StreamURI is the origin for GET /sdk/stream (default
 	// https://stream.launchdarkly.com). Must be https.
 	StreamURI string
-	// Mode is FDv2ModeStream (default) or FDv2ModePoll.
-	Mode FDv2Mode
+	// Mode is LaunchDarklySkillStoreModeStream (default) or LaunchDarklySkillStoreModePoll.
+	Mode LaunchDarklySkillStoreMode
 	// PollInterval is the time between polls (default 30s).
 	PollInterval time.Duration
 	// ReadTimeout is the only network timeout. In poll mode it bounds a whole
@@ -85,7 +85,7 @@ type FDv2SkillStoreOptions struct {
 	transport http.RoundTripper
 }
 
-// FDv2SkillStore is the SkillStore fed by LaunchDarkly's FDv2 delivery
+// LaunchDarklySkillStore is the SkillStore fed by LaunchDarkly's FDv2 delivery
 // channel, authenticated with the environment's server-side SDK key. It holds
 // raw wire objects; the accessors verify them. Delivery runs on a background
 // goroutine started by Start; GetObject only reads what has already arrived,
@@ -94,8 +94,8 @@ type FDv2SkillStoreOptions struct {
 // A transport failure never empties the store: the last known good content is
 // served throughout, and Failed and Diagnostics report degradation. Close is
 // final.
-type FDv2SkillStore struct {
-	mode           FDv2Mode
+type LaunchDarklySkillStore struct {
+	mode           LaunchDarklySkillStoreMode
 	pollInterval   time.Duration
 	readTimeout    time.Duration
 	initialBackoff time.Duration
@@ -130,26 +130,26 @@ type FDv2SkillStore struct {
 
 var clientSideIDRE = regexp.MustCompile(`^[0-9a-f]{20,}$`)
 
-// NewFDv2SkillStore validates the credential and options and builds a store.
+// NewLaunchDarklySkillStore validates the credential and options and builds a store.
 // Call Start to begin delivery. A mobile key or client-side environment ID is
 // refused: skill content is customer-confidential and server-side only.
-func NewFDv2SkillStore(sdkKey string, opts *FDv2SkillStoreOptions) (*FDv2SkillStore, error) {
+func NewLaunchDarklySkillStore(sdkKey string, opts *LaunchDarklySkillStoreOptions) (*LaunchDarklySkillStore, error) {
 	if opts == nil {
-		opts = &FDv2SkillStoreOptions{}
+		opts = &LaunchDarklySkillStoreOptions{}
 	}
 	key := strings.TrimSpace(sdkKey)
 	switch {
 	case key == "":
-		return nil, invalidArg("FDv2SkillStore requires a LaunchDarkly server-side SDK key (sdk-...); none was given")
+		return nil, invalidArg("LaunchDarklySkillStore requires a LaunchDarkly server-side SDK key (sdk-...); none was given")
 	case strings.HasPrefix(key, "mob-"):
-		return nil, invalidArg("FDv2SkillStore was given a mobile key (mob-...). Agent Skills are server-side only: " +
+		return nil, invalidArg("LaunchDarklySkillStore was given a mobile key (mob-...). Agent Skills are server-side only: " +
 			"skill content is customer-confidential and is never delivered to a mobile or client-side process. " +
 			"Use the environment's server-side SDK key (sdk-...)")
 	case clientSideIDRE.MatchString(key):
-		return nil, invalidArg("FDv2SkillStore was given what looks like a client-side environment ID. Agent Skills " +
+		return nil, invalidArg("LaunchDarklySkillStore was given what looks like a client-side environment ID. Agent Skills " +
 			"are server-side only: skill content is customer-confidential. Use the environment's server-side SDK key (sdk-...)")
 	case !strings.HasPrefix(key, "sdk-"):
-		currentLogger().Warn("the credential given to FDv2SkillStore does not look like a LaunchDarkly server-side SDK key (sdk-...)")
+		currentLogger().Warn("the credential given to LaunchDarklySkillStore does not look like a LaunchDarkly server-side SDK key (sdk-...)")
 	}
 	base, stream := opts.BaseURI, opts.StreamURI
 	if stream == "" {
@@ -164,15 +164,15 @@ func NewFDv2SkillStore(sdkKey string, opts *FDv2SkillStoreOptions) (*FDv2SkillSt
 	for _, u := range []struct{ name, value string }{{"BaseURI", base}, {"StreamURI", stream}} {
 		parsed, err := url.Parse(u.value)
 		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-			return nil, invalidArg("FDv2SkillStore refuses %s %q: an https:// URI with a host is required, so the SDK key is never sent in cleartext", u.name, u.value)
+			return nil, invalidArg("LaunchDarklySkillStore refuses %s %q: an https:// URI with a host is required, so the SDK key is never sent in cleartext", u.name, u.value)
 		}
 	}
 	mode := opts.Mode
 	if mode == "" {
-		mode = FDv2ModeStream
+		mode = LaunchDarklySkillStoreModeStream
 	}
-	if mode != FDv2ModeStream && mode != FDv2ModePoll {
-		return nil, invalidArg("Mode must be %q or %q, got %q", FDv2ModeStream, FDv2ModePoll, mode)
+	if mode != LaunchDarklySkillStoreModeStream && mode != LaunchDarklySkillStoreModePoll {
+		return nil, invalidArg("Mode must be %q or %q, got %q", LaunchDarklySkillStoreModeStream, LaunchDarklySkillStoreModePoll, mode)
 	}
 	durations := []struct {
 		name  string
@@ -180,7 +180,7 @@ func NewFDv2SkillStore(sdkKey string, opts *FDv2SkillStoreOptions) (*FDv2SkillSt
 		def   time.Duration
 	}{
 		{"PollInterval", &opts.PollInterval, defaultPollInterval},
-		{"ReadTimeout", &opts.ReadTimeout, map[FDv2Mode]time.Duration{FDv2ModeStream: defaultStreamReadTimeout, FDv2ModePoll: defaultPollReadTimeout}[mode]},
+		{"ReadTimeout", &opts.ReadTimeout, map[LaunchDarklySkillStoreMode]time.Duration{LaunchDarklySkillStoreModeStream: defaultStreamReadTimeout, LaunchDarklySkillStoreModePoll: defaultPollReadTimeout}[mode]},
 		{"InitialBackoff", &opts.InitialBackoff, defaultInitialBackoff},
 		{"MaxBackoff", &opts.MaxBackoff, defaultMaxBackoff},
 	}
@@ -203,7 +203,7 @@ func NewFDv2SkillStore(sdkKey string, opts *FDv2SkillStoreOptions) (*FDv2SkillSt
 		transport = http.DefaultTransport
 	}
 	objects := newObjectSet()
-	s := &FDv2SkillStore{
+	s := &LaunchDarklySkillStore{
 		mode: mode, pollInterval: resolved[0], readTimeout: resolved[1], initialBackoff: resolved[2], maxBackoff: resolved[3],
 		baseURI: strings.TrimRight(base, "/"), streamURI: strings.TrimRight(stream, "/"), sdkKey: key,
 		// Redirects are never followed: that would forward the SDK key to
@@ -220,11 +220,11 @@ func NewFDv2SkillStore(sdkKey string, opts *FDv2SkillStoreOptions) (*FDv2SkillSt
 // it chains. It is a no-op while delivery runs. A store that gave up on a
 // fatal status (Failed is set) is started afresh, with Failed cleared and the
 // failure count and backoff reset. After Close it returns ErrStoreClosed.
-func (s *FDv2SkillStore) Start() (*FDv2SkillStore, error) {
+func (s *LaunchDarklySkillStore) Start() (*LaunchDarklySkillStore, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return nil, fmt.Errorf("%w: Close is final, so delivery cannot resume; construct a new FDv2SkillStore. "+
+		return nil, fmt.Errorf("%w: Close is final, so delivery cannot resume; construct a new LaunchDarklySkillStore. "+
 			"Held content is still readable from the closed store", ErrStoreClosed)
 	}
 	if s.running && s.failedReason == "" {
@@ -248,7 +248,7 @@ func (s *FDv2SkillStore) Start() (*FDv2SkillStore, error) {
 
 // Close stops delivery and waits briefly for the goroutine to exit. It is
 // idempotent and final; held content keeps being served.
-func (s *FDv2SkillStore) Close() {
+func (s *LaunchDarklySkillStore) Close() {
 	s.mu.Lock()
 	s.closed = true
 	cancel, done := s.cancel, s.done
@@ -269,7 +269,7 @@ func (s *FDv2SkillStore) Close() {
 // and reports whether one has. It returns false early when delivery has ended
 // (Close, or a fatal status) with nothing committed. True does not mean any
 // skill verified; see Diagnostics.
-func (s *FDv2SkillStore) WaitForSkills(timeout time.Duration) bool {
+func (s *LaunchDarklySkillStore) WaitForSkills(timeout time.Duration) bool {
 	s.mu.Lock()
 	ch := s.released
 	s.mu.Unlock()
@@ -286,28 +286,28 @@ func (s *FDv2SkillStore) WaitForSkills(timeout time.Duration) bool {
 
 // IsInitialized is WaitForSkills without the wait: true once a payload has
 // committed, and still true after Close. Nothing but a commit makes it true.
-func (s *FDv2SkillStore) IsInitialized() (bool, error) {
+func (s *LaunchDarklySkillStore) IsInitialized() (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.firstPayload, nil
 }
 
 // Failed is why delivery stopped for good, or "" while it runs.
-func (s *FDv2SkillStore) Failed() string {
+func (s *LaunchDarklySkillStore) Failed() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.failedReason
 }
 
 // Diagnostics returns a snapshot of the transport counters.
-func (s *FDv2SkillStore) Diagnostics() StoreDiagnostics {
+func (s *LaunchDarklySkillStore) Diagnostics() StoreDiagnostics {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.reader.diag
 }
 
 // GetObject implements SkillStore. It never fails: it reads what arrived.
-func (s *FDv2SkillStore) GetObject(kind, key string, version int) (any, error) {
+func (s *LaunchDarklySkillStore) GetObject(kind, key string, version int) (any, error) {
 	if kind != skillObjectKind {
 		return nil, nil
 	}
@@ -317,7 +317,7 @@ func (s *FDv2SkillStore) GetObject(kind, key string, version int) (any, error) {
 }
 
 // AllObjects implements SkillStore. Map keys are opaque.
-func (s *FDv2SkillStore) AllObjects(kind string) (map[string]any, error) {
+func (s *LaunchDarklySkillStore) AllObjects(kind string) (map[string]any, error) {
 	if kind != skillObjectKind {
 		return map[string]any{}, nil
 	}
@@ -329,17 +329,17 @@ func (s *FDv2SkillStore) AllObjects(kind string) (map[string]any, error) {
 // AddListener registers l to be called once per changed object when a
 // payload commits, never mid-transfer, on the delivery goroutine: keep it
 // cheap. A revocation passes a {"key", "version"} tombstone with no content.
-func (s *FDv2SkillStore) AddListener(kind string, l *Listener) error {
-	return s.listeners.add("FDv2SkillStore", kind, l)
+func (s *LaunchDarklySkillStore) AddListener(kind string, l *Listener) error {
+	return s.listeners.add("LaunchDarklySkillStore", kind, l)
 }
 
 // RemoveListener removes one registration of l; a no-op if none.
-func (s *FDv2SkillStore) RemoveListener(kind string, l *Listener) {
+func (s *LaunchDarklySkillStore) RemoveListener(kind string, l *Listener) {
 	s.listeners.remove(kind, l)
 }
 
 // releaseLocked lets every WaitForSkills caller go. Call with mu held.
-func (s *FDv2SkillStore) releaseLocked() {
+func (s *LaunchDarklySkillStore) releaseLocked() {
 	if !s.releasedClosed {
 		close(s.released)
 		s.releasedClosed = true
@@ -411,14 +411,14 @@ func backoffDelay(attempt int, base, ceiling time.Duration) time.Duration {
 // retryDelay is the backoff schedule, or a server-requested Retry-After
 // floored at InitialBackoff and capped at MaxBackoff. Retry-After is not
 // jittered: jitter would reconnect sooner than the server asked.
-func (s *FDv2SkillStore) retryDelay(re *recoverableError, attempt int) time.Duration {
+func (s *LaunchDarklySkillStore) retryDelay(re *recoverableError, attempt int) time.Duration {
 	if re.hasRetry {
 		return min(max(re.retryAfter, s.initialBackoff), s.maxBackoff)
 	}
 	return backoffDelay(attempt, s.initialBackoff, s.maxBackoff)
 }
 
-func (s *FDv2SkillStore) url(origin, path, basis string) string {
+func (s *LaunchDarklySkillStore) url(origin, path, basis string) string {
 	q := url.Values{"kinds": {fdv2PayloadKind}}
 	if basis != "" {
 		q.Set("basis", basis)
@@ -426,14 +426,14 @@ func (s *FDv2SkillStore) url(origin, path, basis string) string {
 	return origin + path + "?" + q.Encode()
 }
 
-func (s *FDv2SkillStore) run(ctx context.Context, done chan struct{}) {
+func (s *LaunchDarklySkillStore) run(ctx context.Context, done chan struct{}) {
 	defer close(done)
 	for ctx.Err() == nil {
 		s.mu.Lock()
 		s.answered = false
 		s.mu.Unlock()
 		var err error
-		if s.mode == FDv2ModeStream {
+		if s.mode == LaunchDarklySkillStoreModeStream {
 			err = s.streamOnce(ctx)
 		} else {
 			err = s.pollOnce(ctx)
@@ -506,7 +506,7 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-func (s *FDv2SkillStore) recordSuccess() {
+func (s *LaunchDarklySkillStore) recordSuccess() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.failures = 0
@@ -514,7 +514,7 @@ func (s *FDv2SkillStore) recordSuccess() {
 	s.reader.diag.ConnectionFailures = 0
 }
 
-func (s *FDv2SkillStore) giveUp(reason string) {
+func (s *LaunchDarklySkillStore) giveUp(reason string) {
 	s.mu.Lock()
 	s.failedReason = reason
 	s.reader.diag.LastError = reason
@@ -528,7 +528,7 @@ func (s *FDv2SkillStore) giveUp(reason string) {
 // apply feeds one event to the reader, publishes a commit, and returns the
 // disconnect the event calls for. completed reports a commit or a none
 // intent: the only exchanges an etag may be adopted on.
-func (s *FDv2SkillStore) apply(name string, data []byte) (completed bool, err error) {
+func (s *LaunchDarklySkillStore) apply(name string, data []byte) (completed bool, err error) {
 	s.mu.Lock()
 	out := s.reader.handle(name, data)
 	if out.committed && out.basis != "" {
@@ -551,7 +551,7 @@ func (s *FDv2SkillStore) apply(name string, data []byte) (completed bool, err er
 	return out.committed || out.upToDate, nil
 }
 
-func (s *FDv2SkillStore) request(ctx context.Context, origin, path, basis string, header http.Header) (*http.Response, error) {
+func (s *LaunchDarklySkillStore) request(ctx context.Context, origin, path, basis string, header http.Header) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.url(origin, path, basis), nil)
 	if err != nil {
 		return nil, &fatalError{fmt.Sprintf("the FDv2 request could not be built: %v", err)}
@@ -565,7 +565,7 @@ func (s *FDv2SkillStore) request(ctx context.Context, origin, path, basis string
 	return resp, nil
 }
 
-func (s *FDv2SkillStore) pollOnce(ctx context.Context) error {
+func (s *LaunchDarklySkillStore) pollOnce(ctx context.Context) error {
 	s.mu.Lock()
 	basis := s.basis
 	etag := ""
@@ -653,7 +653,7 @@ func decodePollBody(body []byte) ([]wireEvent, error) {
 	return out, nil
 }
 
-func (s *FDv2SkillStore) streamOnce(ctx context.Context) error {
+func (s *LaunchDarklySkillStore) streamOnce(ctx context.Context) error {
 	s.mu.Lock()
 	basis := s.basis
 	s.carriedState = basis != ""
