@@ -336,7 +336,7 @@ func TestInitClientTelemetryAndShutdown(t *testing.T) {
 		}
 	}
 	all := strings.Join(bodies, "")
-	for _, want := range []string{"highlight.project_id", "service.name", "go-sdk", "deployment.environment", "test-env"} {
+	for _, want := range []string{"launchdarkly.project_id", "service.name", "go-sdk", "deployment.environment", "test-env"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("exported resource lacks %q", want)
 		}
