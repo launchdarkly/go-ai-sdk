@@ -79,8 +79,9 @@ func TestChatSpanTelemetry(t *testing.T) {
 	})
 	tool := spansNamed(exp, "execute_tool a")
 	if len(tool) != 1 || attrsOf(tool[0])["gen_ai.tool.call.id"] != "tu_a" || tool[0].Status().Code != codes.Ok {
-		t.Errorf("tool span = %v", tool)
+		t.Fatalf("tool span = %v", tool)
 	}
+	wantAttrs(t, "tool content", attrsOf(tool[0]), map[string]string{"gen_ai.tool.call.arguments": "{}", "gen_ai.tool.call.result": "r"})
 }
 
 // a zero usage report is still written, not dropped.

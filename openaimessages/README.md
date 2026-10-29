@@ -100,7 +100,7 @@ var ErrMaxSteps error
 type Options struct {
 	Client         *openai.Client // used for every call when set
 	APIKey         string         // used when Client is nil; else OPENAI_API_KEY
-	CaptureContent bool           // default false
+	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 }
 
 func NewHandler(opts Options) *aiserver.ProviderHandler

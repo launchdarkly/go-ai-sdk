@@ -148,7 +148,7 @@ type Options struct {
 	APIKey         string                 // bearer token; beats AWS_BEARER_TOKEN_BEDROCK
 	Region         string                 // endpoint/SigV4 region for the constructed client
 	ModelOptions   func(cfg aiserver.AiConfig) *bedrockruntime.ConverseInput
-	CaptureContent bool                   // default false
+	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 	MaxSteps       int                    // model turns per call; 0 = DefaultMaxSteps
 }
 

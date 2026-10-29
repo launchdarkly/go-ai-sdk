@@ -25,6 +25,10 @@ func judgedConfig(extra map[string]any) map[string]any {
 // spanJudgeHandler answers like a model that calls tool "lookup" when it has
 // one, and returns a fixed verdict for judge calls, opening a real HandlerRun.
 func spanJudgeHandler(verdict string, capture bool, judgeErr error, judgeReqs *[]HandlerRequest) *ProviderHandler {
+	cc := CaptureOff
+	if capture {
+		cc = CaptureOn
+	}
 	return createHandler(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		if req.Variables["response_to_evaluate"] == nil {
 			if fn, ok := req.ToolHandlers["lookup"].(ToolFunc); ok {
@@ -43,7 +47,7 @@ func spanJudgeHandler(verdict string, capture bool, judgeErr error, judgeReqs *[
 		run.Finish("m", verdict)
 		time.Sleep(15 * time.Millisecond) // work after End must not count in the span
 		return HandlerResult{Output: verdict}, nil
-	}, nil, capture)
+	}, nil, cc)
 }
 
 func withSpans(t *testing.T) *tracetest.InMemoryExporter {

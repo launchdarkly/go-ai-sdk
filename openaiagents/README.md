@@ -121,7 +121,7 @@ var ErrMaxTurns, ErrToolNotOffered, ErrNoRoot, ErrNilGraph error
 type Options struct {
 	Client         *openai.Client // used for every call when set
 	APIKey         string         // used when Client is nil; else OPENAI_API_KEY
-	CaptureContent bool           // default false
+	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 	MaxTurns       int            // 0 means 10; a variation's max_turns wins
 }
 func NewHandler(opts Options) *aiserver.ProviderHandler

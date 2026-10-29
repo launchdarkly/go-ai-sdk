@@ -24,7 +24,7 @@ the two meet only through `internal/bridge`.
 ```go
 type ProviderHandler struct {
 	ProvidesFor    ProvidesFor // {Provider, Mode}; Provider "*" = any provider
-	CaptureContent bool        // gates the judge explanation attribute
+	CaptureContent ContentCapture // CaptureOn / CaptureOff; CaptureDefault follows Configure, else on
 	Invoke         InvokeFunc  // func(ctx, HandlerRequest) (HandlerResult, error)
 	Stream         StreamFunc  // optional: func(ctx, HandlerRequest) iter.Seq2[HandlerStreamEvent, error]
 }
@@ -122,7 +122,7 @@ One module (`go.mod`); each package imports only what it needs.
   the tool is just not offered.
 - **Tool keys must match the variation's `tools` map exactly.** A handler
   under a differently-cased key is never offered to the model.
-- **Prompt and completion text is on spans by default**. Do not export to a collector that must not hold it.
+- **Prompt, completion and tool content is on spans by default**. Set the handler's `CaptureContent: aiserver.CaptureOff`, or `aiserver.Configure` before the first call, to keep it off spans. Model, usage and status are written either way.
 - **Pass the request `ctx`.** Spans, the conversation id and cancellation follow
   it; `context.Background()` detaches the call from the caller's trace.
 - **Breaking out of a `Config(...).Stream` loop abandons the run**: no success or error is

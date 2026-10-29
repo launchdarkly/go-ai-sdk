@@ -4,7 +4,11 @@
 package sdkapi
 
 import (
+	"context"
+	"iter"
+
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkcall"
 )
 
@@ -20,7 +24,19 @@ func Graph(key string, opts aiserver.GraphOptions) *aiserver.AgentGraph {
 	return aiserver.Graph(key, opts)
 }
 
-// CreateHandler is aiserver.CreateHandler without a usage report.
-func CreateHandler(pf aiserver.ProvidesFor, invoke aiserver.InvokeFunc, stream aiserver.StreamFunc, captureContent bool) *aiserver.ProviderHandler {
-	return &aiserver.ProviderHandler{ProvidesFor: pf, CaptureContent: captureContent, Invoke: invoke, Stream: stream}
+// CreateHandler is aiserver.CreateHandler without a usage report. As there,
+// a direct Invoke or Stream call applies the handler's capture setting.
+func CreateHandler(pf aiserver.ProvidesFor, invoke aiserver.InvokeFunc, stream aiserver.StreamFunc, captureContent aiserver.ContentCapture) *aiserver.ProviderHandler {
+	h := &aiserver.ProviderHandler{ProvidesFor: pf, CaptureContent: captureContent}
+	if invoke != nil {
+		h.Invoke = func(ctx context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
+			return invoke(bridge.StartInvocation(ctx, uint8(h.CaptureContent)), req)
+		}
+	}
+	if stream != nil {
+		h.Stream = func(ctx context.Context, req aiserver.HandlerRequest) iter.Seq2[aiserver.HandlerStreamEvent, error] {
+			return stream(bridge.StartInvocation(ctx, uint8(h.CaptureContent)), req)
+		}
+	}
+	return h
 }

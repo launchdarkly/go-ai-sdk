@@ -63,9 +63,9 @@ type Options struct {
 	// the handler builds a built-in llms model from config.provider.name:
 	// "anthropic", "bedrock", or OpenAI for anything else.
 	ModelFactory ModelFactory
-	// CaptureContent is attached to the handler so the client core can gate
-	// judge explanations on it.
-	CaptureContent bool
+	// CaptureContent gates prompt, completion, tool and judge-explanation
+	// content on spans. CaptureDefault follows aiserver.Configure, else on.
+	CaptureContent aiserver.ContentCapture
 }
 
 // NewHandler returns the LangChain messages handler (createLangChainMessagesHandler).

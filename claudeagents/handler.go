@@ -69,9 +69,9 @@ type Options struct {
 	Client *anthropic.Client
 	// APIKey is the Anthropic API key used when Client is nil.
 	APIKey string
-	// CaptureContent is attached to the handler so the client core can gate
-	// judge explanations on it.
-	CaptureContent bool
+	// CaptureContent gates prompt, completion, tool and judge-explanation
+	// content on spans. CaptureDefault follows aiserver.Configure, else on.
+	CaptureContent aiserver.ContentCapture
 	// MaxSteps bounds model turns per run. Zero means DefaultMaxSteps. A
 	// config's model.parameters max_turns / maxTurns takes precedence.
 	MaxSteps int
@@ -222,11 +222,13 @@ func buildTools(cfg aiserver.AiConfig, handlers map[string]aiserver.ToolHandler,
 // model can react to; only the span records them.
 func (r *toolset) runHost(ctx context.Context, run *aiserver.HandlerRun, b anthropic.ContentBlockUnion) anthropic.ContentBlockParamUnion {
 	span := run.StartTool(b.Name, b.ID)
+	run.ToolArguments(span, b.Input)
 	r.host[b.Name].Track()
 	out, err := hostTools[b.Name].run(trace.ContextWithSpan(ctx, span), r.ws, b.Input)
 	if err != nil && out == "" {
 		out = err.Error()
 	}
+	run.ToolResult(span, out)
 	run.EndTool(span, err)
 	return anthropic.NewToolResultBlock(b.ID, out, err != nil)
 }
@@ -349,7 +351,9 @@ func (a *agent) run(ctx context.Context, req aiserver.HandlerRequest, extra []lo
 				if n := ts.natives[b.Name]; n != nil {
 					n.Track()
 				}
-				r.EndTool(r.StartTool(b.Name, b.ID), nil)
+				span := r.StartTool(b.Name, b.ID)
+				r.ToolArguments(span, b.Input)
+				r.EndTool(span, nil)
 			case "tool_use":
 				if ts.host[b.Name] != nil {
 					results = append(results, ts.runHost(r.Context(), r, b))
@@ -362,6 +366,7 @@ func (a *agent) run(ctx context.Context, req aiserver.HandlerRequest, extra []lo
 					return res, err
 				}
 				span := r.StartTool(b.Name, b.ID)
+				r.ToolArguments(span, b.Input)
 				var args map[string]any
 				_ = json.Unmarshal(b.Input, &args)
 				out, ferr := fn(trace.ContextWithSpan(r.Context(), span), args)
@@ -369,6 +374,7 @@ func (a *agent) run(ctx context.Context, req aiserver.HandlerRequest, extra []lo
 					r.Fail(ferr)
 					return res, ferr // tool errors propagate
 				}
+				r.ToolResult(span, out)
 				r.EndTool(span, nil)
 				results = append(results, anthropic.NewToolResultBlock(b.ID, aiserver.ToolResultString(out), false))
 			}
