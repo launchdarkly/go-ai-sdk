@@ -457,6 +457,9 @@ func withDeadline(h *aiserver.ProviderHandler, timeout time.Duration) *aiserver.
 		}()
 		select {
 		case o := <-done:
+			if errors.Is(context.Cause(ctx), errShadowTimeout) {
+				return aiserver.HandlerResult{}, errShadowTimeout
+			}
 			return o.res, o.err
 		case <-ctx.Done():
 			return aiserver.HandlerResult{}, context.Cause(ctx)

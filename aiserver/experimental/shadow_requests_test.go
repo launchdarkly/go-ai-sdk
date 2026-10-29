@@ -720,6 +720,19 @@ func TestTimeoutIsTrackedOnce(t *testing.T) {
 	}
 }
 
+func TestTimeoutIsReportedWhenTheHandlerStopsAtTheDeadline(t *testing.T) {
+	stopsAtDeadline := &aiserver.ProviderHandler{Invoke: func(ctx context.Context, _ aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
+		<-ctx.Done()
+		return aiserver.HandlerResult{}, ctx.Err()
+	}}
+	h := withDeadline(stopsAtDeadline, time.Microsecond)
+	for i := 0; i < 2000; i++ {
+		if _, err := h.Invoke(context.Background(), aiserver.HandlerRequest{}); !errors.Is(err, errShadowTimeout) {
+			t.Fatalf("run %d: got %v, want the shadow timeout", i, err)
+		}
+	}
+}
+
 func TestHandlerTimeoutErrorIsAnOrdinaryFailure(t *testing.T) {
 	p := newPair()
 	p.b.err = context.DeadlineExceeded
