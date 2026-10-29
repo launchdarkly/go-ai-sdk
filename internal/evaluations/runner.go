@@ -65,6 +65,10 @@ type runState struct {
 	evaluationKey string
 	evalVersion   int
 	runID         string
+
+	// rowTraces holds each started row's trace by row position, so the
+	// deferred cleanup can end any root a failed phase left open.
+	rowTraces []*rowTrace
 }
 
 // row is a rendered dataset row. input/expected are nil when the
@@ -94,6 +98,7 @@ type genResult struct {
 	elapsed     time.Duration
 	trajectory  string
 	invocations []trajectory.Invocation
+	trace       *rowTrace
 }
 
 type critResult struct {
@@ -108,6 +113,9 @@ type critResult struct {
 	usage     map[string]any
 	started   time.Time
 	elapsed   time.Duration
+	// captureOn is the judge handler's effective capture flag, which gates
+	// the explanation on the evaluate span.
+	captureOn bool
 }
 
 func deref(s *string) string {
@@ -282,7 +290,7 @@ func (r *runState) execute(ctx context.Context) (*EvalRunResult, error) {
 // runPhases generates, emits, scores and emits. The final flush is
 // deferred so queued generation events survive an evaluation-phase failure.
 func (r *runState) runPhases(ctx context.Context, em *emitter) error {
-	defer em.flush()
+	defer r.flushTelemetry(ctx, em)
 	gens, err := r.generate(ctx)
 	if err != nil {
 		return err
@@ -415,15 +423,25 @@ func (r *runState) rowTools(rec *trajectory.Recorder) map[string]aiserver.ToolHa
 func (r *runState) generate(ctx context.Context) ([]*genResult, error) {
 	cfg := r.handlerConfig()
 	results := make([]*genResult, len(r.rows))
+	r.rowTraces = make([]*rowTrace, len(r.rows))
 	err := forEachBounded(ctx, len(r.rows), r.concurrency, func(i int) {
 		row := r.rows[i]
+		rt := startRow(ctx, r.runID, row.index)
+		r.rowTraces[i] = rt
 		rec := trajectory.NewRecorder()
+		call := beginCall(rt.ctx, r.genHandler, rt)
 		started := time.Now()
-		res, err := invoke(ctx, r.genHandler, aiserver.HandlerRequest{
+		res, err := invoke(call.ctx, r.genHandler, aiserver.HandlerRequest{
 			Config: cfg, UserInput: deref(row.input), ToolHandlers: r.rowTools(rec), Variables: maps.Clone(row.variables),
 		})
-		g := &genResult{row: row, started: started, elapsed: time.Since(started),
-			trajectory: rec.Render(), invocations: rec.Invocations()}
+		ended := time.Now()
+		g := &genResult{row: row, started: started, elapsed: ended.Sub(started),
+			trajectory: rec.Render(), invocations: rec.Invocations(), trace: rt}
+		if call.shouldDescribe() {
+			call.writeChat(chatCall{config: cfg, variables: row.variables, finalUser: row.input,
+				toolCalls: g.invocations, output: res.Output, usage: res.Usage, err: err, start: started, end: ended}, rt.attrs)
+		}
+		rt.finishGeneration(err, len(r.criteria))
 		if err != nil {
 			g.status, g.errMsg = statusError, "Unknown error"
 			if msg := err.Error(); msg != "" {
@@ -527,12 +545,18 @@ func (r *runState) evaluate(ctx context.Context, gens []*genResult) ([]*critResu
 	}
 	results := make([]*critResult, len(pairs))
 	err := forEachBounded(ctx, len(pairs), r.concurrency, func(i int) {
+		rt := pairs[i].g.trace
 		switch c := pairs[i].c.(type) {
 		case *Judge:
-			results[i] = r.runJudge(ctx, pairs[i].g, c)
+			ectx, span := startEvaluate(rt, c, r.judges[c.key])
+			results[i] = r.runJudge(ectx, pairs[i].g, c)
+			finishEvaluate(span, results[i])
 		case *Scorer:
-			results[i] = runScorer(ctx, pairs[i].g, c)
+			ectx, span := startEvaluate(rt, c, nil)
+			results[i] = runScorer(ectx, pairs[i].g, c)
+			finishEvaluate(span, results[i])
 		}
+		rt.criterionDone()
 	})
 	if err != nil {
 		return nil, fmt.Errorf("evaluations: evaluation phase: %w", err)
@@ -563,9 +587,16 @@ func (r *runState) runJudge(ctx context.Context, g *genResult, j *Judge) *critRe
 	vars["ground_truth_context"] = groundTruth
 	vars["message_history"] = judging.BuildMessageHistory(input, g.trajectory, output)
 	vars["formatting_instructions"] = judging.FormattingInstructions
-	hr, err := invoke(ctx, rj.handler, aiserver.HandlerRequest{
+	call := beginCall(ctx, rj.handler, g.trace)
+	res.captureOn = aiserver.CaptureContentEnabled(call.ctx)
+	started := time.Now()
+	hr, err := invoke(call.ctx, rj.handler, aiserver.HandlerRequest{
 		Config: rj.config, UserInput: output, ToolHandlers: map[string]aiserver.ToolHandler{}, Variables: vars,
 	})
+	if call.shouldDescribe() {
+		call.writeChat(chatCall{config: rj.config, variables: vars, finalUser: &output,
+			output: hr.Output, err: err, start: started, end: time.Now()}, g.spanAttrs())
+	}
 	if err != nil {
 		return res.fail(causeHandlerRaised, err.Error()) // errorMessage equals the error message
 	}

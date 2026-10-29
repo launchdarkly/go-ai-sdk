@@ -268,6 +268,33 @@ func TestChatContentShape(t *testing.T) {
 			t.Errorf("%s = %s\nwant %s", k, attrs[k], v)
 		}
 	}
+	// The OpenLLMetry carrier: the system instructions are message 0, and a
+	// tool call flattens to {name, arguments} JSON.
+	for k, v := range map[string]string{
+		"gen_ai.prompt.0.role": "system", "gen_ai.prompt.0.content": "sys",
+		"gen_ai.prompt.1.role": "user", "gen_ai.prompt.1.content": "hi",
+		"gen_ai.completion.0.role": "assistant", "gen_ai.completion.0.content": `{"name":"lookup","arguments":{"q":"x"}}` + "\nanswer",
+	} {
+		if attrs[k] != v {
+			t.Errorf("%s = %q, want %q", k, attrs[k], v)
+		}
+	}
+}
+
+func TestToolDefinitionsOmitEmptyMembers(t *testing.T) {
+	freshOptions(t)
+	exp := contentSpans(t)
+	_, span := tracerFor(TracerPrefix+"/test").Start(bg, "chat m")
+	SetChatContent(bg, span, ChatContent{ToolDefinitions: []Tool{{Name: "bare", Type: "custom"}}})
+	span.End()
+	for _, a := range exp.GetSpans().Snapshots()[0].Attributes() {
+		if a.Key == "gen_ai.tool.definitions" && a.Value.AsString() != `[{"name":"bare","type":"function"}]` {
+			t.Errorf("tool definitions %s", a.Value.AsString())
+		}
+	}
+	if evs := exp.GetSpans().Snapshots()[0].Events(); len(evs) != 1 || evs[0].Name != "gen_ai.content.prompt" {
+		t.Errorf("the prompt event is written whenever capture is on; no completion event without output: %v", evs)
+	}
 }
 
 func TestJudgeExplanationFollowsConfiguredDefault(t *testing.T) {
