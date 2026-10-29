@@ -143,7 +143,7 @@ func TestUsageReporting(t *testing.T) {
 		_, _ = Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, "", userCtx)
 	}
 	_ = Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Stream(bg, "", userCtx) // reports without iterating
-	_ = CreateHandler(ProvidesFor{"X", ModeMessages}, nil, nil, false)
+	_ = CreateHandler(ProvidesFor{"X", ModeMessages}, nil, nil, CaptureDefault)
 	got := map[string]int{}
 	for _, e := range f.events("$ld:ai:sdk:usage") {
 		got[e.Data["helper"].(string)]++

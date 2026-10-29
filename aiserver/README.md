@@ -141,9 +141,25 @@ and `ConversationIDSpanProcessor` ahead of the batch exporter.
 Bind a conversation id with `aiserver.WithConversationID(ctx, id)`; SDK spans
 started under that context get `gen_ai.conversation.id`.
 
-> **Content is recorded on spans.** By design, handler spans
-> carry prompt and completion text (`gen_ai.prompt.N.*`, `gen_ai.completion.0.*`,
-> `gen_ai.content.*` events). `CaptureContent` only gates the judge explanation.
+> **Content is recorded on spans by default.** Handler spans carry prompt and
+> completion text (`gen_ai.prompt.N.*`, `gen_ai.completion.0.*`,
+> `gen_ai.content.*` events), tool spans carry `gen_ai.tool.call.arguments` and
+> `gen_ai.tool.call.result`, and judge spans carry `gen_ai.evaluation.explanation`.
+> One gate controls all of it: the handler's `CaptureContent` (`CaptureOn` /
+> `CaptureOff`), else the process default set with
+> `aiserver.Configure(aiserver.SDKOptions{CaptureContent: ...})`, else on.
+> Model, provider, usage, status and tool names are written either way.
+> `Configure` can change the default only until the first handler call;
+> `Shutdown` resets it. It is not an `InitOptions` field.
+
+Two context bindings let other code add to SDK spans without the core knowing
+what they are for. `aiserver.WithSpanAttributes(ctx, attrs...)` writes string
+or integer attributes, write-if-absent, on every SDK span started under ctx.
+`aiserver.WithSpanCounter(ctx)` counts the SDK spans started under ctx. Spans
+from other tracers get neither. Code that writes its own spans uses
+`SetChatContent`, `SetToolCallArguments` and `SetToolCallResult`, which apply
+the same gate. `aiserver.FlushTelemetry(ctx)` force-flushes the registered
+tracer provider.
 
 ## Errors
 
@@ -173,7 +189,8 @@ if errors.Is(err, aiserver.ErrConfigDisabled) {
 | `Graph(key, GraphOptions) *AgentGraph` | Model-driven multi-agent router; `.Invoke` / `.Stream` |
 | `ResolveGraph(ctx, key, ldctx, GraphOptions) *GraphDefinition` | Topology + node configs for native runners |
 | `InspectConfig(ctx, key, ldctx) InspectResult` | Read a variation without invoking a model; never errors |
-| `CreateHandler(ProvidesFor, invoke, stream, captureContent) *ProviderHandler` | Build a custom handler |
+| `CreateHandler(ProvidesFor, invoke, stream, ContentCapture) *ProviderHandler` | Build a custom handler |
+| `Configure(SDKOptions) error` | Set the process-wide content-capture default |
 | `BuildJudgeTasks` / `RunJudge` | Deferred judge evaluation on your own goroutine |
 | `InitClient` / `InitWithClient` / `GetClient` / `Shutdown` | Lifecycle |
 | `ParseTemplate`, `ParseUsage`, `ParseAiConfig`, `NormalizeMode`, `ParseJSONWithPossibleFences` | Utilities |

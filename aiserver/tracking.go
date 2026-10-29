@@ -184,6 +184,7 @@ func trackTokens(userCtx ldcontext.Context, td TrackData, u TokenUsage) {
 
 func executeAndTrack(ctx context.Context, a execArgs) (execResult, error) {
 	td, req, rec := a.prepare()
+	ctx = startInvocation(ctx, a.handler.CaptureContent)
 	start := time.Now()
 	res, err := func() (HandlerResult, error) {
 		defer trackPanic(a.userCtx, td, start)
@@ -226,6 +227,7 @@ type streamDone struct {
 func executeAndStream(ctx context.Context, a execArgs, done *streamDone) iter.Seq2[HandlerStreamEvent, error] {
 	return func(yield func(HandlerStreamEvent, error) bool) {
 		td, req, rec := a.prepare()
+		ctx := startInvocation(ctx, a.handler.CaptureContent)
 		start := time.Now()
 		var full strings.Builder
 		var rawUsage map[string]any

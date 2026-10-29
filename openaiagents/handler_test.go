@@ -130,11 +130,11 @@ func invoke(t *testing.T, h *aiserver.ProviderHandler, req aiserver.HandlerReque
 }
 
 func TestFactoryMetadata(t *testing.T) {
-	a, b := newHandler(Options{}), newHandler(Options{CaptureContent: true})
+	a, b := newHandler(Options{}), newHandler(Options{CaptureContent: aiserver.CaptureOn})
 	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeAgent}) || a.ProvidesFor != ProvidesFor {
 		t.Errorf("providesFor = %+v", a.ProvidesFor)
 	}
-	if a.CaptureContent || !b.CaptureContent {
+	if a.CaptureContent != aiserver.CaptureDefault || b.CaptureContent != aiserver.CaptureOn {
 		t.Errorf("captureContent default/passthrough wrong: %v %v", a.CaptureContent, b.CaptureContent)
 	}
 	if a == b || a.Invoke == nil || a.Stream == nil {

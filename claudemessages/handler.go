@@ -49,9 +49,9 @@ type Options struct {
 	// APIKey, falling back to the ANTHROPIC_API_KEY environment variable.
 	Client *anthropic.Client
 	APIKey string
-	// CaptureContent is attached to the handler so the client core can gate
-	// judge explanations on it.
-	CaptureContent bool
+	// CaptureContent gates prompt, completion, tool and judge-explanation
+	// content on spans. CaptureDefault follows aiserver.Configure, else on.
+	CaptureContent aiserver.ContentCapture
 }
 
 // NewHandler returns the Anthropic messages handler (createClaudeMessagesHandler).
@@ -194,6 +194,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 					r.Fail(err)
 					return "", usage, false, err
 				}
+				r.ToolArguments(tool, b.Input)
 				var args map[string]any
 				_ = json.Unmarshal(b.Input, &args)
 				res, ferr := fn(r.Context(), args)
@@ -201,6 +202,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 					r.Fail(ferr)
 					return "", usage, false, ferr // tool errors propagate
 				}
+				r.ToolResult(tool, res)
 				r.EndTool(tool, nil)
 				results = append(results, anthropic.NewToolResultBlock(b.ID, aiserver.ToolResultString(res), false))
 			}

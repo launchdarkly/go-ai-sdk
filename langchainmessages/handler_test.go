@@ -98,10 +98,10 @@ func TestFactoryMetadata(t *testing.T) {
 	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "*", Mode: aiserver.ModeMessages}) {
 		t.Errorf("providesFor = %+v", a.ProvidesFor)
 	}
-	if a.CaptureContent || a == b || a.Invoke == nil || a.Stream == nil {
+	if a.CaptureContent != aiserver.CaptureDefault || a == b || a.Invoke == nil || a.Stream == nil {
 		t.Errorf("factory metadata wrong: %+v", a)
 	}
-	if !newHandler(Options{CaptureContent: true}).CaptureContent {
+	if newHandler(Options{CaptureContent: aiserver.CaptureOn}).CaptureContent != aiserver.CaptureOn {
 		t.Error("captureContent not passed through")
 	}
 }

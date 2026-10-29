@@ -189,11 +189,11 @@ func TestFactoryMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := NewHandler(Options{CaptureContent: true})
+	b, _ := NewHandler(Options{CaptureContent: aiserver.CaptureOn})
 	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "Bedrock", Mode: aiserver.ModeAgent}) {
 		t.Errorf("providesFor = %+v", a.ProvidesFor)
 	}
-	if a.CaptureContent || !b.CaptureContent || a == b || a.Invoke == nil || a.Stream == nil {
+	if a.CaptureContent != aiserver.CaptureDefault || b.CaptureContent != aiserver.CaptureOn || a == b || a.Invoke == nil || a.Stream == nil {
 		t.Errorf("metadata wrong: a=%+v b=%+v", a, b)
 	}
 	h1, _ := build(Options{})

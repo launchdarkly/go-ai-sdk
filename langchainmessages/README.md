@@ -132,7 +132,7 @@ type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
 type Options struct {
 	Model          llms.Model
 	ModelFactory   ModelFactory
-	CaptureContent bool // default false
+	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 }
 func NewHandler(opts Options) *aiserver.ProviderHandler
 

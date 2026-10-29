@@ -82,9 +82,9 @@ type Options struct {
 	// ConverseStream, GuardrailConfig is converted to the stream form. Return
 	// nil to change nothing.
 	ModelOptions func(cfg aiserver.AiConfig) *bedrockruntime.ConverseInput
-	// CaptureContent is attached to the handler so the client core can gate
-	// judge explanations on it. Default false.
-	CaptureContent bool
+	// CaptureContent gates prompt, completion, tool and judge-explanation
+	// content on spans. CaptureDefault follows aiserver.Configure, else on.
+	CaptureContent aiserver.ContentCapture
 	// MaxSteps bounds the model turns in one call. When the model still asks
 	// for tools at the bound, the call fails with ErrMaxSteps. Zero means
 	// DefaultMaxSteps.
@@ -107,7 +107,7 @@ func NewHandler(opts Options) (*aiserver.ProviderHandler, error) {
 
 type handler struct {
 	*bedrockwire.Engine
-	captureContent bool
+	captureContent aiserver.ContentCapture
 }
 
 // build makes the handler without reporting usage.

@@ -117,7 +117,7 @@ var ErrToolNotFound error
 type Options struct {
 	Client         *anthropic.Client // used when set
 	APIKey         string            // used when Client is nil; else ANTHROPIC_API_KEY
-	CaptureContent bool              // default false
+	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 }
 // NewHandler is createClaudeMessagesHandler. The handler has Invoke and Stream.
 func NewHandler(Options) *aiserver.ProviderHandler

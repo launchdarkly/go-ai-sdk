@@ -38,6 +38,12 @@ func ShutdownHooks() []func(context.Context) {
 	return slices.Clone(hooks)
 }
 
+// StartInvocation marks the start of one ProviderHandler call: it latches
+// aiserver.Configure and binds the handler's aiserver.ContentCapture (passed
+// as its uint8 value) on the returned context. Set by the core package at
+// init.
+var StartInvocation func(ctx context.Context, capture uint8) context.Context
+
 // Logger returns the SDK logger set by aiserver.SetLogger, so experimental
 // code logs where the application pointed the core. The core assigns it once
 // in init, before any goroutine can read it.

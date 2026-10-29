@@ -47,9 +47,9 @@ type Options struct {
 	Client *openai.Client
 	// APIKey is used only when Client is nil.
 	APIKey string
-	// CaptureContent is attached to the handler so the client core can gate
-	// judge explanations on it.
-	CaptureContent bool
+	// CaptureContent gates prompt, completion, tool and judge-explanation
+	// content on spans. CaptureDefault follows aiserver.Configure, else on.
+	CaptureContent aiserver.ContentCapture
 }
 
 // NewHandler returns the OpenAI messages handler (createOpenAIHandler).
@@ -140,10 +140,12 @@ func runTools(r *aiserver.HandlerRun, resp *responses.Response, callable map[str
 		}
 		call := item.AsFunctionCall()
 		span := r.StartTool(call.Name, call.CallID)
+		r.ToolArguments(span, call.Arguments)
 		res, err := callTool(r.Context(), call, callable, handlers)
 		if err != nil {
 			return nil, err // Fail ends the open tool span
 		}
+		r.ToolResult(span, res)
 		r.EndTool(span, nil)
 		outputs = append(outputs, openaiwire.FunctionCallOutput(call.CallID, aiserver.ToolResultString(res)))
 	}
