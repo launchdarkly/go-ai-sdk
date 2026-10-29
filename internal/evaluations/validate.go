@@ -3,11 +3,14 @@ package evaluations
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"reflect"
 	"slices"
 	"sort"
 	"strings"
+
+	"golang.org/x/text/cases"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
@@ -146,30 +149,53 @@ func isNilTool(h aiserver.ToolHandler) bool {
 	return false
 }
 
+func (t runTool) sourceName() string {
+	if t.inline {
+		return "inline tool (InlineTools)"
+	}
+	return "library tool (Tools)"
+}
+
 // validateTools checks both maps before any I/O and returns the tools in
-// key order (Go maps have no declaration order).
+// key order (Go maps have no declaration order). Keys are checked on both
+// sources: non-blank, lowercase, and unique under Unicode case folding
+// (straße and strasse collide), so the collision check covers library vs
+// inline, library vs library and inline vs inline.
 func validateTools(library map[string]aiserver.ToolHandler, inline map[string]InlineTool) ([]runTool, error) {
 	var out []runTool
-	folded := map[string]string{}
-	for key, impl := range library {
-		if isNilTool(impl) {
+	fold := cases.Fold()
+	seen := map[string]runTool{}
+	checkKey := func(t runTool) error {
+		if strings.TrimSpace(t.key) == "" {
+			return invalid("tool keys must not be blank: %s has the key %q", t.sourceName(), t.key)
+		}
+		if lower := strings.ToLower(t.key); t.key != lower {
+			return invalid("%s key %q must not use uppercase letters; use %q", t.sourceName(), t.key, lower)
+		}
+		f := fold.String(t.key)
+		if prev, dup := seen[f]; dup {
+			if prev.key == t.key {
+				return invalid("tool %q is declared both as a %s and as an %s; declare it once", t.key, prev.sourceName(), t.sourceName())
+			}
+			return invalid("%s %q and %s %q are the same key under case folding; rename one", prev.sourceName(), prev.key, t.sourceName(), t.key)
+		}
+		seen[f] = t
+		return nil
+	}
+	for _, key := range slices.Sorted(maps.Keys(library)) {
+		t := runTool{key: key, impl: library[key]}
+		if err := checkKey(t); err != nil {
+			return nil, err
+		}
+		if isNilTool(t.impl) {
 			return nil, invalid("tool %q implementation must be an aiserver.ToolFunc or *aiserver.NativeTool", key)
 		}
-		folded[strings.ToLower(key)] = key
-		out = append(out, runTool{key: key, impl: impl})
+		out = append(out, t)
 	}
-	for key, def := range inline {
-		if strings.TrimSpace(key) == "" {
-			return nil, invalid("InlineTools keys must not be blank")
-		}
-		if key != strings.ToLower(key) {
-			return nil, invalid("inline tool key %q must not use uppercase letters; use %q", key, strings.ToLower(key))
-		}
-		if _, dup := library[key]; dup {
-			return nil, invalid("tool %q is declared both as a library tool (Tools) and as an inline tool (InlineTools); declare it once", key)
-		}
-		if lib, dup := folded[key]; dup {
-			return nil, invalid("library tool %q and inline tool %q differ only by case; rename one", lib, key)
+	for _, key := range slices.Sorted(maps.Keys(inline)) {
+		def := inline[key]
+		if err := checkKey(runTool{key: key, inline: true}); err != nil {
+			return nil, err
 		}
 		if _, native := def.Implementation.(*aiserver.NativeTool); native {
 			return nil, invalid("inline tool %q uses a NativeTool, but a native tool has no schema to define; pass it in Tools instead", key)
@@ -206,6 +232,27 @@ func strictCopy(v map[string]any) (map[string]any, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// cloneJSON deep-copies a decoded JSON value, so each consumer of a
+// validated schema (the create body, every row's handler config) holds its
+// own copy.
+func cloneJSON(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, e := range t {
+			out[k] = cloneJSON(e)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, e := range t {
+			out[i] = cloneJSON(e)
+		}
+		return out
+	}
+	return v
 }
 
 func strictJSON(v reflect.Value, path string) error {
