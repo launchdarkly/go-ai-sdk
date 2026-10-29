@@ -878,7 +878,7 @@ func TestSdkUsage(t *testing.T) {
 	installClient(t, ld, tracetest.NewInMemoryExporter())
 	NewHandler(Options{})
 	NewHandler(Options{})
-	if got := ld.usageHelpers(); !reflect.DeepEqual(got, []string{"openai-messages.createOpenAIHandler"}) {
+	if got := ld.usageHelpers(); !reflect.DeepEqual(got, []string{"openai-messages.createOpenAIMessagesHandler"}) {
 		t.Fatalf("usage helpers = %v (factory must not emit client.createHandler, repeat must not re-emit)", got)
 	}
 	for _, tr := range ld.tracks {
