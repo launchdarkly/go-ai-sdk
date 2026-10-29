@@ -90,8 +90,8 @@ type ShadowResult struct {
 
 // ShadowConfig is Config, and also runs the shadows of the matched rule or
 // fallthrough. Shadows start only after the served variation succeeds and
-// never delay or change its response. A running shadow ends at its timeout;
-// Shutdown does not wait for it. It returns an error for a negative Timeout.
+// never delay or change its response. A running shadow ends at its timeout
+// or when aiserver.Shutdown cancels it. It returns an error for a negative Timeout.
 // Experimental.
 func ShadowConfig(args aiserver.ConfigArgs, opts ShadowOptions) (*ShadowAIConfig, error) {
 	aiserver.ReportUsage("experimental.shadowConfig", "", "")
@@ -178,14 +178,41 @@ func handOver(onTask func(ShadowTask), task ShadowTask) {
 	onTask(task)
 }
 
-// running counts background shadows, so tests can wait for them.
-var running sync.WaitGroup
+var (
+	// running counts background shadows, so tests can wait for them.
+	running   sync.WaitGroup
+	cancelsMu sync.Mutex
+	cancels   = map[*context.CancelFunc]struct{}{}
+)
+
+func init() { bridge.OnShutdown(cancelRunning) }
+
+func cancelRunning(context.Context) {
+	cancelsMu.Lock()
+	defer cancelsMu.Unlock()
+	for cancel := range cancels {
+		(*cancel)()
+	}
+	clear(cancels)
+}
 
 // startBackground detaches the shadow from the caller's cancellation, so it
-// outlives the request; it keeps the context's values and trace.
+// outlives the request; it keeps the context's values and trace. Shutdown
+// cancels it.
 func startBackground(ctx context.Context, task ShadowTask, handlers []*aiserver.ProviderHandler) {
-	ctx = context.WithoutCancel(ctx)
-	running.Go(func() { runShadow(ctx, task, handlers) })
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	cancelsMu.Lock()
+	cancels[&cancel] = struct{}{}
+	cancelsMu.Unlock()
+	running.Go(func() {
+		defer func() {
+			cancelsMu.Lock()
+			delete(cancels, &cancel)
+			cancelsMu.Unlock()
+			cancel()
+		}()
+		runShadow(ctx, task, handlers)
+	})
 }
 
 type detailClient interface {

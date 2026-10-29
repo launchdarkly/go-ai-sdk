@@ -929,3 +929,36 @@ func TestTemplateVariablesCannotSetSpanAttributes(t *testing.T) {
 		t.Fatal("a template variable set a span attribute")
 	}
 }
+
+func TestShutdownCancelsRunningShadows(t *testing.T) {
+	f := install(t, fallthroughPayload(), ldreason.NewEvalReasonFallthrough())
+	started := make(chan struct{})
+	cancelled := make(chan struct{})
+	blocking := &aiserver.ProviderHandler{
+		ProvidesFor: aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeMessages},
+		Invoke: func(ctx context.Context, _ aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
+			close(started)
+			<-ctx.Done()
+			close(cancelled)
+			return aiserver.HandlerResult{}, ctx.Err()
+		},
+	}
+	p := newPair()
+	s := mustShadow(t, []*aiserver.ProviderHandler{p.a.handler("OpenAI"), blocking}, ShadowOptions{Timeout: time.Minute})
+	if _, err := s.Invoke(context.Background(), "hello", shadowUser); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	if err := aiserver.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-cancelled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Shutdown did not cancel the running shadow")
+	}
+	running.Wait()
+	if ev := f.events(true); len(ev) != 0 {
+		t.Fatalf("a cancelled shadow recorded %v", ev)
+	}
+}

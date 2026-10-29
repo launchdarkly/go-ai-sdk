@@ -162,7 +162,8 @@ value, a deadline wrapped handler and the shadow track data. Both pass `sdkcall.
 Rules that are easy to break: shadows start only after A succeeds (after `Invoke` returns, or at
 the stream's `done` event); preparing them never fails A (panics are recovered and logged); B
 never gets tools, judges or `shadowConfiguration`; the deadline wraps the handler, so a timeout is
-tracked once; nothing is added to A's events. Sampling is
+tracked once; nothing is added to A's events; `aiserver.Shutdown` cancels background shadows through
+`bridge.OnShutdown`. Sampling is
 `sha1("<id>.<canonical key>")[:15] / 0xFFFFFFFFFFFFFFF`, with the canonical key from
 `aiserver.ContextIdentity`.
 

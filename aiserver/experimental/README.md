@@ -210,7 +210,8 @@ result := experimental.RunShadow(ctx, <-queue, handlers) // never fails; see res
 | `OnTask` | Run shadows yourself. It receives a `ShadowTask` per sampled shadow and should only enqueue it. A `ShadowTask` survives `encoding/json`, except `Config.Raw`. |
 
 Shadows run in a background goroutine by default, detached from the caller's cancellation, and
-each one ends at its timeout. `aiserver.Shutdown` does not wait for them. A shadow always runs as
+each one ends at its timeout. `aiserver.Shutdown` cancels any that are still running, and a
+cancelled shadow records nothing. A shadow always runs as
 a plain invoke, even when the served call streamed, with no tools and no judges. Pass handlers for
 every provider your shadow variations use, since a shadow with no matching handler is skipped.
 Shadows need a client with `JSONVariationDetail`, which `*ld.LDClient` has; with any other client
