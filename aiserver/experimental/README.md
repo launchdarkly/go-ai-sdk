@@ -27,6 +27,23 @@ go get github.com/launchdarkly/go-ai-sdk/openaimessages   # or any handler packa
 Handlers read their provider's own variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, AWS chain).
 Missing credentials fail `InitEvaluations` with `ErrEvalMissingCredential`, before any network I/O.
 
+### What leaves the process on spans
+
+`Run` also exports OpenTelemetry spans through the tracer provider `aiserver.InitClient`
+registered: one `launchdarkly.dataset_row` trace per row, an `evaluate {criterion}` span per
+criterion, and, for a handler that opens no spans of its own, `chat` and `execute_tool` spans
+the runner writes. Every span carries the row's `gen_ai.conversation.id`,
+`launchdarkly.evaluation_run.id` and `launchdarkly.evaluation_run.row_index`.
+
+**By default those spans carry the transcript:** the row input and the config's messages, the
+system and judge instructions rendered with the row's variables, the model output, tool
+arguments and results, the judge's raw completion, and its reason
+(`gen_ai.evaluation.explanation`). Setting capture off removes all of it, on evaluation spans as
+on every other span: `CaptureContent: aiserver.CaptureOff` on the handler, or
+`aiserver.Configure(aiserver.SDKOptions{CaptureContent: aiserver.CaptureOff})` before the first
+handler call. Model, provider, usage, status, tool names and scores are written either way. The
+`$ld:ai:offline-evals:*` result events never carry any of this content.
+
 ### Example
 
 ```go

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 )
 
@@ -37,6 +38,11 @@ type Invocation struct {
 	Result    string
 	Error     string
 	Failed    bool
+	// Started and Ended bracket the call; Done is false while it is still
+	// open (or if it panicked), and then Ended is zero. Render ignores them.
+	Started time.Time
+	Ended   time.Time
+	Done    bool
 }
 
 // Recorder records one unit's tool calls in call-start order. Safe for
@@ -87,7 +93,7 @@ func (r *Recorder) reserve(name string, args map[string]any) int {
 		r.omitted++
 		return -1
 	}
-	r.invocations = append(r.invocations, Invocation{Name: name, Arguments: rendered})
+	r.invocations = append(r.invocations, Invocation{Name: name, Arguments: rendered, Started: time.Now()})
 	return len(r.invocations) - 1
 }
 
@@ -95,6 +101,7 @@ func (r *Recorder) complete(slot int, res any, err error) {
 	if slot < 0 {
 		return
 	}
+	ended := time.Now()
 	var result, msg string
 	if err != nil {
 		msg = truncate(err.Error())
@@ -105,6 +112,7 @@ func (r *Recorder) complete(slot int, res any, err error) {
 	defer r.mu.Unlock()
 	inv := &r.invocations[slot]
 	inv.Result, inv.Error, inv.Failed = result, msg, err != nil
+	inv.Ended, inv.Done = ended, true
 }
 
 // Invocations returns the recorded calls, oldest first.
