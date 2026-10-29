@@ -226,7 +226,7 @@ func init() {
 }
 
 // sdkKey is the SDK key for both init paths: InitOptions.SDKKey, else
-// LD_SDK_KEY. Telemetry stamps it as highlight.project_id.
+// LD_SDK_KEY. Telemetry stamps it as launchdarkly.project_id.
 func sdkKey(opts InitOptions) string {
 	if opts.SDKKey != "" {
 		return opts.SDKKey
@@ -285,7 +285,7 @@ func setupTelemetry(ctx context.Context, sdkKey string, opts InitOptions) error 
 	if err != nil {
 		return err
 	}
-	attrs := []attribute.KeyValue{attribute.String("highlight.project_id", sdkKey)}
+	attrs := []attribute.KeyValue{attribute.String("launchdarkly.project_id", sdkKey)}
 	attrs = append(attrs, semconv.ServiceName(opts.ServiceName))
 	if opts.Environment != "" {
 		attrs = append(attrs, semconv.DeploymentEnvironment(opts.Environment))

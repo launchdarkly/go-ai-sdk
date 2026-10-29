@@ -108,7 +108,7 @@ empty; a blank value counts as unset.
 
 | Variable | Required | Description |
 |---|---|---|
-| `LD_SDK_KEY` | yes, unless `InitOptions.SDKKey` or `InitWithClient` | LaunchDarkly server-side SDK key; also the `highlight.project_id` resource attribute |
+| `LD_SDK_KEY` | yes, unless `InitOptions.SDKKey` or `InitWithClient` | LaunchDarkly server-side SDK key; also the `launchdarkly.project_id` resource attribute |
 | `LD_BASE_URI` | no | LaunchDarkly polling/base URI (`InitOptions.BaseURI`) for non-production environments |
 | `LD_STREAM_URI` | no | LaunchDarkly streaming URI (`InitOptions.StreamURI`) |
 | `LD_EVENTS_URI` | no | LaunchDarkly events URI (`InitOptions.EventsURI`) |
@@ -134,7 +134,7 @@ Initialization paths:
 
 `InitClient` / `InitWithClient` register a global OpenTelemetry tracer provider:
 an OTLP/HTTP exporter with gzip compression, a resource carrying
-`highlight.project_id` (the SDK key), `service.name` and
+`launchdarkly.project_id` (the SDK key), `service.name` and
 `deployment.environment` when set, W3C trace-context and baggage propagators,
 and `ConversationIDSpanProcessor` ahead of the batch exporter.
 

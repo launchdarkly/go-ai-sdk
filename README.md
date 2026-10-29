@@ -102,7 +102,7 @@ unset.
 
 | Variable | Required | Description |
 |---|---|---|
-| `LD_SDK_KEY` | yes, unless `InitOptions.SDKKey` or `InitWithClient` | LaunchDarkly server-side SDK key; also stamped as `highlight.project_id` |
+| `LD_SDK_KEY` | yes, unless `InitOptions.SDKKey` or `InitWithClient` | LaunchDarkly server-side SDK key; also stamped as `launchdarkly.project_id` |
 | `LD_BASE_URI` | no | LaunchDarkly polling/base URI for non-production environments |
 | `LD_STREAM_URI` | no | LaunchDarkly streaming URI |
 | `LD_EVENTS_URI` | no | LaunchDarkly events URI |
@@ -120,7 +120,7 @@ unset.
 
 `InitClient` registers a global OpenTelemetry tracer provider: OTLP/HTTP with
 gzip to `InitOptions.OTLPEndpoint`, else `OTEL_EXPORTER_OTLP_ENDPOINT`, else
-`aiserver.DefaultOTLPEndpoint`; resource attributes `highlight.project_id` (SDK
+`aiserver.DefaultOTLPEndpoint`; resource attributes `launchdarkly.project_id` (SDK
 key), `service.name` (`LD_SERVICE_NAME`, default `go-sdk`) and
 `deployment.environment` (`LD_ENVIRONMENT`, when set); W3C propagators; and a span
 processor that stamps `gen_ai.conversation.id` from
