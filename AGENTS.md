@@ -90,7 +90,7 @@ packages build `XxxGraph` wrappers on `internal/sdkapi.Graph` and native runners
 ## OTel setup
 
 `aiserver.InitClient` / `InitWithClient` register the global tracer provider
-(OTLP/HTTP + gzip, `highlight.project_id` / `service.name` /
+(OTLP/HTTP + gzip, `launchdarkly.project_id` / `service.name` /
 `deployment.environment` resource, W3C propagators,
 `ConversationIDSpanProcessor`). Handler packages only start spans through
 `StartHandlerRun`; they never configure OTel. The OTel SDK modules are ordinary

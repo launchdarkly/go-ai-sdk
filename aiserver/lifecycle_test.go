@@ -354,12 +354,12 @@ func TestBYOCTelemetryUsesEnvSDKKey(t *testing.T) {
 	span.End()
 	var got string
 	for _, kv := range exp.GetSpans().Snapshots()[0].Resource().Attributes() {
-		if kv.Key == "highlight.project_id" {
+		if kv.Key == "launchdarkly.project_id" {
 			got = kv.Value.AsString()
 		}
 	}
 	if got != "env-sdk-key" {
-		t.Errorf("highlight.project_id = %q, want the LD_SDK_KEY value", got)
+		t.Errorf("launchdarkly.project_id = %q, want the LD_SDK_KEY value", got)
 	}
 }
 
