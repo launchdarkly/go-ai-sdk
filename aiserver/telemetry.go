@@ -106,7 +106,12 @@ const (
 	// ldContextValue holds the typed context alongside the template map; Go
 	// templates need a map but identity needs the typed ldcontext.Context.
 	varLDContextTyped = "__ldContextTyped"
+	// varLDSpanAttributes holds extra root span attributes. Its unexported
+	// type means template variables cannot set it.
+	varLDSpanAttributes = "__ldSpanAttributes"
 )
+
+type spanAttributes []attribute.KeyValue
 
 // SetLDSpanAttributes writes the LaunchDarkly config-association and context
 // identity attributes on a handler's root span from variables. Without an
@@ -120,6 +125,9 @@ func SetLDSpanAttributes(span trace.Span, variables map[string]any) {
 	}
 	c, _ := variables[varLDContextTyped].(ldcontext.Context)
 	SetLDSpanAttributesFor(span, td, c)
+	if extra, ok := variables[varLDSpanAttributes].(spanAttributes); ok {
+		span.SetAttributes(extra...)
+	}
 }
 
 // SetLDSpanAttributesFor writes the same attributes for a span that has no

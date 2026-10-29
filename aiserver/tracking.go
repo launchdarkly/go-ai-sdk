@@ -14,6 +14,7 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
 	"github.com/launchdarkly/go-ai-sdk/internal/trajectory"
 )
 
@@ -26,6 +27,12 @@ func track(event string, ctx ldcontext.Context, td TrackData, metric float64) {
 		return
 	}
 	b, _ := json.Marshal(td)
+	if td.extra != nil {
+		var data map[string]any
+		_ = json.Unmarshal(b, &data)
+		maps.Copy(data, td.extra.fields)
+		b, _ = json.Marshal(data)
+	}
 	safeTrack(c, event, ctx, metric, ldvalue.Parse(b))
 }
 
@@ -84,6 +91,7 @@ type execArgs struct {
 	variables map[string]any
 	graphKey  string
 	history   []Message
+	run       bridge.RunOptions
 }
 
 // execResult is one tracked invocation's outcome.
@@ -120,6 +128,12 @@ func newTrackData(configKey string, cfg AiConfig, meta VariationMeta, graphKey s
 // as native) and then by the tool-call tracking wrapper.
 func (a execArgs) prepare() (TrackData, HandlerRequest, *trajectory.Recorder) {
 	td := newTrackData(a.configKey, a.config, a.meta, a.graphKey)
+	if a.run.RunID != "" {
+		td.RunID = a.run.RunID
+	}
+	if len(a.run.TrackData) > 0 {
+		td.extra = &extraTrackData{maps.Clone(a.run.TrackData)}
+	}
 	rec := trajectory.NewRecorder()
 	exposed := make(map[string]bool, len(a.config.Tools))
 	for k := range a.config.Tools {
@@ -142,6 +156,9 @@ func (a execArgs) prepare() (TrackData, HandlerRequest, *trajectory.Recorder) {
 	vars[VarLDContext] = ContextToMap(a.userCtx) // always overwrites a caller's ldContext
 	vars[varLDContextTyped] = a.userCtx
 	vars[VarLD] = td
+	if len(a.run.SpanAttributes) > 0 {
+		vars[varLDSpanAttributes] = spanAttributes(a.run.SpanAttributes)
+	}
 	return td, HandlerRequest{
 		Config:       a.config,
 		UserInput:    a.userInput,

@@ -213,8 +213,11 @@ func runShutdownHook(ctx context.Context, hook func(context.Context)) {
 
 func init() {
 	bridge.Logger = sdkLogger
+	bridge.ConfigWithOptions = func(args any, opts bridge.RunOptions) any {
+		return &AIConfig{args: args.(ConfigArgs), opts: opts}
+	}
 	bridge.ExtractVariationRaw = func(ctx context.Context, key string, c ldcontext.Context) (map[string]any, error) {
-		raw, meta, err := readVariation(ctx, key, c)
+		raw, meta, err := readVariation(ctx, key, c, nil)
 		if err != nil {
 			return nil, err
 		}

@@ -80,7 +80,10 @@ ReportUsage, TracerPrefix, PackageName, PackageVersion
 
 1. Resolve handlers (local first, then registry) and tools (local overlays registry).
 2. `extractVariation`: variation with default `{enabled:false}`, require
-   `_ldMeta.enabled`, `ParseAiConfig`.
+   `_ldMeta.enabled`, `ParseAiConfig`. An `AIConfig` built through
+   `bridge.ConfigWithOptions` calls its `RunOptions.Variation` instead of
+   `JSONVariation`, and its tracked runs use the options' run id, extra track
+   data and span attributes.
 3. Select the handler: exact `[provider, mode]`, then `["*", mode]`, else error.
 4. Tracked execution: mint `TrackData`, wrap tools (trajectory recorder inside
    the `$ld:ai:tool_call` wrapper), inject `variables.ldContext` and `__ld`,

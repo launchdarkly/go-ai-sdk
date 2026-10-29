@@ -82,11 +82,11 @@ func TestRootSurfaceIsPinned(t *testing.T) {
 	}
 }
 
-// No experimental name (skills or evaluations) leaks onto the root.
+// No experimental name (skills, evaluations or shadow requests) leaks onto the root.
 func TestNoExperimentalNameOnRoot(t *testing.T) {
 	root := exportedNames(t, "*.go")
 	experimental := exportedNames(t, "experimental/*.go")
-	for _, must := range []string{"InitEvaluations", "NewJudge", "NewScorer", "Dataset", "GetSkill", "WriteSkills"} {
+	for _, must := range []string{"InitEvaluations", "NewJudge", "NewScorer", "Dataset", "GetSkill", "WriteSkills", "ShadowConfig", "RunShadow"} {
 		if !slices.Contains(experimental, must) {
 			t.Fatalf("experimental surface lost %s; the leak check would be vacuous", must)
 		}

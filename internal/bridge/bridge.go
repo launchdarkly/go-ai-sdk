@@ -10,12 +10,34 @@ import (
 	"sync"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
+	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // ExtractVariationRaw resolves a flag variation as decoded JSON and returns
 // an error when it is disabled. Set by the core package at init; experimental
 // code parses the result with aiserver.ParseAiConfig.
 var ExtractVariationRaw func(ctx context.Context, key string, c ldcontext.Context) (map[string]any, error)
+
+// VariationClient is the part of the LaunchDarkly client a Variation gets.
+type VariationClient interface {
+	JSONVariation(key string, c ldcontext.Context, def ldvalue.Value) (ldvalue.Value, error)
+}
+
+// Variation evaluates a config's flag in place of the core's JSONVariation call.
+type Variation func(client VariationClient, key string, c ldcontext.Context, def ldvalue.Value) (ldvalue.Value, error)
+
+// RunOptions change one config's runs. The zero value is a plain Config run.
+type RunOptions struct {
+	Variation      Variation            // nil: JSONVariation
+	RunID          string               // "": a new run id per run
+	TrackData      map[string]any       // merged into every event's data
+	SpanAttributes []attribute.KeyValue // added to the handler's root span
+}
+
+// ConfigWithOptions returns an *aiserver.AIConfig for args (an
+// aiserver.ConfigArgs) that runs with opts. Set by the core package at init.
+var ConfigWithOptions func(args any, opts RunOptions) any
 
 var (
 	mu    sync.Mutex

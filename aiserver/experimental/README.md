@@ -176,3 +176,42 @@ An integrity failure is logged at ERROR through the SDK logger (`aiserver.SetLog
 `ld.skills.integrity_failure {sorted-key JSON}`, with the same mapping on the `ld_skills` attribute.
 SIEM rules can match the event name and `reason_code`. While Agent Skills is experimental, the event
 name, fields and codes may change only in a minor release with a changelog entry under Experimental.
+
+## Shadow requests
+
+A shadow request runs a candidate variation on real traffic without serving it. Use
+`ShadowConfig` in place of `aiserver.Config` at the call sites you want to shadow. It takes the
+same `aiserver.ConfigArgs` plus `ShadowOptions`, and its `Invoke` and `Stream` return exactly what
+`Config`'s return. When the context matches a targeting rule or the fallthrough that has shadows
+attached, each sampled shadow runs the same input on its own variation once the served call
+succeeds. Its response is discarded. Its events are the normal `$ld:ai:*` events for that
+variation, with the served call's `runId` and `isShadow: true`, so you can compare the two on the
+usual AI metrics. A shadow never delays or changes the served response, and its failures are only
+tracked.
+
+```go
+shadowed, err := experimental.ShadowConfig(
+	aiserver.ConfigArgs{Key: "my-ai-config", Handlers: []*aiserver.ProviderHandler{openai, anthropic}},
+	experimental.ShadowOptions{},
+)
+if err != nil { log.Fatal(err) }
+resp, err := shadowed.Invoke(ctx, "Summarize this document", userCtx)
+
+// Or hand each shadow to your own queue, and run it from a worker.
+shadowed, err = experimental.ShadowConfig(args, experimental.ShadowOptions{
+	OnTask: func(task experimental.ShadowTask) { queue <- task },
+})
+result := experimental.RunShadow(ctx, <-queue, handlers) // never fails; see result.Error
+```
+
+| Option | Meaning |
+| --- | --- |
+| `Timeout` | How long each shadow may run before it is tracked as an error with `Error: "timeout"`. Zero means 30 seconds; a negative value makes `ShadowConfig` return an error. |
+| `OnTask` | Run shadows yourself. It receives a `ShadowTask` per sampled shadow and should only enqueue it. A `ShadowTask` survives `encoding/json`, except `Config.Raw`. |
+
+Shadows run in a background goroutine by default, detached from the caller's cancellation, and
+each one ends at its timeout. `aiserver.Shutdown` does not wait for them. A shadow always runs as
+a plain invoke, even when the served call streamed, with no tools and no judges. Pass handlers for
+every provider your shadow variations use, since a shadow with no matching handler is skipped.
+Shadows need a client with `JSONVariationDetail`, which `*ld.LDClient` has; with any other client
+the served call still runs and no shadow does. Plain `aiserver.Config` never runs shadows.
