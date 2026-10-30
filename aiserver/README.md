@@ -119,7 +119,7 @@ empty; a blank value counts as unset.
 
 `InitOptions` fields: `SDKKey`, `BaseURI`, `StreamURI`, `EventsURI` (non-production
 LaunchDarkly endpoints), `OTLPEndpoint`, `ServiceName`, `Environment`, `WaitFor`
-(initialization timeout, default 10s).
+(initialization timeout; zero or negative means the 10s default).
 
 Initialization paths:
 
