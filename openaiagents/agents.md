@@ -13,7 +13,7 @@ Go version.
 | --- | --- |
 | `handler.go` | Package doc, constants, sentinel errors, `Options`, `NewHandler`, `OpenAIAgents`, and the handler's blocking and streaming entry points. |
 | `runner.go` | The agent / runner model: building agents from configs, request construction, the turn loop, tool and handoff execution, run hooks. |
-| `outputtype.go` | `OutputType` and `BuildOutputType`. |
+| `outputtype.go` | Unexported `outputType` and `buildOutputType` (structured-output `text.format`). |
 | `graph.go` | `OpenAIGraph` and the native adapter `ToOpenAIAgents` / `NativeGraph`. |
 | `fake_test.go` | `httptest` OpenAI server, per-key fake LaunchDarkly client, span exporter helpers. |
 | `handler_test.go` | Handler, wrapper, structured output and usage-report tests. |
@@ -35,8 +35,6 @@ func NewHandler(Options) *aiserver.ProviderHandler
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func OpenAIAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, *InvokeOptions) (aiserver.ProviderResponse, error)
 func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph
-type OutputType struct{ Type, Name string; Strict bool; Schema map[string]any }
-func BuildOutputType(map[string]any) *OutputType
 type NativeGraphOptions struct{ ToolHandlers; Context ldcontext.Context; Handler Options }
 type NativeGraph struct{ /* unexported */ }
 func ToOpenAIAgents(*aiserver.GraphDefinition, *NativeGraphOptions) *NativeGraph
@@ -55,7 +53,7 @@ The handler receives `aiserver.HandlerRequest{Config, UserInput, ToolHandlers, V
 - **`Config`**: `aiserver.ComposePrompt(req, ModeAgent)` gives the system prompt (instructions win
   over `messages` system entries) and the turns. The system prompt is the Responses
   `instructions`. `Tools` are filtered by `aiserver.CallableTools`; tools whose handler is a
-  `NativeTool` become hosted tools. `OutputFormat` becomes `BuildOutputType` on the blocking path.
+  `NativeTool` become hosted tools. `OutputFormat` becomes `buildOutputType` on the blocking path.
   Allowlisted `Model.Parameters` go out as extra JSON fields (camelCase keys are read as their
   snake_case names; snake_case wins); `max_turns` caps the run.
 - **`UserInput`**: appended by `ComposePrompt`; `""` when empty, never absent.
