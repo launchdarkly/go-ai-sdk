@@ -55,7 +55,7 @@ if !res.Passed { os.Exit(1) }
 | `Dataset` | `DatasetKey("...")` for a hosted dataset, or `InlineRows{...}` (`DatasetRow` values or `map[string]any` with `input`, `expectedOutput`, `variables`, `metadata`, optional `rowIdx`). |
 | `Handler` / `Handlers` | Exactly one. Each config (generation and every judge) picks its handler by provider and mode; an exact provider beats `*`; there is no mode fallback. |
 | `Generation` / `AIConfig` | Exactly one. `AIConfig: &AIConfigRef{Key, Variation}` reads the latest variation version; `Overrides` replace single fields. |
-| `Tools` / `InlineTools` | Library tools (resolved and version-pinned by key) and tools defined in code (`InlineTool{Implementation, Schema, Description}`). Inline keys are lowercase. |
+| `Tools` / `InlineTools` | Library tools (resolved and version-pinned by key) and tools defined in code (`InlineTool{Implementation, Schema, Description}`). Every key, library or inline, is non-blank and lowercase, and keys must differ under Unicode case folding (`straße` and `strasse` collide). |
 | `Criteria` | `*Judge` (`NewJudge`) and `*Scorer` (`NewScorer`). With `AIConfig`, nil uses the variation's judges and `[]Criterion{}` runs none. |
 | `Concurrency` | In-flight handler, judge and scorer calls (default 10). |
 | `PollInterval` / `PollTimeout` | Summary polling (default 2s / 3m). Large datasets need a longer timeout. |

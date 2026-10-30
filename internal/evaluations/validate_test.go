@@ -103,7 +103,13 @@ func TestRunValidationBeforeIO(t *testing.T) {
 		{"zero-value judge", func(a *RunArgs) { a.Criteria = []Criterion{&Judge{}} }, []string{"judge key must not be blank"}},
 		{"blank inline key", func(a *RunArgs) {
 			a.InlineTools = map[string]InlineTool{" ": {Implementation: noopTool, Schema: map[string]any{}}}
-		}, []string{"InlineTools"}},
+		}, []string{"tool keys must not be blank", "InlineTools"}},
+		{"blank library key", func(a *RunArgs) {
+			a.Tools = map[string]aiserver.ToolHandler{" ": noopTool}
+		}, []string{"tool keys must not be blank", "library"}},
+		{"uppercase library key", func(a *RunArgs) {
+			a.Tools = map[string]aiserver.ToolHandler{"Lookup": noopTool}
+		}, []string{"library", `"Lookup"`, "uppercase", `"lookup"`}},
 		{"uppercase inline key", func(a *RunArgs) {
 			a.InlineTools = map[string]InlineTool{"Lookup": {Implementation: noopTool, Schema: map[string]any{}}}
 		}, []string{`"Lookup"`, "uppercase"}},
@@ -114,6 +120,12 @@ func TestRunValidationBeforeIO(t *testing.T) {
 		{"inline schema with a date", func(a *RunArgs) {
 			a.InlineTools = map[string]InlineTool{"t": {Implementation: noopTool, Schema: map[string]any{"d": time.Now()}}}
 		}, []string{`"t"`, "time.Time"}},
+		{"inline schema with a non-string key", func(a *RunArgs) {
+			a.InlineTools = map[string]InlineTool{"t": {Implementation: noopTool, Schema: map[string]any{"properties": map[int]any{1: "x"}}}}
+		}, []string{`"t"`, "$.properties", "non-string keys"}},
+		{"inline schema with a non-string key inside a list", func(a *RunArgs) {
+			a.InlineTools = map[string]InlineTool{"t": {Implementation: noopTool, Schema: map[string]any{"anyOf": []any{map[bool]any{true: "x"}}}}}
+		}, []string{`"t"`, "$.anyOf[0]", "non-string keys"}},
 		{"inline native tool", func(a *RunArgs) {
 			a.InlineTools = map[string]InlineTool{"web": {Implementation: &aiserver.NativeTool{ToolName: "web"}, Schema: map[string]any{}}}
 		}, []string{`"web"`, "native tool has no schema to define"}},
@@ -124,10 +136,19 @@ func TestRunValidationBeforeIO(t *testing.T) {
 			a.Tools = map[string]aiserver.ToolHandler{"lookup_order": noopTool}
 			a.InlineTools = map[string]InlineTool{"lookup_order": {Implementation: noopTool, Schema: map[string]any{}}}
 		}, []string{`"lookup_order"`, "library", "inline"}},
-		{"keys differing only by case", func(a *RunArgs) {
-			a.Tools = map[string]aiserver.ToolHandler{"Lookup_Order": noopTool}
-			a.InlineTools = map[string]InlineTool{"lookup_order": {Implementation: noopTool, Schema: map[string]any{}}}
-		}, []string{`"Lookup_Order"`, `"lookup_order"`}},
+		{"library keys differing only by case", func(a *RunArgs) {
+			a.Tools = map[string]aiserver.ToolHandler{"Lookup": noopTool, "lookup": noopTool}
+		}, []string{`"Lookup"`, "uppercase"}},
+		{"library and inline keys equal under case folding", func(a *RunArgs) {
+			a.Tools = map[string]aiserver.ToolHandler{"straße": noopTool}
+			a.InlineTools = map[string]InlineTool{"strasse": {Implementation: noopTool, Schema: map[string]any{}}}
+		}, []string{`"straße"`, `"strasse"`, "library", "inline", "case folding"}},
+		{"inline keys equal under case folding", func(a *RunArgs) {
+			a.InlineTools = map[string]InlineTool{
+				"straße":  {Implementation: noopTool, Schema: map[string]any{}},
+				"strasse": {Implementation: noopTool, Schema: map[string]any{}},
+			}
+		}, []string{`"straße"`, `"strasse"`, "case folding"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -144,19 +165,6 @@ func TestRunValidationBeforeIO(t *testing.T) {
 				t.Fatal("validation must precede client resolution")
 			}
 		})
-	}
-}
-
-func TestTwoLibraryKeysDifferingByCaseAreTwoLookups(t *testing.T) {
-	e := newEnv(t, 1)
-	for _, k := range []string{"Lookup", "lookup"} {
-		e.route("GET", "projects/proj/ai-tools/"+k, resp{body: map[string]any{"version": 1}})
-	}
-	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-	args.Tools = map[string]aiserver.ToolHandler{"Lookup": noopTool, "lookup": noopTool}
-	mustRun(t, e.module(), args)
-	if e.count("ai-tools/") != 2 {
-		t.Fatalf("tool GETs: %v", e.sequence())
 	}
 }
 
