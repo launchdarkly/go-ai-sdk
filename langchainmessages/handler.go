@@ -67,9 +67,9 @@ type Options struct {
 	CaptureContent bool
 }
 
-// NewHandler returns the LangChain messages handler (createLangChainHandler).
+// NewHandler returns the LangChain messages handler (createLangChainMessagesHandler).
 func NewHandler(opts Options) *aiserver.ProviderHandler {
-	aiserver.ReportUsage("langchain-messages.createLangChainHandler", PackageName, PackageVersion)
+	aiserver.ReportUsage("langchain-messages.createLangChainMessagesHandler", PackageName, PackageVersion)
 	return newHandler(opts)
 }
 

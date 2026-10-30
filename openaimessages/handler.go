@@ -52,9 +52,9 @@ type Options struct {
 	CaptureContent bool
 }
 
-// NewHandler returns the OpenAI messages handler (createOpenAIHandler).
+// NewHandler returns the OpenAI messages handler (createOpenAIMessagesHandler).
 func NewHandler(opts Options) *aiserver.ProviderHandler {
-	aiserver.ReportUsage("openai-messages.createOpenAIHandler", PackageName, PackageVersion)
+	aiserver.ReportUsage("openai-messages.createOpenAIMessagesHandler", PackageName, PackageVersion)
 	return newHandler(opts)
 }
 
