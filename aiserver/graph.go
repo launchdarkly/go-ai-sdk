@@ -113,7 +113,8 @@ type GraphResponse struct {
 }
 
 // GraphStreamEvent is one item from Graph(...).Stream. Type is
-// node_start, chunk, node_done, handoff or done.
+// node_start, chunk, node_done, handoff or done. JudgeResults on node_done
+// holds that node's own judges; on done it holds only the graph-level judge.
 type GraphStreamEvent struct {
 	Type         EventType
 	NodeKey      string
@@ -493,7 +494,11 @@ func (d *GraphDefinition) streamRoute(ctx context.Context, n *GraphNode, input s
 	if route && routing == nil && len(outgoing) == 1 {
 		res.Next = d.nodes[outgoing[0].TargetKey]
 	}
-	if !emit(GraphStreamEvent{Type: EventNodeDone, NodeKey: n.Key, Response: done.response, Usage: done.usage}) {
+	nodeDone := GraphStreamEvent{Type: EventNodeDone, NodeKey: n.Key, Response: done.response, Usage: done.usage}
+	if len(judgeResults) > 0 { // nil when none produced a result
+		nodeDone.JudgeResults = judgeResults
+	}
+	if !emit(nodeDone) {
 		return res, true, nil
 	}
 	return res, false, nil
