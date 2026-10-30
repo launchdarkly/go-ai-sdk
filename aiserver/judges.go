@@ -92,7 +92,7 @@ func activeJudges(cfg AiConfig) []JudgeRef {
 // often one toggled off in LaunchDarkly) is logged and skipped rather than
 // failing the call, as in the JavaScript SDK.
 func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context) (AiConfig, VariationMeta, bool) {
-	cfg, meta, err := extractVariation(ctx, key, userCtx)
+	cfg, meta, err := extractVariation(ctx, key, userCtx, nil, false)
 	if err != nil {
 		sdkLogger().Error("judge skipped: its config could not be resolved", "judge", key, "error", err)
 		return AiConfig{}, VariationMeta{}, false

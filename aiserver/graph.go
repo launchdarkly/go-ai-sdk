@@ -561,7 +561,7 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 		}
 	}
 	for _, k := range keys {
-		cfg, nmeta, err := extractVariation(ctx, k, userCtx)
+		cfg, nmeta, err := extractVariation(ctx, k, userCtx, nil, false)
 		if err != nil {
 			sdkLogger().Error("graph node failed to resolve; graph disabled", "graph", key, "node", k, "error", err)
 			def.nodes, def.edges = map[string]*GraphNode{}, nil

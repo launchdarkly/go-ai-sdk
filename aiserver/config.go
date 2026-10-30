@@ -10,6 +10,7 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkcall"
 )
 
@@ -28,6 +29,7 @@ type ConfigArgs struct {
 // AIConfig is the value Config returns.
 type AIConfig struct {
 	args ConfigArgs
+	opts bridge.RunOptions
 }
 
 // Config is the unified AI Config entry point.
@@ -39,12 +41,24 @@ func variationToAny(v ldvalue.Value) any {
 	return out
 }
 
-func readVariation(ctx context.Context, key string, userCtx ldcontext.Context) (raw map[string]any, meta *VariationMeta, err error) {
-	c, err := InitClient(ctx, InitOptions{})
+func readVariation(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation, existingClient bool) (raw map[string]any, meta *VariationMeta, err error) {
+	var c LDClient
+	if existingClient {
+		c, err = GetClient()
+	} else {
+		c, err = InitClient(ctx, InitOptions{})
+	}
 	if err != nil {
 		return nil, nil, err
 	}
-	v, evalErr := c.JSONVariation(key, userCtx, ldvalue.ObjectBuild().SetBool("enabled", false).Build())
+	def := ldvalue.ObjectBuild().SetBool("enabled", false).Build()
+	var v ldvalue.Value
+	var evalErr error
+	if variation != nil {
+		v, evalErr = variation(c, key, userCtx, def)
+	} else {
+		v, evalErr = c.JSONVariation(key, userCtx, def)
+	}
 	raw, _ = variationToAny(v).(map[string]any)
 	if m, ok := raw["_ldMeta"].(map[string]any); ok {
 		meta = parseMeta(m)
@@ -78,8 +92,8 @@ func parseMeta(m map[string]any) *VariationMeta {
 	return meta
 }
 
-func extractVariation(ctx context.Context, key string, userCtx ldcontext.Context) (AiConfig, VariationMeta, error) {
-	raw, meta, err := readVariation(ctx, key, userCtx)
+func extractVariation(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation, existingClient bool) (AiConfig, VariationMeta, error) {
+	raw, meta, err := readVariation(ctx, key, userCtx, variation, existingClient)
 	if err != nil {
 		return AiConfig{}, VariationMeta{}, err
 	}
@@ -132,7 +146,7 @@ type resolved struct {
 func (c *AIConfig) resolve(ctx context.Context, userCtx ldcontext.Context) (resolved, error) {
 	handlers := resolveHandlers(c.args.Registry, c.args.Handlers)
 	tools := resolveTools(c.args.Registry, c.args.ToolHandlers)
-	cfg, meta, err := extractVariation(ctx, c.args.Key, userCtx)
+	cfg, meta, err := extractVariation(ctx, c.args.Key, userCtx, c.opts.Variation, c.opts.ExistingClient)
 	if err != nil {
 		return resolved{}, err
 	}
@@ -167,7 +181,7 @@ func (c *AIConfig) Invoke(ctx context.Context, userInput string, userCtx ldconte
 	}
 	res, err := executeAndTrack(ctx, execArgs{
 		configKey: c.args.Key, config: r.cfg, meta: r.meta, userCtx: userCtx, handler: r.handler,
-		userInput: userInput, tools: r.tools, variables: variables, history: history,
+		userInput: userInput, tools: r.tools, variables: variables, history: history, run: c.opts,
 	})
 	if err != nil {
 		return ProviderResponse{}, err
@@ -201,7 +215,7 @@ func (c *AIConfig) Stream(ctx context.Context, userInput string, userCtx ldconte
 		var done streamDone
 		for ev, err := range executeAndStream(ctx, execArgs{
 			configKey: c.args.Key, config: r.cfg, meta: r.meta, userCtx: userCtx, handler: r.handler,
-			userInput: userInput, tools: r.tools, variables: variables, history: history,
+			userInput: userInput, tools: r.tools, variables: variables, history: history, run: c.opts,
 		}, &done) {
 			if err != nil {
 				yield(StreamEvent{}, err)
@@ -237,7 +251,7 @@ type InspectResult struct {
 // InspectConfig reads a variation without invoking a model. It never errors.
 func InspectConfig(ctx context.Context, key string, userCtx ldcontext.Context) InspectResult {
 	reportUsage("client.inspectConfig", "", "")
-	raw, meta, err := readVariation(ctx, key, userCtx)
+	raw, meta, err := readVariation(ctx, key, userCtx, nil, false)
 	if err != nil || meta == nil {
 		return InspectResult{}
 	}

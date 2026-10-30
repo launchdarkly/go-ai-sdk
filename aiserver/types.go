@@ -161,7 +161,12 @@ type TrackData struct {
 	EnvironmentID  string `json:"environmentId,omitempty"`
 	ModelKey       string `json:"modelKey,omitempty"`
 	ModelVersion   *int   `json:"modelVersion,omitempty"`
+	extra          *extraTrackData
 }
+
+// extraTrackData holds fields merged into every event's data. A pointer
+// keeps TrackData comparable.
+type extraTrackData struct{ fields map[string]any }
 
 // ToolHandler is a value in a toolHandlers map: a ToolFunc or a NativeTool.
 type ToolHandler interface{ isToolHandler() }
