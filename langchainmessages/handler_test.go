@@ -859,13 +859,13 @@ func TestHelperUsage(t *testing.T) {
 
 	NewHandler(Options{})
 	NewHandler(Options{})
-	if got := helpers(); !reflect.DeepEqual(got, []string{"langchain-messages.createLangChainHandler"}) {
+	if got := helpers(); !reflect.DeepEqual(got, []string{"langchain-messages.createLangChainMessagesHandler"}) {
 		t.Errorf("factory usage = %v", got)
 	}
 	f := &fakeModel{turns: []scripted{textTurn("a", 1, 1), textTurn("b", 1, 1)}}
 	_, _ = LangChainMessages(bg, "k", "q", ldcontext.New("u"), &InvokeOptions{Handler: Options{Model: f}})
 	_, _ = LangChainMessages(bg, "k", "q", ldcontext.New("u"), &InvokeOptions{Handler: Options{Model: f}})
-	if got := helpers(); !reflect.DeepEqual(got, []string{"langchain-messages.createLangChainHandler", "langchain-messages.langchainMessages"}) {
+	if got := helpers(); !reflect.DeepEqual(got, []string{"langchain-messages.createLangChainMessagesHandler", "langchain-messages.langchainMessages"}) {
 		t.Errorf("wrapper usage = %v", got)
 	}
 
@@ -874,7 +874,7 @@ func TestHelperUsage(t *testing.T) {
 	ld.events = nil
 	start()
 	NewHandler(Options{})
-	if got := helpers(); !reflect.DeepEqual(got, []string{"langchain-messages.createLangChainHandler"}) {
+	if got := helpers(); !reflect.DeepEqual(got, []string{"langchain-messages.createLangChainMessagesHandler"}) {
 		t.Errorf("after shutdown = %v", got)
 	}
 }

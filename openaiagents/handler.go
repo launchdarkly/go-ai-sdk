@@ -81,9 +81,9 @@ func (o Options) client() *openai.Client {
 	return &c
 }
 
-// NewHandler returns the OpenAI agent handler (createOpenAIAgentHandler).
+// NewHandler returns the OpenAI agent handler (createOpenAIAgentsHandler).
 func NewHandler(opts Options) *aiserver.ProviderHandler {
-	aiserver.ReportUsage("openai-agents.createOpenAIAgentHandler", PackageName, PackageVersion)
+	aiserver.ReportUsage("openai-agents.createOpenAIAgentsHandler", PackageName, PackageVersion)
 	return newHandler(opts)
 }
 
