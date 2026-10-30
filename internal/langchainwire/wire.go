@@ -429,10 +429,14 @@ func RunTool(ctx context.Context, r *aiserver.HandlerRun, fns map[string]aiserve
 		return llms.MessageContent{}, fmt.Errorf("%w: tool call %q has no function", ErrNoToolHandler, tc.ID)
 	}
 	name := tc.FunctionCall.Name
-	var end func()
+	var end func(out any)
 	if r != nil { // opened first so a missing tool shows as a failed call, as in JS
 		s := r.StartTool(name, tc.ID)
-		end = func() { r.EndTool(s, nil) }
+		r.ToolArguments(s, tc.FunctionCall.Arguments)
+		end = func(out any) {
+			r.ToolResult(s, out)
+			r.EndTool(s, nil)
+		}
 	}
 	fn := fns[name]
 	if fn == nil {
@@ -447,7 +451,7 @@ func RunTool(ctx context.Context, r *aiserver.HandlerRun, fns map[string]aiserve
 		return llms.MessageContent{}, fmt.Errorf("langchain: tool %q: %w", name, err)
 	}
 	if end != nil {
-		end()
+		end(out)
 	}
 	return ToolResponse(tc, aiserver.ToolResultString(out)), nil
 }

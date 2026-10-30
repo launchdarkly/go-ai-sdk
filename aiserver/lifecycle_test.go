@@ -143,7 +143,7 @@ func TestUsageReporting(t *testing.T) {
 		_, _ = Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, "", userCtx)
 	}
 	_ = Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Stream(bg, "", userCtx) // reports without iterating
-	_ = CreateHandler(ProvidesFor{"X", ModeMessages}, nil, nil, false)
+	_ = CreateHandler(ProvidesFor{"X", ModeMessages}, nil, nil, CaptureDefault)
 	got := map[string]int{}
 	for _, e := range f.events("$ld:ai:sdk:usage") {
 		got[e.Data["helper"].(string)]++
@@ -354,12 +354,12 @@ func TestBYOCTelemetryUsesEnvSDKKey(t *testing.T) {
 	span.End()
 	var got string
 	for _, kv := range exp.GetSpans().Snapshots()[0].Resource().Attributes() {
-		if kv.Key == "highlight.project_id" {
+		if kv.Key == "launchdarkly.project_id" {
 			got = kv.Value.AsString()
 		}
 	}
 	if got != "env-sdk-key" {
-		t.Errorf("highlight.project_id = %q, want the LD_SDK_KEY value", got)
+		t.Errorf("launchdarkly.project_id = %q, want the LD_SDK_KEY value", got)
 	}
 }
 

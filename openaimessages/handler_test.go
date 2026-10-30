@@ -198,11 +198,11 @@ func funcTool(desc string, params map[string]any) aiserver.Tool {
 }
 
 func TestFactoryMetadata(t *testing.T) {
-	a, b := newHandler(Options{}), newHandler(Options{CaptureContent: true})
+	a, b := newHandler(Options{}), newHandler(Options{CaptureContent: aiserver.CaptureOn})
 	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeMessages}) || a.ProvidesFor != ProvidesFor {
 		t.Errorf("providesFor = %+v", a.ProvidesFor)
 	}
-	if a.CaptureContent || !b.CaptureContent {
+	if a.CaptureContent != aiserver.CaptureDefault || b.CaptureContent != aiserver.CaptureOn {
 		t.Errorf("captureContent default/passthrough wrong: %v %v", a.CaptureContent, b.CaptureContent)
 	}
 	if a == b || a.Invoke == nil || a.Stream == nil {
@@ -486,7 +486,8 @@ func TestTelemetry(t *testing.T) {
 	// Cached tokens are inside input_tokens: 1 + 10, not 1 + 10 + 4.
 	assertRootTelemetry(t, exp, 11, 4, 4, 2, "final")
 	spans := spansByName(exp)
-	if s := spans["execute_tool a"]; len(s) != 1 || attrs(s[0])["gen_ai.tool.call.id"] != "call_a" {
+	if s := spans["execute_tool a"]; len(s) != 1 || attrs(s[0])["gen_ai.tool.call.id"] != "call_a" ||
+		attrs(s[0])["gen_ai.tool.call.arguments"] != "{}" || attrs(s[0])["gen_ai.tool.call.result"] != "r" {
 		t.Errorf("tool span = %v", s)
 	}
 	chat := attrs(spans["chat test-model"][1])

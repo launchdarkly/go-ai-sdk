@@ -153,7 +153,7 @@ var ErrToolNotFound, ErrUnsupportedNativeTool, ErrMaxSteps error
 type Options struct {
 	Client         *anthropic.Client // used when set
 	APIKey         string            // used when Client is nil; else ANTHROPIC_API_KEY
-	CaptureContent bool              // default false
+	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 	MaxSteps       int               // 0 → DefaultMaxSteps; config max_turns wins
 	WorkDir        string            // host built-ins run in and are confined to it; "" → process working directory at construction
 }

@@ -315,7 +315,7 @@ func handler(provider string, mode aiserver.Mode, fn func(ctx context.Context, r
 			return aiserver.HandlerResult{Output: "out:" + req.UserInput}, nil
 		}
 	}
-	return sdkapi.CreateHandler(aiserver.ProvidesFor{Provider: provider, Mode: mode}, fn, nil, false)
+	return sdkapi.CreateHandler(aiserver.ProvidesFor{Provider: provider, Mode: mode}, fn, nil, aiserver.CaptureDefault)
 }
 
 // recorder captures every call a stub handler gets.

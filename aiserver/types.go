@@ -224,22 +224,26 @@ type (
 // captureContent and optional stream attached". Go functions cannot carry
 // properties, so the handler is a struct holding the functions.
 type ProviderHandler struct {
-	ProvidesFor    ProvidesFor
-	CaptureContent bool
+	ProvidesFor ProvidesFor
+	// CaptureContent gates prompt, completion, tool and judge-explanation
+	// content on spans. CaptureDefault follows Configure, else on.
+	CaptureContent ContentCapture
 	Invoke         InvokeFunc
 	Stream         StreamFunc // optional; nil falls back to Invoke
 }
 
-// CreateHandler attaches providesFor and captureContent to a handler.
-func CreateHandler(pf ProvidesFor, invoke InvokeFunc, stream StreamFunc, captureContent bool) *ProviderHandler {
+// CreateHandler attaches providesFor and captureContent to a handler. Calling
+// the returned handler's Invoke or Stream directly applies captureContent
+// just as a call through Config does.
+func CreateHandler(pf ProvidesFor, invoke InvokeFunc, stream StreamFunc, captureContent ContentCapture) *ProviderHandler {
 	reportUsage("client.createHandler", "", "")
 	return createHandler(pf, invoke, stream, captureContent)
 }
 
 // createHandler is CreateHandler without the usage report. Handler packages
 // call internal/sdkapi.CreateHandler, which builds the same struct.
-func createHandler(pf ProvidesFor, invoke InvokeFunc, stream StreamFunc, captureContent bool) *ProviderHandler {
-	return &ProviderHandler{ProvidesFor: pf, CaptureContent: captureContent, Invoke: invoke, Stream: stream}
+func createHandler(pf ProvidesFor, invoke InvokeFunc, stream StreamFunc, captureContent ContentCapture) *ProviderHandler {
+	return bindInvocation(&ProviderHandler{ProvidesFor: pf, CaptureContent: captureContent, Invoke: invoke, Stream: stream})
 }
 
 type JudgeResult struct {

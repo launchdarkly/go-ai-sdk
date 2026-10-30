@@ -174,7 +174,8 @@ type HandlerRun struct {
 
 // StartHandlerRun opens the root span, writes model identity, the LD
 // config-association and context-identity attributes (from req.Variables),
-// and the prompt content (OpenLLMetry attributes + gen_ai.content.prompt).
+// and, when CaptureContentEnabled, the prompt content (OpenLLMetry
+// attributes + gen_ai.content.prompt).
 func StartHandlerRun(ctx context.Context, opts HandlerSpanOptions, req HandlerRequest, p Prompt) *HandlerRun {
 	if opts.Operation == "" {
 		opts.Operation = "chat"
@@ -189,7 +190,9 @@ func StartHandlerRun(ctx context.Context, opts HandlerSpanOptions, req HandlerRe
 	root.SetAttributes(attribute.String("gen_ai.operation.name", opts.Operation))
 	root.SetAttributes(r.identity()...)
 	SetLDSpanAttributes(root, req.Variables)
-	writePromptContent(root, p)
+	if CaptureContentEnabled(ctx) {
+		writePromptContent(root, p)
+	}
 	return r
 }
 
@@ -266,6 +269,16 @@ func (r *HandlerRun) StartTool(name, callID string) trace.Span {
 // EndTool ends a tool span; a non-nil err marks it ERROR.
 func (r *HandlerRun) EndTool(s trace.Span, err error) { r.end(s, err) }
 
+// ToolArguments records a tool call's arguments on its execute_tool span,
+// subject to the content gate.
+func (r *HandlerRun) ToolArguments(s trace.Span, arguments any) {
+	SetToolCallArguments(r.ctx, s, arguments)
+}
+
+// ToolResult records a tool call's result on its execute_tool span, subject
+// to the content gate.
+func (r *HandlerRun) ToolResult(s trace.Span, result any) { SetToolCallResult(r.ctx, s, result) }
+
 func (r *HandlerRun) end(s trace.Span, err error) {
 	if !r.open[s] {
 		return
@@ -290,16 +303,19 @@ func (r *HandlerRun) AddUsage(u SpanUsage) {
 }
 
 // Finish ends the root on success: response model, run usage, completion
-// content (gen_ai.completion.0.* + gen_ai.content.completion), status OK.
+// content (gen_ai.completion.0.* + gen_ai.content.completion) when
+// CaptureContentEnabled, status OK.
 func (r *HandlerRun) Finish(responseModel, output string) {
 	if responseModel == "" {
 		responseModel = r.opts.RequestModel
 	}
 	r.Root.SetAttributes(attribute.String("gen_ai.response.model", responseModel))
 	SetUsageSpanAttributes(r.Root, r.usage)
-	r.Root.SetAttributes(attribute.String("gen_ai.completion.0.role", "assistant"),
-		attribute.String("gen_ai.completion.0.content", output))
-	r.Root.AddEvent("gen_ai.content.completion", trace.WithAttributes(attribute.String("gen_ai.completion", output)))
+	if CaptureContentEnabled(r.ctx) {
+		r.Root.SetAttributes(attribute.String("gen_ai.completion.0.role", "assistant"),
+			attribute.String("gen_ai.completion.0.content", output))
+		r.Root.AddEvent("gen_ai.content.completion", trace.WithAttributes(attribute.String("gen_ai.completion", output)))
+	}
 	r.end(r.Root, nil)
 }
 

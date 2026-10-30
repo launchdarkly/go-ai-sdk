@@ -115,7 +115,7 @@ func setupClient(t *testing.T, responses ...string) (Options, *fakeAnthropic, *t
 	prev := otel.GetTracerProvider()
 	otel.SetTracerProvider(tp)
 	t.Cleanup(func() { otel.SetTracerProvider(prev) })
-	return Options{Client: &c, CaptureContent: true}, f, exp
+	return Options{Client: &c, CaptureContent: aiserver.CaptureOn}, f, exp
 }
 
 func cfg(extra func(*aiserver.AiConfig)) aiserver.AiConfig {
@@ -153,10 +153,10 @@ func lastText(req map[string]any) string {
 
 func TestFactoryMetadata(t *testing.T) {
 	a, b := newHandler(Options{}), newHandler(Options{})
-	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeMessages}) || a.CaptureContent || a == b || a.Stream == nil {
+	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeMessages}) || a.CaptureContent != aiserver.CaptureDefault || a == b || a.Stream == nil {
 		t.Errorf("factory metadata wrong: %+v", a)
 	}
-	if !newHandler(Options{CaptureContent: true}).CaptureContent {
+	if newHandler(Options{CaptureContent: aiserver.CaptureOn}).CaptureContent != aiserver.CaptureOn {
 		t.Error("captureContent not passed through")
 	}
 }

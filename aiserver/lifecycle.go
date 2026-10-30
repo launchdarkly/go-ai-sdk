@@ -178,6 +178,7 @@ func Shutdown(ctx context.Context) error {
 	client, tracerProvider = nil, nil
 	resetReports()
 	stateMu.Unlock()
+	resetOptions()
 	for _, hook := range bridge.ShutdownHooks() {
 		runShutdownHook(ctx, hook)
 	}
@@ -190,6 +191,17 @@ func Shutdown(ctx context.Context) error {
 		errs = append(errs, c.Close())
 	}
 	return errors.Join(errs...)
+}
+
+// FlushTelemetry force-flushes the process tracer provider (the one InitClient
+// registered, or one the application installed), so a batch exporter sends
+// its queued spans now. A provider without ForceFlush, such as the no-op
+// default, makes it a no-op.
+func FlushTelemetry(ctx context.Context) error {
+	if f, ok := otel.GetTracerProvider().(interface{ ForceFlush(context.Context) error }); ok {
+		return f.ForceFlush(ctx)
+	}
+	return nil
 }
 
 func safeFlush(c LDClient) {
@@ -213,6 +225,9 @@ func runShutdownHook(ctx context.Context, hook func(context.Context)) {
 
 func init() {
 	bridge.Logger = sdkLogger
+	bridge.StartInvocation = func(ctx context.Context, capture uint8) context.Context {
+		return startInvocation(ctx, ContentCapture(capture))
+	}
 	bridge.ExtractVariationRaw = func(ctx context.Context, key string, c ldcontext.Context) (map[string]any, error) {
 		raw, meta, err := readVariation(ctx, key, c)
 		if err != nil {
@@ -226,7 +241,7 @@ func init() {
 }
 
 // sdkKey is the SDK key for both init paths: InitOptions.SDKKey, else
-// LD_SDK_KEY. Telemetry stamps it as highlight.project_id.
+// LD_SDK_KEY. Telemetry stamps it as launchdarkly.project_id.
 func sdkKey(opts InitOptions) string {
 	if opts.SDKKey != "" {
 		return opts.SDKKey
@@ -285,7 +300,7 @@ func setupTelemetry(ctx context.Context, sdkKey string, opts InitOptions) error 
 	if err != nil {
 		return err
 	}
-	attrs := []attribute.KeyValue{attribute.String("highlight.project_id", sdkKey)}
+	attrs := []attribute.KeyValue{attribute.String("launchdarkly.project_id", sdkKey)}
 	attrs = append(attrs, semconv.ServiceName(opts.ServiceName))
 	if opts.Environment != "" {
 		attrs = append(attrs, semconv.DeploymentEnvironment(opts.Environment))

@@ -337,12 +337,14 @@ func (r *runner) runCalls(ctx context.Context, a *agent, calls []responses.Respo
 		var span trace.Span
 		if r.span != nil {
 			span = r.span.StartTool(call.Name, call.CallID)
+			r.span.ToolArguments(span, call.Arguments)
 		}
 		res, err := callTool(ctx, a, call)
 		if err != nil {
 			return nil, nil, err // HandlerRun.Fail ends the open tool span
 		}
 		if r.span != nil {
+			r.span.ToolResult(span, res)
 			r.span.EndTool(span, nil)
 		}
 		outputs = append(outputs, openaiwire.FunctionCallOutput(call.CallID, aiserver.ToolResultString(res)))

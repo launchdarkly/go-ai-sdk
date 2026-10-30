@@ -17,10 +17,10 @@ var ldVars = map[string]any{"__ld": aiserver.TrackData{ConfigKey: "test-config",
 
 func TestFactoryMetadata(t *testing.T) {
 	a, b := newHandler(Options{}), newHandler(Options{})
-	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeAgent}) || a.CaptureContent || a == b || a.Invoke == nil || a.Stream == nil {
+	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeAgent}) || a.CaptureContent != aiserver.CaptureDefault || a == b || a.Invoke == nil || a.Stream == nil {
 		t.Errorf("factory metadata wrong: %+v", a)
 	}
-	if !newHandler(Options{CaptureContent: true}).CaptureContent {
+	if newHandler(Options{CaptureContent: aiserver.CaptureOn}).CaptureContent != aiserver.CaptureOn {
 		t.Error("captureContent not passed through")
 	}
 }

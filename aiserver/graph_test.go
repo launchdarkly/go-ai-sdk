@@ -88,7 +88,7 @@ func (r *recordingHandler) handler() *ProviderHandler {
 			}
 		}
 	}
-	return createHandler(ProvidesFor{"P", ModeAgent}, invoke, stream, false)
+	return createHandler(ProvidesFor{"P", ModeAgent}, invoke, stream, CaptureDefault)
 }
 
 func (r *recordingHandler) keys() []string {
@@ -473,7 +473,7 @@ func TestGraphHandoffFailure(t *testing.T) {
 			_, _ = fn(ctx, nil)
 		}
 		return HandlerResult{}, errors.New("router crashed")
-	}, nil, false)
+	}, nil, CaptureDefault)
 	if _, err := Graph("route", GraphOptions{Handlers: []*ProviderHandler{h}}).Invoke(bg, "q", userCtx); err == nil {
 		t.Fatal("expected error")
 	}
@@ -581,7 +581,7 @@ func TestGraphJudge(t *testing.T) {
 			return HandlerResult{Output: `{"score":0.9,"reasoning":"fine"}`}, nil
 		}
 		return HandlerResult{Output: "final"}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	resp, err := Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}, GraphJudge: "gj"}).Invoke(bg, "q", userCtx)
 	if err != nil || resp.JudgeResults["gj"].Score != 0.9 {
 		t.Fatalf("resp=%+v err=%v", resp, err)
@@ -681,7 +681,7 @@ func TestGraphSpanStatusOnEveryPath(t *testing.T) {
 	t.Run("node panic", func(t *testing.T) {
 		f := withFake(t, twoNode(nil))
 		exp := withSpans(t)
-		h := createHandler(ProvidesFor{"P", ModeAgent}, func(context.Context, HandlerRequest) (HandlerResult, error) { panic("node bug") }, nil, false)
+		h := createHandler(ProvidesFor{"P", ModeAgent}, func(context.Context, HandlerRequest) (HandlerResult, error) { panic("node bug") }, nil, CaptureDefault)
 		if r := run(func() { _, _ = Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}}).Invoke(bg, "q", userCtx) }); r == nil {
 			t.Fatal("the panic was swallowed")
 		}
@@ -756,7 +756,7 @@ func TestGraphRoutingNormalizesHandlerMode(t *testing.T) {
 		return createHandler(ProvidesFor{"P", mode}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 			served = append(served, tag+":"+req.Variables[VarLD].(TrackData).ConfigKey)
 			return HandlerResult{Output: "out"}, nil
-		}, nil, false)
+		}, nil, CaptureDefault)
 	}
 	hs := []*ProviderHandler{mk(ModeAgent, "agent"), mk(Mode("completion"), "legacy")}
 	if _, err := Graph("g", GraphOptions{Handlers: hs}).Invoke(bg, "q", userCtx); err != nil {

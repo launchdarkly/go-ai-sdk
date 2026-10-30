@@ -23,7 +23,7 @@ func TestGraphJudgeFailureTracksOnlyFailure(t *testing.T) {
 			return HandlerResult{}, boom
 		}
 		return HandlerResult{Output: "final"}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	_, err := Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}, GraphJudge: "gj"}).Invoke(bg, "q", userCtx)
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v, want the judge failure", err)
@@ -64,11 +64,11 @@ func TestGraphJudgeUsesItsOwnProvidersHandler(t *testing.T) {
 			openaiJudged++
 		}
 		return HandlerResult{Output: "final"}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	anthropic := createHandler(ProvidesFor{"Anthropic", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
 		anthropicJudged++
 		return HandlerResult{Output: `{"score":0.5,"reasoning":"ok"}`}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	resp, err := Graph("g", GraphOptions{Handlers: []*ProviderHandler{openai, anthropic}, GraphJudge: "gj"}).Invoke(bg, "q", userCtx)
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestRunJudgeVariablesAreExactlyTheJudgeKeys(t *testing.T) {
 	h := createHandler(ProvidesFor{"P", ModeMessages}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 		got = req.Variables
 		return HandlerResult{Output: `{"score":1,"reasoning":"r"}`}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	task := JudgeTask{ConfigKey: "judge", JudgeConfig: AiConfig{Instructions: "grade {{message_history}}"},
 		ActualOutput: "out", UserInput: "in", UserContext: userCtx, JudgeProvider: "P", JudgeMode: ModeMessages}
 	if _, err := RunJudge(bg, task, []*ProviderHandler{h}); err != nil {
@@ -177,7 +177,7 @@ func TestTrajectoryToolOrderIsDeterministic(t *testing.T) {
 			_, _ = req.ToolHandlers[n].(ToolFunc)(ctx, nil)
 		}
 		return HandlerResult{Output: "answer"}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	for range 20 {
 		if _, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}, ToolHandlers: th}).Invoke(bg, "q", userCtx); err != nil {
 			t.Fatal(err)
