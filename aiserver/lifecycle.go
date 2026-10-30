@@ -51,7 +51,11 @@ type InitOptions struct {
 	OTLPEndpoint string
 	ServiceName  string
 	Environment  string
-	WaitFor      time.Duration // initialization timeout; default 10s (matches JavaScript)
+	// WaitFor is the initialization timeout; zero or negative means the 10s
+	// default (matches JavaScript). The LaunchDarkly client does not wait for
+	// a non-positive timeout, so honouring one would adopt a client that never
+	// initialized and serve every AI Config disabled.
+	WaitFor time.Duration
 }
 
 var (
@@ -114,7 +118,7 @@ func InitClient(ctx context.Context, opts InitOptions) (LDClient, error) {
 		cfg.ServiceEndpoints = interfaces.ServiceEndpoints{Polling: opts.BaseURI, Streaming: opts.StreamURI, Events: opts.EventsURI}
 	}
 	wait := opts.WaitFor
-	if wait == 0 {
+	if wait <= 0 {
 		wait = 10 * time.Second
 	}
 	c, err := newLDClient(key, cfg, wait)
