@@ -52,7 +52,9 @@ type ShadowOptions struct {
 	// Timeout bounds each shadow run. Zero means 30 seconds.
 	Timeout time.Duration
 	// OnTask, when set, receives each sampled shadow instead of the SDK
-	// running it. It should only enqueue the task; run it with RunShadow.
+	// running it. It runs before Invoke returns, so it must not block: only
+	// enqueue the task, for example with a select on a buffered channel, and
+	// run it with RunShadow.
 	OnTask func(ShadowTask)
 }
 
@@ -78,6 +80,9 @@ type ShadowTask struct {
 	Timeout         time.Duration          `json:"timeout"`
 	TrackData       map[string]any         `json:"trackData"`
 	SpanAttributes  map[string]any         `json:"spanAttributes"`
+	// ConversationID is the caller's conversation id when the shadow was
+	// sampled. RunShadow runs under exactly this id.
+	ConversationID string `json:"conversationId,omitempty"`
 }
 
 // ShadowResult is the outcome of one shadow run. It has no response text:
@@ -96,7 +101,7 @@ type ShadowResult struct {
 func ShadowConfig(args aiserver.ConfigArgs, opts ShadowOptions) (*ShadowAIConfig, error) {
 	aiserver.ReportUsage("experimental.shadowConfig", "", "")
 	if opts.Timeout < 0 {
-		return nil, errors.New("ShadowOptions.Timeout must be greater than 0")
+		return nil, errors.New("ShadowOptions.Timeout must not be negative")
 	}
 	if opts.Timeout == 0 {
 		opts.Timeout = defaultShadowTimeout
@@ -105,7 +110,9 @@ func ShadowConfig(args aiserver.ConfigArgs, opts ShadowOptions) (*ShadowAIConfig
 }
 
 // RunShadow runs one ShadowTask. It never fails: a failure is returned in
-// ShadowResult.Error. Experimental.
+// ShadowResult.Error. It uses the client InitClient or InitWithClient set
+// up and never starts one, so after Shutdown it only returns an error.
+// Experimental.
 func RunShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.ProviderHandler) ShadowResult {
 	aiserver.ReportUsage("experimental.runShadow", "", "")
 	return runShadow(ctx, task, handlers)
@@ -160,7 +167,7 @@ func (s *ShadowAIConfig) startShadows(ctx context.Context, e *evaluation, userIn
 	}()
 	handlers := s.handlers()
 	call := aiserver.NewCallOptions(opts...)
-	for _, task := range selectTasks(s.args.Key, e, handlers, userInput, userCtx, call, s.opts.Timeout) {
+	for _, task := range selectTasks(ctx, s.args.Key, e, handlers, userInput, userCtx, call, s.opts.Timeout) {
 		if s.opts.OnTask != nil {
 			handOver(s.opts.OnTask, task)
 			continue
@@ -227,28 +234,32 @@ type evaluation struct {
 	primaryVariationKey string
 }
 
-// variation replaces Config's JSONVariation call: it reads the reason too,
-// and removes shadowConfiguration before the served variation runs.
+// variation replaces Config's JSONVariation call: it reads the reason when
+// the client can, and removes shadowConfiguration before the served
+// variation runs.
 func (e *evaluation) variation(client bridge.VariationClient, key string, c ldcontext.Context, def ldvalue.Value) (ldvalue.Value, error) {
-	detailed, ok := client.(detailClient)
-	if !ok {
-		return client.JSONVariation(key, c, def)
+	var v ldvalue.Value
+	var err error
+	if detailed, ok := client.(detailClient); ok {
+		var detail ldreason.EvaluationDetail
+		v, detail, err = detailed.JSONVariationDetail(key, c, def)
+		e.reason = detail.Reason
+	} else {
+		v, err = client.JSONVariation(key, c, def)
 	}
-	v, detail, err := detailed.JSONVariationDetail(key, c, def)
-	e.reason = detail.Reason
-	var value map[string]any
-	if json.Unmarshal([]byte(v.JSONString()), &value) != nil || value == nil {
+	e.primaryVariationKey = v.GetByKey("_ldMeta").GetByKey("variationKey").StringValue()
+	shadows := v.GetByKey("shadowConfiguration")
+	if shadows.IsNull() {
 		return v, err
 	}
-	meta, _ := value["_ldMeta"].(map[string]any)
-	e.primaryVariationKey, _ = meta["variationKey"].(string)
-	shadows, present := value["shadowConfiguration"]
-	if !present {
-		return v, err
+	_ = json.Unmarshal([]byte(shadows.JSONString()), &e.shadows)
+	stripped := ldvalue.ObjectBuildWithCapacity(v.Count())
+	for _, k := range v.Keys(nil) {
+		if k != "shadowConfiguration" {
+			stripped.Set(k, v.GetByKey(k))
+		}
 	}
-	e.shadows = shadows
-	delete(value, "shadowConfiguration")
-	return ldvalue.FromJSONMarshal(value), err
+	return stripped.Build(), err
 }
 
 func slotFor(reason ldreason.EvaluationReason) (string, bool) {
@@ -320,7 +331,7 @@ func handlerFor(cfg aiserver.AiConfig, meta aiserver.VariationMeta, handlers []*
 	return h
 }
 
-func selectTasks(configKey string, e *evaluation, handlers []*aiserver.ProviderHandler, userInput string, userCtx ldcontext.Context, call aiserver.CallOptions, timeout time.Duration) []ShadowTask {
+func selectTasks(ctx context.Context, configKey string, e *evaluation, handlers []*aiserver.ProviderHandler, userInput string, userCtx ldcontext.Context, call aiserver.CallOptions, timeout time.Duration) []ShadowTask {
 	slot, ok := slotFor(e.reason)
 	if !ok {
 		return nil
@@ -330,6 +341,7 @@ func selectTasks(configKey string, e *evaluation, handlers []*aiserver.ProviderH
 	variations, _ := configuration["variations"].(map[string]any)
 	entries, _ := shadows[slot].([]any)
 	nowMs := float64(time.Now().UnixMilli())
+	conversation := bridge.ConversationID(ctx)
 	var tasks []ShadowTask
 	for _, raw := range entries {
 		entry, ok := parseEntry(raw)
@@ -368,18 +380,21 @@ func selectTasks(configKey string, e *evaluation, handlers []*aiserver.ProviderH
 				"launchdarkly.shadow.request.id":            entry.id,
 				"launchdarkly.shadow.primary.variation.key": e.primaryVariationKey,
 			},
+			ConversationID: conversation,
 		})
 	}
 	return tasks
 }
 
 func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.ProviderHandler) (res ShadowResult) {
-	res = ShadowResult{TrackData: maps.Clone(task.TrackData)}
+	runID, _ := task.TrackData["runId"].(string)
+	res = ShadowResult{TrackData: bridge.TrackDataFor(task.ConfigKey, task.Config, task.Meta, runID, task.TrackData)}
 	defer func() {
 		if r := recover(); r != nil {
-			res = ShadowResult{TrackData: maps.Clone(task.TrackData), Error: fmt.Sprintf("panic: %v", r)}
+			res.Error = fmt.Sprintf("panic: %v", r)
 		}
 	}()
+	ctx = bridge.WithExactConversationID(ctx, task.ConversationID)
 	if err := ctx.Err(); err != nil {
 		res.Error = err.Error()
 		return res
@@ -393,7 +408,6 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 	if timeout <= 0 {
 		timeout = defaultShadowTimeout
 	}
-	runID, _ := task.TrackData["runId"].(string)
 	extra := maps.Clone(task.TrackData)
 	delete(extra, "runId")
 	value := shadowValue(task.Config, task.Meta)
@@ -408,6 +422,8 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 		RunID:          runID,
 		TrackData:      extra,
 		SpanAttributes: toAttributes(task.SpanAttributes),
+		ExistingClient: true,
+		NoFlagEvent:    true,
 	}).(*aiserver.AIConfig)
 	vars, _ := deepCopy(task.Variables).(map[string]any)
 	resp, err := run.Invoke(ctx, task.UserInput, task.UserContext,

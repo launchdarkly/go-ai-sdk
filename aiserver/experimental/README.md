@@ -198,8 +198,15 @@ if err != nil { log.Fatal(err) }
 resp, err := shadowed.Invoke(ctx, "Summarize this document", userCtx)
 
 // Or hand each shadow to your own queue, and run it from a worker.
+// OnTask runs before Invoke returns, so it must never block.
+queue := make(chan experimental.ShadowTask, 100)
 shadowed, err = experimental.ShadowConfig(args, experimental.ShadowOptions{
-	OnTask: func(task experimental.ShadowTask) { queue <- task },
+	OnTask: func(task experimental.ShadowTask) {
+		select {
+		case queue <- task:
+		default: // queue full: drop this shadow
+		}
+	},
 })
 result := experimental.RunShadow(ctx, <-queue, handlers) // never fails; see result.Error
 ```
@@ -207,7 +214,7 @@ result := experimental.RunShadow(ctx, <-queue, handlers) // never fails; see res
 | Option | Meaning |
 | --- | --- |
 | `Timeout` | How long each shadow may run before it is tracked as an error with `Error: "timeout"`. Zero means 30 seconds; a negative value makes `ShadowConfig` return an error. |
-| `OnTask` | Run shadows yourself. It receives a `ShadowTask` per sampled shadow and should only enqueue it. A `ShadowTask` survives `encoding/json`, except `Config.Raw`. |
+| `OnTask` | Run shadows yourself. It receives a `ShadowTask` per sampled shadow before `Invoke` returns, so it must not block: only enqueue it. A `ShadowTask` survives `encoding/json`, except `Config.Raw`, and carries the caller's conversation id. `RunShadow` uses the client already set up and never starts one. |
 
 Shadows run in a background goroutine by default, detached from the caller's cancellation, and
 each one ends at its timeout. `aiserver.Shutdown` cancels any that are still running, and a

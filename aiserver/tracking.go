@@ -27,13 +27,15 @@ func track(event string, ctx ldcontext.Context, td TrackData, metric float64) {
 		return
 	}
 	b, _ := json.Marshal(td)
+	data := ldvalue.Parse(b)
 	if td.extra != nil {
-		var data map[string]any
-		_ = json.Unmarshal(b, &data)
-		maps.Copy(data, td.extra.fields)
-		b, _ = json.Marshal(data)
+		merged := ldvalue.ValueMapBuildFromMap(data.AsValueMap())
+		for k, v := range td.extra.fields {
+			merged.Set(k, ldvalue.CopyArbitraryValue(v))
+		}
+		data = merged.Build().AsValue()
 	}
-	safeTrack(c, event, ctx, metric, ldvalue.Parse(b))
+	safeTrack(c, event, ctx, metric, data)
 }
 
 // Track sends a LaunchDarkly AI tracking event with td as its data. It is
@@ -158,6 +160,9 @@ func (a execArgs) prepare() (TrackData, HandlerRequest, *trajectory.Recorder) {
 	vars[VarLD] = td
 	if len(a.run.SpanAttributes) > 0 {
 		vars[varLDSpanAttributes] = spanAttributes(a.run.SpanAttributes)
+	}
+	if a.run.NoFlagEvent {
+		vars[varLDNoFlagEvent] = noFlagEvent{}
 	}
 	return td, HandlerRequest{
 		Config:       a.config,

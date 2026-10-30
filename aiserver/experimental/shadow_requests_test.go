@@ -975,3 +975,144 @@ func TestShutdownCancelsRunningShadows(t *testing.T) {
 		t.Fatalf("a cancelled shadow recorded %v", ev)
 	}
 }
+
+func TestShadowAfterShutdownCreatesNoClient(t *testing.T) {
+	t.Setenv("LD_SDK_KEY", "sdk-not-a-real-key")
+	p := newPair()
+	f, task := deferredTask(t, p, ShadowOptions{})
+	if err := aiserver.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	res := RunShadow(context.Background(), task, p.handlers())
+	if res.Error == "" || time.Since(start) > time.Second {
+		t.Fatalf("result %+v after %v", res, time.Since(start))
+	}
+	if _, err := aiserver.GetClient(); err == nil {
+		t.Fatal("a shadow after Shutdown created a client")
+	}
+	if p.b.count() != 0 || len(f.events(true)) != 0 {
+		t.Fatalf("shadow calls %d, events %v", p.b.count(), f.events(true))
+	}
+}
+
+func TestClientWithoutDetailStillStripsShadowConfiguration(t *testing.T) {
+	f := &shadowLD{value: fallthroughPayload(), reason: ldreason.NewEvalReasonFallthrough()}
+	installClient(t, plainLD{f})
+	p := newPair()
+	invokeAndWait(t, mustShadow(t, p.handlers(), ShadowOptions{}))
+	if _, ok := p.a.last().Config.Raw["shadowConfiguration"]; ok {
+		t.Fatal("the served config kept shadowConfiguration")
+	}
+}
+
+func TestFailedShadowReturnsTheFullTrackData(t *testing.T) {
+	p := newPair()
+	p.b.delay = time.Second
+	_, task := deferredTask(t, p, ShadowOptions{Timeout: 20 * time.Millisecond})
+	p.b.err = errors.New("boom")
+	unrouted := RunShadow(context.Background(), task, nil)
+	timedOut := RunShadow(context.Background(), task, p.handlers())
+	for _, res := range []ShadowResult{unrouted, timedOut} {
+		want := map[string]any{
+			"configKey": "cfg", "variationKey": "claude-candidate", "providerName": "Anthropic",
+			"runId": task.TrackData["runId"], "isShadow": true, "shadowRequestId": "shadow-1",
+		}
+		for k, v := range want {
+			if res.TrackData[k] != v {
+				t.Errorf("%q: %s = %v, want %v", res.Error, k, res.TrackData[k], v)
+			}
+		}
+	}
+}
+
+func conversationSpans(t *testing.T) *tracetest.SpanRecorder {
+	t.Helper()
+	rec := tracetest.NewSpanRecorder()
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(aiserver.ConversationIDSpanProcessor{}),
+		sdktrace.WithSpanProcessor(rec),
+	))
+	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+	return rec
+}
+
+func spanConversations(rec *tracetest.SpanRecorder) []string {
+	var out []string
+	for _, attrs := range rootAttrs(rec) {
+		out = append(out, attrs["gen_ai.conversation.id"].AsString())
+	}
+	return out
+}
+
+func TestStreamShadowKeepsTheConversationID(t *testing.T) {
+	install(t, fallthroughPayload(), ldreason.NewEvalReasonFallthrough())
+	rec := conversationSpans(t)
+	p := newPair()
+	p.a.span, p.b.span = true, true
+	ctx := aiserver.WithConversationID(context.Background(), "conv-1")
+	for _, err := range mustShadow(t, p.handlers(), ShadowOptions{}).Stream(ctx, "hello", shadowUser) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	running.Wait()
+	if got := spanConversations(rec); !slices.Equal(got, []string{"conv-1"}) {
+		t.Fatalf("conversation ids %v", got)
+	}
+}
+
+func TestTaskCarriesTheConversationID(t *testing.T) {
+	install(t, fallthroughPayload(), ldreason.NewEvalReasonFallthrough())
+	p := newPair()
+	var tasks []ShadowTask
+	s := mustShadow(t, p.handlers(), ShadowOptions{OnTask: func(task ShadowTask) { tasks = append(tasks, task) }})
+	if _, err := s.Invoke(aiserver.WithConversationID(context.Background(), "conv-1"), "hello", shadowUser); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Invoke(context.Background(), "hello", shadowUser); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(tasks[0])
+	var decoded ShadowTask
+	_ = json.Unmarshal(b, &decoded)
+	if tasks[0].ConversationID != "conv-1" || decoded.ConversationID != "conv-1" || tasks[1].ConversationID != "" {
+		t.Fatalf("conversation ids %q %q %q", tasks[0].ConversationID, decoded.ConversationID, tasks[1].ConversationID)
+	}
+
+	rec := conversationSpans(t)
+	p.b.span = true
+	worker := aiserver.WithConversationID(context.Background(), "worker-conversation")
+	RunShadow(worker, tasks[0], p.handlers())
+	RunShadow(worker, tasks[1], p.handlers())
+	if got := spanConversations(rec); !slices.Equal(got, []string{"conv-1", ""}) {
+		t.Fatalf("conversation ids %v", got)
+	}
+}
+
+func TestShadowRootSpanHasNoFeatureFlagEvent(t *testing.T) {
+	install(t, fallthroughPayload(), ldreason.NewEvalReasonFallthrough())
+	rec := recordSpans(t)
+	p := newPair()
+	p.a.span, p.b.span = true, true
+	invokeAndWait(t, mustShadow(t, p.handlers(), ShadowOptions{}))
+	var events [][]string
+	for _, s := range rec.Ended() {
+		var names []string
+		for _, e := range s.Events() {
+			names = append(names, e.Name)
+		}
+		events = append(events, names)
+	}
+	if len(events) != 2 || !slices.Contains(events[0], "feature_flag") || slices.Contains(events[1], "feature_flag") {
+		t.Fatalf("span events %v", events)
+	}
+}
+
+func TestNegativeTimeoutErrorSaysNotNegative(t *testing.T) {
+	_, err := ShadowConfig(aiserver.ConfigArgs{Key: "cfg"}, ShadowOptions{Timeout: -time.Second})
+	if err == nil || err.Error() != "ShadowOptions.Timeout must not be negative" {
+		t.Fatalf("error %v", err)
+	}
+}

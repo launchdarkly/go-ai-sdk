@@ -41,8 +41,13 @@ func variationToAny(v ldvalue.Value) any {
 	return out
 }
 
-func readVariation(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation) (raw map[string]any, meta *VariationMeta, err error) {
-	c, err := InitClient(ctx, InitOptions{})
+func readVariation(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation, existingClient bool) (raw map[string]any, meta *VariationMeta, err error) {
+	var c LDClient
+	if existingClient {
+		c, err = GetClient()
+	} else {
+		c, err = InitClient(ctx, InitOptions{})
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -87,8 +92,8 @@ func parseMeta(m map[string]any) *VariationMeta {
 	return meta
 }
 
-func extractVariation(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation) (AiConfig, VariationMeta, error) {
-	raw, meta, err := readVariation(ctx, key, userCtx, variation)
+func extractVariation(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation, existingClient bool) (AiConfig, VariationMeta, error) {
+	raw, meta, err := readVariation(ctx, key, userCtx, variation, existingClient)
 	if err != nil {
 		return AiConfig{}, VariationMeta{}, err
 	}
@@ -141,7 +146,7 @@ type resolved struct {
 func (c *AIConfig) resolve(ctx context.Context, userCtx ldcontext.Context) (resolved, error) {
 	handlers := resolveHandlers(c.args.Registry, c.args.Handlers)
 	tools := resolveTools(c.args.Registry, c.args.ToolHandlers)
-	cfg, meta, err := extractVariation(ctx, c.args.Key, userCtx, c.opts.Variation)
+	cfg, meta, err := extractVariation(ctx, c.args.Key, userCtx, c.opts.Variation, c.opts.ExistingClient)
 	if err != nil {
 		return resolved{}, err
 	}
@@ -246,7 +251,7 @@ type InspectResult struct {
 // InspectConfig reads a variation without invoking a model. It never errors.
 func InspectConfig(ctx context.Context, key string, userCtx ldcontext.Context) InspectResult {
 	reportUsage("client.inspectConfig", "", "")
-	raw, meta, err := readVariation(ctx, key, userCtx, nil)
+	raw, meta, err := readVariation(ctx, key, userCtx, nil, false)
 	if err != nil || meta == nil {
 		return InspectResult{}
 	}

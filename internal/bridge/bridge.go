@@ -33,7 +33,22 @@ type RunOptions struct {
 	RunID          string               // "": a new run id per run
 	TrackData      map[string]any       // merged into every event's data
 	SpanAttributes []attribute.KeyValue // added to the handler's root span
+	ExistingClient bool                 // true: use the initialized client and never start one
+	NoFlagEvent    bool                 // true: no feature_flag event on the handler's root span
 }
+
+// ConversationID returns the conversation id bound on ctx, or "". Set by the
+// core package at init.
+var ConversationID func(ctx context.Context) string
+
+// WithExactConversationID binds exactly id on ctx: "" unbinds a bound id.
+// Set by the core package at init.
+var WithExactConversationID func(ctx context.Context, id string) context.Context
+
+// TrackDataFor returns the event data of one run of config (an
+// aiserver.AiConfig) with meta (an aiserver.VariationMeta), as its events
+// carry it, with extra merged in. Set by the core package at init.
+var TrackDataFor func(configKey string, config, meta any, runID string, extra map[string]any) map[string]any
 
 // ConfigWithOptions returns an *aiserver.AIConfig for args (an
 // aiserver.ConfigArgs) that runs with opts. Set by the core package at init.
