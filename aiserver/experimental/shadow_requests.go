@@ -66,8 +66,7 @@ type ShadowAIConfig struct {
 }
 
 // ShadowTask is everything needed to run and track one sampled shadow, with
-// no flag evaluation. It survives a JSON round trip, except Config.Raw.
-// Experimental.
+// no flag evaluation. It survives a JSON round trip. Experimental.
 type ShadowTask struct {
 	ConfigKey       string                 `json:"configKey"`
 	ShadowRequestID string                 `json:"shadowRequestId"`
@@ -83,6 +82,9 @@ type ShadowTask struct {
 	// ConversationID is the caller's conversation id when the shadow was
 	// sampled. RunShadow runs under exactly this id.
 	ConversationID string `json:"conversationId,omitempty"`
+	// ConfigRaw is Config.Raw, which Config drops from JSON. RunShadow uses it
+	// when Config.Raw is empty.
+	ConfigRaw map[string]any `json:"configRaw,omitempty"`
 }
 
 // ShadowResult is the outcome of one shadow run. It has no response text:
@@ -356,7 +358,12 @@ func selectTasks(ctx context.Context, configKey string, e *evaluation, handlers 
 			bridge.Logger().Debug("Skipping shadow request: no handler for its provider", "shadowRequestId", entry.id)
 			continue
 		}
-		vars, _ := deepCopy(call.Variables).(map[string]any)
+		vars, err := jsonCopy(call.Variables)
+		if err != nil {
+			bridge.Logger().Warn("Skipping shadow request: its variables could not be copied", "shadowRequestId", entry.id, "error", err)
+			continue
+		}
+		configRaw, _ := deepCopy(cfg.Raw).(map[string]any)
 		tasks = append(tasks, ShadowTask{
 			ConfigKey:       configKey,
 			ShadowRequestID: entry.id,
@@ -381,6 +388,7 @@ func selectTasks(ctx context.Context, configKey string, e *evaluation, handlers 
 				"launchdarkly.shadow.primary.variation.key": e.primaryVariationKey,
 			},
 			ConversationID: conversation,
+			ConfigRaw:      configRaw,
 		})
 	}
 	return tasks
@@ -410,7 +418,11 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 	}
 	extra := maps.Clone(task.TrackData)
 	delete(extra, "runId")
-	value := shadowValue(task.Config, task.Meta)
+	cfg := task.Config
+	if cfg.Raw == nil {
+		cfg.Raw = task.ConfigRaw
+	}
+	value := shadowValue(cfg, task.Meta)
 	run := bridge.ConfigWithOptions(aiserver.ConfigArgs{
 		Key:      task.ConfigKey,
 		Handlers: []*aiserver.ProviderHandler{withDeadline(h, timeout)},
@@ -530,6 +542,21 @@ func deepCopy(v any) any {
 		return out
 	}
 	return v
+}
+
+// jsonCopy detaches m from the caller: a background shadow reads it after
+// Invoke returns, so no map or slice inside it may be shared.
+func jsonCopy(m map[string]any) (map[string]any, error) {
+	if m == nil {
+		return nil, nil
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]any
+	err = json.Unmarshal(b, &out)
+	return out, err
 }
 
 func copyHistory(history []aiserver.Message) []aiserver.Message {

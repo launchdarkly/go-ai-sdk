@@ -1116,3 +1116,53 @@ func TestNegativeTimeoutErrorSaysNotNegative(t *testing.T) {
 		t.Fatalf("error %v", err)
 	}
 }
+
+func TestShadowVariablesAreDetachedFromTheCaller(t *testing.T) {
+	install(t, fallthroughPayload(), ldreason.NewEvalReasonFallthrough())
+	p := newPair()
+	p.b.delay = 20 * time.Millisecond
+	profile := map[string]string{"name": "a"}
+	var tasks []ShadowTask
+	vars := aiserver.WithVariables(map[string]any{"profile": profile})
+	if _, err := mustShadow(t, p.handlers(), ShadowOptions{OnTask: func(task ShadowTask) { tasks = append(tasks, task) }}).Invoke(context.Background(), "hello", shadowUser, vars); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mustShadow(t, p.handlers(), ShadowOptions{}).Invoke(context.Background(), "hello", shadowUser, vars); err != nil {
+		t.Fatal(err)
+	}
+	profile["name"] = "b"
+	running.Wait()
+	for _, got := range []any{tasks[0].Variables["profile"], p.b.last().Variables["profile"]} {
+		m, ok := got.(map[string]any)
+		if !ok || m["name"] != "a" {
+			t.Fatalf("shadow variables %#v follow the caller's map", got)
+		}
+	}
+}
+
+func TestDeferredTaskKeepsUnmodeledVariationFields(t *testing.T) {
+	payload := fallthroughPayload()
+	variation := payload["shadowConfiguration"].(map[string]any)["variations"].(map[string]any)["claude-candidate"].(map[string]any)
+	variation["customField"] = "kept"
+	install(t, payload, ldreason.NewEvalReasonFallthrough())
+	p := newPair()
+	var tasks []ShadowTask
+	invokeAndWait(t, mustShadow(t, p.handlers(), ShadowOptions{OnTask: func(task ShadowTask) { tasks = append(tasks, task) }}))
+	b, _ := json.Marshal(tasks[0])
+	var decoded ShadowTask
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if res := RunShadow(context.Background(), decoded, p.handlers()); res.Error != "" {
+		t.Fatal(res.Error)
+	}
+	raw := p.b.last().Config.Raw
+	if raw["customField"] != "kept" {
+		t.Fatalf("raw after a JSON round trip %v", raw)
+	}
+	for _, k := range []string{"tools", "judgeConfiguration", "shadowConfiguration"} {
+		if _, ok := raw[k]; ok {
+			t.Fatalf("raw kept %s", k)
+		}
+	}
+}
