@@ -156,7 +156,7 @@ Behavior:
   `ErrMaxTurns`.
 - `outputFormat` is sent as `text.format` (`{"type": "json_schema", "name": "output", "strict":
   false, "schema": ...}`; the schema root gets `type: "object"` and `required` lists every
-  property), and the parsed JSON value is returned. Unparseable output is returned as the raw string. Streaming ignores
+  property, or is omitted when `properties` is empty), and the parsed JSON value is returned. Unparseable output is returned as the raw string. Streaming ignores
   `outputFormat`.
 - Forwarded `model.parameters`: `temperature`, `top_p`, `max_output_tokens` (also from
   `max_tokens` / `max_completion_tokens`), `parallel_tool_calls`, `tool_choice`, `reasoning`,
