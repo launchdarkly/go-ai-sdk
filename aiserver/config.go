@@ -41,7 +41,11 @@ func variationToAny(v ldvalue.Value) any {
 	return out
 }
 
-func readVariation(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation, existingClient bool) (raw map[string]any, meta *VariationMeta, err error) {
+func readVariation(ctx context.Context, key string, userCtx ldcontext.Context) (map[string]any, *VariationMeta, error) {
+	return readVariationWith(ctx, key, userCtx, nil, false)
+}
+
+func readVariationWith(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation, existingClient bool) (raw map[string]any, meta *VariationMeta, err error) {
 	var c LDClient
 	if existingClient {
 		c, err = GetClient()
@@ -93,7 +97,7 @@ func parseMeta(m map[string]any) *VariationMeta {
 }
 
 func extractVariation(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation, existingClient bool) (AiConfig, VariationMeta, error) {
-	raw, meta, err := readVariation(ctx, key, userCtx, variation, existingClient)
+	raw, meta, err := readVariationWith(ctx, key, userCtx, variation, existingClient)
 	if err != nil {
 		return AiConfig{}, VariationMeta{}, err
 	}
@@ -251,7 +255,7 @@ type InspectResult struct {
 // InspectConfig reads a variation without invoking a model. It never errors.
 func InspectConfig(ctx context.Context, key string, userCtx ldcontext.Context) InspectResult {
 	reportUsage("client.inspectConfig", "", "")
-	raw, meta, err := readVariation(ctx, key, userCtx, nil, false)
+	raw, meta, err := readVariation(ctx, key, userCtx)
 	if err != nil || meta == nil {
 		return InspectResult{}
 	}

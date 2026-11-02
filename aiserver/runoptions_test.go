@@ -35,11 +35,11 @@ func TestRunOptionsReplaceTheVariationAndExtendTracking(t *testing.T) {
 	t.Cleanup(func() { otel.SetTracerProvider(prev) })
 
 	var seen HandlerRequest
-	h := createHandler(ProvidesFor{"openai", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := &ProviderHandler{ProvidesFor: ProvidesFor{"openai", ModeMessages}, Invoke: func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		seen = req
 		StartHandlerRun(ctx, HandlerSpanOptions{Tracer: TracerPrefix + "/test", Name: "test"}, req, Prompt{}).Finish("", "ok")
 		return HandlerResult{Output: "ok", Usage: map[string]any{"input": 1, "output": 2}}, nil
-	}, nil, false)
+	}}
 	value := ldvalue.FromJSONMarshal(enabledConfig("openai", "completion", nil))
 	variation := func(bridge.VariationClient, string, ldcontext.Context, ldvalue.Value) (ldvalue.Value, error) {
 		return value, nil
