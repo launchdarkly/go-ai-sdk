@@ -155,7 +155,7 @@ Behavior:
   `NativeTool` becomes a hosted tool. A run stops after `max_turns` model turns (default 10) with
   `ErrMaxTurns`.
 - `outputFormat` is sent as `text.format` (`{"type": "json_schema", "name": "output", "strict":
-  false, "schema": ...}`; the schema root gets `type: "object"`, and when `properties` is set,
+  false, "schema": ...}`; the schema root gets `type: "object"`, and when `properties` is an object,
   `required` lists every property, or is omitted when `properties` is empty), and the parsed
   JSON value is returned. Unparseable output is returned as the raw string. Streaming ignores
   `outputFormat`.
