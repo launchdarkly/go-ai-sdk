@@ -760,7 +760,7 @@ func TestSdkUsage(t *testing.T) {
 	NewHandler(Options{})
 	OpenAIGraph("g", aiserver.GraphOptions{}, Options{})
 	ToOpenAIAgents(nil, nil)
-	want := []string{"openai-agents.createOpenAIAgentHandler", "openai-agents.openaiGraph", "openai-agents.toOpenAIAgents"}
+	want := []string{"openai-agents.createOpenAIAgentsHandler", "openai-agents.openaiGraph", "openai-agents.toOpenAIAgents"}
 	if got := ld.usageHelpers(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("usage helpers = %v (no client.createHandler / client.graph.*, no repeats)", got)
 	}

@@ -44,9 +44,9 @@ func (*NativeGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
 ```
 
 `init()` calls `aiserver.RegisterAiSdkPackage(PackageName, PackageVersion)`. Usage helpers:
-`openai-agents.createOpenAIAgentHandler` (`NewHandler`), `openai-agents.openaiAgents`,
+`openai-agents.createOpenAIAgentsHandler` (`NewHandler`), `openai-agents.openaiAgents`,
 `openai-agents.openaiGraph`, `openai-agents.toOpenAIAgents`. Internal paths (`newHandler`,
-`aiserver.ConfigInternal`, `aiserver.GraphInternal`) never report.
+`internal/sdkapi.Config`, `internal/sdkapi.Graph`) never report.
 
 ## Implementation details
 

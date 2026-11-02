@@ -18,14 +18,13 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkcall"
 	"github.com/launchdarkly/go-ai-sdk/internal/trajectory"
 )
 
 const (
 	// maxTraversalDepth bounds graph walks and BFS expansion (cycle guard).
 	maxTraversalDepth = 100
-	// MaxGraphCacheSize bounds the per-instance resolved-graph cache.
-	MaxGraphCacheSize = 512
 	// GraphSpanName is the graph-level span.
 	GraphSpanName = "ld.ai.graph"
 )
@@ -82,6 +81,9 @@ type GraphOptions struct {
 	GraphJudge string
 	// Registry supplies handlers and tools; local values take precedence.
 	Registry *Registry
+	// SDKCall suppresses $ld:ai:sdk:usage for this graph. Only internal/sdkapi
+	// can build a non-zero token. Applications leave it zero.
+	SDKCall sdkcall.Token
 }
 
 // RunNodeOptions are per-node options for RunNode and Route.
@@ -243,50 +245,36 @@ func (d *GraphDefinition) Traverse(ctx context.Context, fn TraverseVisitor) (any
 	return acc[d.Root.Key], nil
 }
 
-// ReverseTraverse visits nodes leaf-first, the root always last, and
-// returns the root's result.
+// ReverseTraverse visits every child before its parents (post-order from the
+// root, each node once, the root last) and returns the root's result.
 func (d *GraphDefinition) ReverseTraverse(ctx context.Context, fn TraverseVisitor) (any, error) {
 	if d.Root == nil {
 		return nil, nil
 	}
-	var frontier []string
-	for _, n := range d.TerminalNodes() {
-		frontier = append(frontier, n.Key)
-	}
-	if len(frontier) == 0 {
-		return nil, nil
-	}
 	acc := map[string]any{}
 	visited := map[string]bool{}
-	for i := 0; len(frontier) > 0 && i < maxTraversalDepth; i++ {
-		var next []string
-		for _, k := range frontier {
-			if visited[k] {
-				continue
-			}
-			visited[k] = true
-			if k == d.Root.Key {
-				continue
-			}
-			v, err := fn(ctx, d.nodes[k], acc)
-			if err != nil {
-				return nil, err
-			}
-			acc[k] = v
-			for _, p := range d.GetParentNodes(k) {
-				if !visited[p.Key] {
-					next = append(next, p.Key)
-				}
+	var visit func(k string) error
+	visit = func(k string) error {
+		if visited[k] {
+			return nil
+		}
+		visited[k] = true
+		for _, c := range d.GetChildNodes(k) {
+			if err := visit(c.Key); err != nil {
+				return err
 			}
 		}
-		frontier = next
+		v, err := fn(ctx, d.nodes[k], acc)
+		if err != nil {
+			return err
+		}
+		acc[k] = v
+		return nil
 	}
-	v, err := fn(ctx, d.Root, acc)
-	if err != nil {
+	if err := visit(d.Root.Key); err != nil {
 		return nil, err
 	}
-	acc[d.Root.Key] = v
-	return v, nil
+	return acc[d.Root.Key], nil
 }
 
 // TrackData returns the graph-level track data (graphKey set) for adapters.
@@ -334,7 +322,20 @@ func selectNodeHandler(n *GraphNode, handlers []*ProviderHandler) (*ProviderHand
 
 var unsafeToolChars = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
-const routingSuffix = "\n\nComplete your task using your available tools first. Only once you have your final answer, call exactly one transfer tool to route to the next agent."
+// routingSuffix and handoffResult are the model-visible routing text for a
+// multi-edge node. The wording is pinned by §3.15a of TESTING.md in
+// launchdarkly/ai-sdks-monorepo (AIC-3601); keep it byte-identical to the other
+// SDKs. Do not reintroduce "final answer" or
+// "final response": a pure router has no answer of its own and wrote the
+// target's. Keep "recorded" and "using your available tools first": nodes with
+// a real tool skipped it when the result read "Transferring to <key>".
+const routingSuffix = "\n\nComplete your task using your available tools first. Only once your own part is done, call exactly one transfer tool to route to the next agent. Do not answer the parts of the request that belong to the agent you route to."
+
+// handoffResult is the handoff tool's result. target is the edge's raw
+// TargetKey, not the sanitized tool name.
+func handoffResult(target string) string {
+	return "Handoff to " + target + " recorded. " + target + " takes over when your turn ends. Finish your own part, then end your turn. Do not answer for " + target + "."
+}
 
 // handoffRouting is the synthetic routing surface for a multi-edge node,
 // shared by Invoke and Stream so they route identically.
@@ -372,7 +373,7 @@ func (d *GraphDefinition) buildRouting(n *GraphNode, outgoing []GraphEdge) *hand
 				r.chosen = target
 			}
 			r.mu.Unlock()
-			return "Handoff to " + target + " recorded. Finish your own work and provide your final response.", nil
+			return handoffResult(target), nil
 		})
 	}
 	r.config = n.Config
@@ -586,13 +587,8 @@ func ResolveGraph(ctx context.Context, key string, userCtx ldcontext.Context, op
 // AgentGraph is the value Graph returns: a model-driven router bound to a
 // graph flag key.
 type AgentGraph struct {
-	key      string
-	opts     GraphOptions
-	internal bool
-
-	mu    sync.Mutex
-	cache map[string]*GraphDefinition
-	order []string
+	key  string
+	opts GraphOptions
 }
 
 // Graph returns a model-driven graph runner. It starts at the root, lets the
@@ -600,50 +596,13 @@ type AgentGraph struct {
 // into the next. It stops on a terminal answer, a leaf, a revisited node, or
 // the step cap.
 func Graph(key string, opts GraphOptions) *AgentGraph {
-	return &AgentGraph{key: key, opts: opts, cache: map[string]*GraphDefinition{}}
+	return &AgentGraph{key: key, opts: opts}
 }
 
-// GraphInternal is the non-reporting Graph for handler-package wrappers.
-func GraphInternal(key string, opts GraphOptions) *AgentGraph {
-	g := Graph(key, opts)
-	g.internal = true
-	return g
-}
-
-// definition resolves once per distinct context content (equal contexts
-// share an entry), bounded by MaxGraphCacheSize. Only enabled definitions
-// are cached.
+// definition resolves the graph and node flags on every call, so flag changes,
+// including disabling the graph, reach a reused AgentGraph on its next run.
 func (g *AgentGraph) definition(ctx context.Context, userCtx ldcontext.Context) *GraphDefinition {
-	b, _ := json.Marshal(userCtx)
-	k := string(b)
-	g.mu.Lock()
-	if d, ok := g.cache[k]; ok {
-		g.mu.Unlock()
-		return d
-	}
-	g.mu.Unlock()
-	d := resolveDefinition(ctx, g.key, userCtx, g.opts)
-	if !d.Enabled {
-		return d // a disabled or failed resolution may be transient; resolve again next call
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if existing, ok := g.cache[k]; ok {
-		return existing
-	}
-	if len(g.order) >= MaxGraphCacheSize {
-		delete(g.cache, g.order[0])
-		g.order = g.order[1:]
-	}
-	g.cache[k] = d
-	g.order = append(g.order, k)
-	return d
-}
-
-func (g *AgentGraph) cacheLen() int {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return len(g.cache)
+	return resolveDefinition(ctx, g.key, userCtx, g.opts)
 }
 
 // Invoke runs the graph and returns the final node's response and the
@@ -652,7 +611,7 @@ func (g *AgentGraph) cacheLen() int {
 func (g *AgentGraph) Invoke(ctx context.Context, input string, userCtx ldcontext.Context, opts ...CallOption) (GraphResponse, error) {
 	co := NewCallOptions(opts...)
 	variables, history := co.Variables, co.History
-	if !g.internal {
+	if !g.opts.SDKCall.Marked() {
 		reportUsage("client.graph.invoke", "", "")
 	}
 	var out GraphResponse
@@ -677,7 +636,7 @@ func (g *AgentGraph) Invoke(ctx context.Context, input string, userCtx ldcontext
 func (g *AgentGraph) Stream(ctx context.Context, input string, userCtx ldcontext.Context, opts ...CallOption) iter.Seq2[GraphStreamEvent, error] {
 	co := NewCallOptions(opts...)
 	variables, history := co.Variables, co.History
-	if !g.internal {
+	if !g.opts.SDKCall.Marked() {
 		reportUsage("client.graph.stream", "", "")
 	}
 	return g.stream(ctx, input, userCtx, variables, history)
@@ -695,7 +654,7 @@ func (g *AgentGraph) stream(ctx context.Context, input string, userCtx ldcontext
 			return
 		}
 		runTD := def.trackData
-		runTD.RunID = uuid.NewString() // the definition is cached; each run gets its own id
+		runTD.RunID = uuid.NewString() // each run gets its own id
 
 		spanCtx, span := otel.Tracer(TracerPrefix+"/aiserver").Start(ctx, GraphSpanName)
 		span.SetAttributes(attribute.String("ld.ai.graph.key", g.key))

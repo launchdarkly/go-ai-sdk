@@ -13,6 +13,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/bedrockwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
 const (
@@ -111,7 +112,7 @@ func build(opts Options) (*handler, error) {
 }
 
 func (h *handler) provider() *aiserver.ProviderHandler {
-	return aiserver.CreateHandlerInternal(ProvidesFor, h.Invoke, h.Stream, h.captureContent)
+	return sdkapi.CreateHandler(ProvidesFor, h.Invoke, h.Stream, h.captureContent)
 }
 
 // InvokeOptions are the optional arguments to BedrockMessages.
@@ -136,7 +137,7 @@ func BedrockMessages(ctx context.Context, configKey, userInput string, userCtx l
 	if err != nil {
 		return aiserver.ProviderResponse{}, err
 	}
-	return aiserver.ConfigInternal(aiserver.ConfigArgs{
+	return sdkapi.Config(aiserver.ConfigArgs{
 		Key: configKey, Handlers: []*aiserver.ProviderHandler{h.provider()},
 		ToolHandlers: opts.ToolHandlers, Registry: opts.Registry, SkipJudges: opts.SkipJudges,
 	}).Invoke(ctx, userInput, userCtx, aiserver.WithVariables(opts.Variables))

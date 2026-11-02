@@ -132,7 +132,7 @@ func TestConfigRoutingErrors(t *testing.T) {
 func TestConfigHandlerErrorTracked(t *testing.T) {
 	f := withFake(t, map[string]any{"cfg": enabledConfig("P", "", nil)})
 	boom := errors.New("boom")
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
 		return HandlerResult{}, boom
 	}, nil, false)
 	if _, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, "", userCtx); !errors.Is(err, boom) {
@@ -166,7 +166,7 @@ func TestOutputFormatParsing(t *testing.T) {
 
 func TestStream(t *testing.T) {
 	f := withFake(t, map[string]any{"cfg": enabledConfig("P", "", nil)})
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, nil, func(_ context.Context, req HandlerRequest) iter.Seq2[HandlerStreamEvent, error] {
+	h := createHandler(ProvidesFor{"P", ModeMessages}, nil, func(_ context.Context, req HandlerRequest) iter.Seq2[HandlerStreamEvent, error] {
 		return func(yield func(HandlerStreamEvent, error) bool) {
 			if req.Variables["ldContext"] == nil {
 				yield(HandlerStreamEvent{}, errors.New("no ldContext"))
@@ -214,7 +214,7 @@ func TestJudges(t *testing.T) {
 		"judge": enabledConfig("P", "judge", map[string]any{"evaluationMetricKey": "quality"}),
 	})
 	var judgeReq HandlerRequest
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeMessages}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 		if req.Variables["response_to_evaluate"] != nil {
 			judgeReq = req
 			return HandlerResult{Output: `{"score":0.8,"reasoning":"good"}`}, nil
@@ -439,19 +439,19 @@ func TestHandlerPanicTracksGenerationError(t *testing.T) {
 		consumer func(*AIConfig)
 		wantErr  int
 	}{
-		"invoke": {CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, boom, nil, false),
+		"invoke": {createHandler(ProvidesFor{"P", ModeMessages}, boom, nil, false),
 			func(a *AIConfig) { _, _ = a.Invoke(bg, "q", userCtx) }, 1},
-		"stream": {CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, boom, streamBoom, false),
+		"stream": {createHandler(ProvidesFor{"P", ModeMessages}, boom, streamBoom, false),
 			func(a *AIConfig) {
 				for range a.Stream(bg, "q", userCtx) {
 				}
 			}, 1},
-		"stream fallback": {CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, boom, nil, false),
+		"stream fallback": {createHandler(ProvidesFor{"P", ModeMessages}, boom, nil, false),
 			func(a *AIConfig) {
 				for range a.Stream(bg, "q", userCtx) {
 				}
 			}, 1},
-		"consumer": {CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, boom, chunky, false),
+		"consumer": {createHandler(ProvidesFor{"P", ModeMessages}, boom, chunky, false),
 			func(a *AIConfig) {
 				for range a.Stream(bg, "q", userCtx) {
 					panic("consumer bug")
@@ -509,7 +509,7 @@ func TestUnresolvableJudgeIsSkipped(t *testing.T) {
 		"off":   off,
 		"judge": enabledConfig("P", "judge", nil),
 	})
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeMessages}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeMessages}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 		if req.Variables["response_to_evaluate"] != nil {
 			return HandlerResult{Output: `{"score":0.5,"reasoning":"ok"}`}, nil
 		}

@@ -258,8 +258,8 @@ func RunJudge(ctx context.Context, task JudgeTask, handlers []*ProviderHandler) 
 			explanation = reasoning
 		}
 		record(score, explanation)
-		td := res.TrackData
-		td.GraphKey = task.ParentTrackData.GraphKey
+		// The score belongs to the evaluated (parent) config, exactly as in the inline path.
+		td := task.ParentTrackData
 		td.JudgeConfigKey = task.ConfigKey
 		out = &JudgeRunResult{Score: score, Response: reasoning, Usage: res.Usage, TrackData: td}
 		return nil

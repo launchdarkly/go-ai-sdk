@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkcall"
 	ld "github.com/launchdarkly/go-server-sdk/v7"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -161,11 +163,11 @@ func TestUsageReporting(t *testing.T) {
 			}
 		}
 	}
-	// ConfigInternal (used by wrappers) does not report.
+	// A marked SDKCall (what internal/sdkapi sets) does not report.
 	_ = Shutdown(bg)
 	g := &fakeLD{variations: map[string]any{"cfg": enabledConfig("P", "", nil)}}
 	setClientForTest(g)
-	_, _ = ConfigInternal(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, "", userCtx)
+	_, _ = Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}, SDKCall: sdkcall.Mark()}).Invoke(bg, "", userCtx)
 	if len(g.events("$ld:ai:sdk:usage")) != 0 {
 		t.Error("internal config reported usage")
 	}

@@ -86,12 +86,17 @@ final `done`. Framework-native runners take `aiserver.ResolveGraph(...)`.
 ### Registry
 
 ```go
-aiserver.GlobalRegistry.Register(aiserver.RegistryEntries{
+registry := aiserver.NewRegistry(aiserver.RegistryEntries{
 	Handlers: []*aiserver.ProviderHandler{oa, cl},
 	Tools:    map[string]aiserver.ToolHandler{"get-weather": aiserver.ToolFunc(getWeather)},
 })
-aiserver.Config(aiserver.ConfigArgs{Key: "my-ai-config", Registry: aiserver.GlobalRegistry})
+aiserver.Config(aiserver.ConfigArgs{Key: "my-ai-config", Registry: registry})
 ```
+
+Unlike the JavaScript and Python SDKs, Go has no SDK-owned global registry:
+packages cannot register into shared state on import, so you build a
+`*Registry` and pass it explicitly. If you want one per process, keep it in a
+variable in your own package.
 
 Tool keys must match the keys in the variation's `tools` map exactly. A tool
 with no registered function is never shown to the model.
@@ -118,8 +123,9 @@ LaunchDarkly endpoints), `OTLPEndpoint`, `ServiceName`, `Environment`, `WaitFor`
 
 Initialization paths:
 
-- **Lazy** — `Config(...).Invoke` and `InspectConfig` call `InitClient` with no
-  options on first use.
+- **Lazy** — the first `Config(...)` or `Graph(...)` call, `ResolveGraph` or
+  `InspectConfig` calls `InitClient` with an empty `InitOptions`, so every
+  setting comes from the environment variables above.
 - **Explicit** — `InitClient(ctx, opts)` to pass options or fail fast at startup.
 - **Bring your own client** — `InitWithClient(ctx, ldClient, opts)` with any value
   that satisfies `aiserver.LDClient` (a `*ldclient.LDClient` does).

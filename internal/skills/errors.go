@@ -25,8 +25,8 @@ var (
 	// ErrUnsupportedKind is returned by AddListener for a kind other than "skill".
 	ErrUnsupportedKind = errors.New("launchdarkly ai skills: unsupported object kind")
 
-	// ErrStoreClosed is returned by FDv2SkillStore.Start after Close.
-	ErrStoreClosed = errors.New("launchdarkly ai skills: the FDv2SkillStore is closed")
+	// ErrStoreClosed is returned by LaunchDarklySkillStore.Start after Close.
+	ErrStoreClosed = errors.New("launchdarkly ai skills: the LaunchDarklySkillStore is closed")
 
 	// ErrUnsupportedPlatform is returned by WriteSkills where the platform has
 	// no descriptor-relative (*at) filesystem calls.
@@ -37,7 +37,7 @@ var (
 // match on "skill store"; keep that phrase.
 const noStoreMessage = "launchdarkly ai skills: no skill store is configured, so skill content " +
 	"cannot be retrieved. Configure one with experimental.SetSkillStore(store): " +
-	"FDv2SkillStore (experimental.NewFDv2SkillStore) receives content from LaunchDarkly, " +
+	"LaunchDarklySkillStore (experimental.NewLaunchDarklySkillStore) receives content from LaunchDarkly, " +
 	"and InMemorySkillStore (experimental.NewInMemorySkillStore) is for local development and testing"
 
 func invalidArg(format string, args ...any) error {

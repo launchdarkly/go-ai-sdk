@@ -17,11 +17,11 @@ import (
 )
 
 func registryConfig(key string, skipJudges bool) *aiserver.AIConfig {
-	return aiserver.Config(aiserver.ConfigArgs{Key: key, Registry: aiserver.GlobalRegistry, SkipJudges: skipJudges})
+	return aiserver.Config(aiserver.ConfigArgs{Key: key, Registry: registry, SkipJudges: skipJudges})
 }
 
 func registryGraph(key string) *aiserver.AgentGraph {
-	return aiserver.Graph(key, aiserver.GraphOptions{Registry: aiserver.GlobalRegistry})
+	return aiserver.Graph(key, aiserver.GraphOptions{Registry: registry})
 }
 
 // agent demonstrates Config().Invoke.
@@ -181,7 +181,7 @@ func graphHistory(ctx context.Context, key, _ string) error {
 
 // nativeGraph resolves a graph and runs it with the Claude native adapter.
 func nativeGraph(ctx context.Context, key, input string) error {
-	def := aiserver.ResolveGraph(ctx, key, newContext(), aiserver.GraphOptions{Registry: aiserver.GlobalRegistry})
+	def := aiserver.ResolveGraph(ctx, key, newContext(), aiserver.GraphOptions{Registry: registry})
 	if !def.Enabled {
 		return fmt.Errorf("%w: %s", aiserver.ErrGraphDisabled, key)
 	}
@@ -199,7 +199,7 @@ func nativeGraph(ctx context.Context, key, input string) error {
 // graph is ToLangGraph's error to report.
 func nativeGraphLangChain(ctx context.Context, key, input string) error {
 	user := newContext()
-	def := aiserver.ResolveGraph(ctx, key, user, aiserver.GraphOptions{Registry: aiserver.GlobalRegistry})
+	def := aiserver.ResolveGraph(ctx, key, user, aiserver.GraphOptions{Registry: registry})
 	resp, err := langchainagents.ToLangGraph(def, &langchainagents.NativeGraphOptions{ToolHandlers: exampleTools, Context: user}).
 		Invoke(ctx, input, aiserver.WithVariables(map[string]any{"user_id": "user-123"}))
 	if err != nil {
@@ -220,7 +220,7 @@ func judge(ctx context.Context, key, input string) error {
 	if len(resp.JudgeTasks) == 0 {
 		return errors.New("no judge tasks returned; does the config have a judgeConfiguration?")
 	}
-	handlers := aiserver.GlobalRegistry.Handlers()
+	handlers := registry.Handlers()
 	type outcome struct {
 		task aiserver.JudgeTask
 		res  *aiserver.JudgeRunResult

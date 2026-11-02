@@ -90,7 +90,7 @@ func watchSkills(ctx context.Context, sel selection, root string, opts *WatchSki
 	if !ok {
 		return ReconcileReport{}, nil, fmt.Errorf("%w: WatchSkills needs a store implementing AddListener, and %T does not, "+
 			"so delivery changes cannot be observed. Use WriteSkills for a one-shot reconcile, or configure a "+
-			"delivery-backed store (FDv2SkillStore)", ErrStoreNotWatchable, s)
+			"delivery-backed store (LaunchDarklySkillStore)", ErrStoreNotWatchable, s)
 	}
 	if opts.Debounce < 0 {
 		return ReconcileReport{}, nil, invalidArg("debounce must be a non-negative duration, got %v", opts.Debounce)

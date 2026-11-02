@@ -102,7 +102,7 @@ func enabledConfig(provider, mode string, extra map[string]any) map[string]any {
 }
 
 func stubHandler(provider string, mode Mode, out string, usage map[string]any, seen *HandlerRequest) *ProviderHandler {
-	return CreateHandlerInternal(ProvidesFor{provider, mode}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+	return createHandler(ProvidesFor{provider, mode}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 		if seen != nil {
 			*seen = req
 		}

@@ -19,6 +19,7 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
 // recReq is one request the fake transport saw.
@@ -314,7 +315,7 @@ func handler(provider string, mode aiserver.Mode, fn func(ctx context.Context, r
 			return aiserver.HandlerResult{Output: "out:" + req.UserInput}, nil
 		}
 	}
-	return aiserver.CreateHandlerInternal(aiserver.ProvidesFor{Provider: provider, Mode: mode}, fn, nil, false)
+	return sdkapi.CreateHandler(aiserver.ProvidesFor{Provider: provider, Mode: mode}, fn, nil, false)
 }
 
 // recorder captures every call a stub handler gets.

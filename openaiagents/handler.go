@@ -20,6 +20,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
 const (
@@ -80,15 +81,15 @@ func (o Options) client() *openai.Client {
 	return &c
 }
 
-// NewHandler returns the OpenAI agent handler (createOpenAIAgentHandler).
+// NewHandler returns the OpenAI agent handler (createOpenAIAgentsHandler).
 func NewHandler(opts Options) *aiserver.ProviderHandler {
-	aiserver.ReportUsage("openai-agents.createOpenAIAgentHandler", PackageName, PackageVersion)
+	aiserver.ReportUsage("openai-agents.createOpenAIAgentsHandler", PackageName, PackageVersion)
 	return newHandler(opts)
 }
 
 func newHandler(opts Options) *aiserver.ProviderHandler {
 	h := &handler{client: opts.client(), maxTurns: opts.MaxTurns}
-	return aiserver.CreateHandlerInternal(ProvidesFor, h.invoke, h.stream, opts.CaptureContent)
+	return sdkapi.CreateHandler(ProvidesFor, h.invoke, h.stream, opts.CaptureContent)
 }
 
 // InvokeOptions are the optional arguments to OpenAIAgents.
@@ -109,7 +110,7 @@ func OpenAIAgents(ctx context.Context, configKey, userInput string, userCtx ldco
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}
-	return aiserver.ConfigInternal(aiserver.ConfigArgs{
+	return sdkapi.Config(aiserver.ConfigArgs{
 		Key: configKey, Handlers: []*aiserver.ProviderHandler{newHandler(opts.Handler)},
 		ToolHandlers: opts.ToolHandlers, Registry: opts.Registry, SkipJudges: opts.SkipJudges,
 	}).Invoke(ctx, userInput, userCtx, aiserver.WithVariables(opts.Variables))

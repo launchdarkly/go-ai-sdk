@@ -11,7 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -89,7 +88,7 @@ func (r *recordingHandler) handler() *ProviderHandler {
 			}
 		}
 	}
-	return CreateHandlerInternal(ProvidesFor{"P", ModeAgent}, invoke, stream, false)
+	return createHandler(ProvidesFor{"P", ModeAgent}, invoke, stream, false)
 }
 
 func (r *recordingHandler) keys() []string {
@@ -152,6 +151,42 @@ func TestResolveGraphTopology(t *testing.T) {
 	}
 	if ResolveGraph(bg, "no-root", userCtx, GraphOptions{}).Enabled || ResolveGraph(bg, "missing", userCtx, GraphOptions{}).Enabled {
 		t.Error("graph without root must be disabled")
+	}
+}
+
+func TestReverseTraverseVisitsEveryChildBeforeItsParent(t *testing.T) {
+	edges := func(m map[string][]string) map[string]any {
+		out := map[string]any{}
+		for k, ts := range m {
+			var es []any
+			for _, t := range ts {
+				es = append(es, map[string]any{"key": t})
+			}
+			out[k] = es
+		}
+		return out
+	}
+	withFake(t, map[string]any{
+		// Uneven depths: P has a terminal child and a deeper one.
+		"uneven": map[string]any{"root": "root", "edges": edges(map[string][]string{"root": {"P"}, "P": {"T1", "Q"}, "Q": {"T2"}})},
+		// Cycle: each node is visited exactly once.
+		"cyclic": map[string]any{"root": "root", "edges": edges(map[string][]string{"root": {"A"}, "A": {"B"}, "B": {"A", "T"}})},
+		"root":   nodeCfg("r"), "P": nodeCfg("p"), "Q": nodeCfg("q"), "T1": nodeCfg("t1"), "T2": nodeCfg("t2"),
+		"A": nodeCfg("a"), "B": nodeCfg("b"), "T": nodeCfg("t"),
+	})
+	for key, want := range map[string][]string{
+		"uneven": {"T1", "T2", "Q", "P", "root"},
+		"cyclic": {"T", "B", "A", "root"},
+	} {
+		var order []string
+		visit := func(_ context.Context, n *GraphNode, _ map[string]any) (any, error) {
+			order = append(order, n.Key)
+			return n.Key, nil
+		}
+		v, err := ResolveGraph(bg, key, userCtx, GraphOptions{}).ReverseTraverse(bg, visit)
+		if err != nil || v != "root" || !reflect.DeepEqual(order, want) {
+			t.Errorf("%s: reverse order = %v (%v, %v), want %v", key, order, v, err, want)
+		}
 	}
 }
 
@@ -238,29 +273,47 @@ func TestGraphCycleGuard(t *testing.T) {
 	}
 }
 
-func TestGraphCachingAndIsolation(t *testing.T) {
+func TestGraphResolvesEachCallAndIsolation(t *testing.T) {
 	f := withFake(t, twoNode(nil))
 	rh := &recordingHandler{}
 	g := Graph("g", GraphOptions{Handlers: []*ProviderHandler{rh.handler()}})
-	a := ldcontext.New("u1")
-	b := ldcontext.New("u1") // distinct value, equal content
-	if _, err := g.Invoke(bg, "", a, WithVariables(map[string]any{"v": "first"})); err != nil {
+	if _, err := g.Invoke(bg, "", userCtx, WithVariables(map[string]any{"v": "first"})); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Invoke(bg, "", b); err != nil {
+	if _, err := g.Invoke(bg, "", userCtx); err != nil {
 		t.Fatal(err)
 	}
-	if f.calls["root-node"] != 1 || f.calls["g"] != 1 || g.cacheLen() != 1 {
-		t.Errorf("node variations re-resolved: %v, cache=%d", f.calls, g.cacheLen())
+	if f.calls["root-node"] != 2 || f.calls["g"] != 2 {
+		t.Errorf("flags not re-resolved per call: %v", f.calls)
 	}
 	if v := rh.calls[2].Req.Variables["v"]; v != nil {
 		t.Errorf("variables leaked into second call: %v", v)
 	}
-	for i := range MaxGraphCacheSize + 5 {
-		_, _ = g.Invoke(bg, "", ldcontext.New("ctx-"+string(rune('a'+i%26))+strings.Repeat("x", i)))
+}
+
+// A reused Graph sees flag changes, including the kill switch, on the next call (TESTING.md §3.11).
+func TestGraphSeesFlagChanges(t *testing.T) {
+	f := withFake(t, map[string]any{"g": map[string]any{"root": "only"}, "only": nodeCfg("v1")})
+	rh := &recordingHandler{}
+	g := Graph("g", GraphOptions{Handlers: []*ProviderHandler{rh.handler()}})
+	if _, err := g.Invoke(bg, "", userCtx); err != nil {
+		t.Fatal(err)
 	}
-	if n := g.cacheLen(); n > MaxGraphCacheSize {
-		t.Errorf("cache grew to %d", n)
+	f.variations["only"] = nodeCfg("v2")
+	if _, err := g.Invoke(bg, "", userCtx); err != nil {
+		t.Fatal(err)
+	}
+	if got := rh.calls[1].Req.Config.Instructions; got != "v2" {
+		t.Errorf("second call instructions = %q, want v2", got)
+	}
+	f.variations["g"] = map[string]any{}
+	if _, err := g.Invoke(bg, "", userCtx); !errors.Is(err, ErrGraphDisabled) {
+		t.Errorf("disabled graph invoke err = %v", err)
+	}
+	for _, err := range g.Stream(bg, "", userCtx) {
+		if !errors.Is(err, ErrGraphDisabled) {
+			t.Errorf("disabled graph stream err = %v", err)
+		}
 	}
 }
 
@@ -333,9 +386,89 @@ func TestGraphModelSelectedHandoff(t *testing.T) {
 	}
 }
 
+// The routing text is pinned byte-for-byte by TESTING.md §3.15a and must match
+// the TypeScript and Python SDKs (AIC-3601). The literals are spelled out here
+// on purpose: building them from the production constants would not catch drift.
+const (
+	wantRoutingSuffix  = "\n\nComplete your task using your available tools first. Only once your own part is done, call exactly one transfer tool to route to the next agent. Do not answer the parts of the request that belong to the agent you route to."
+	wantBillingHandoff = "Handoff to billing-team recorded. billing-team takes over when your turn ends. Finish your own part, then end your turn. Do not answer for billing-team."
+	wantSupportHandoff = "Handoff to support recorded. support takes over when your turn ends. Finish your own part, then end your turn. Do not answer for support."
+)
+
+func TestGraphRoutingText(t *testing.T) {
+	lookupTool := map[string]any{"lookup": map[string]any{"name": "lookup", "type": "function", "parameters": map[string]any{}}}
+	for _, tc := range []struct {
+		name  string
+		tools map[string]any // the router's own tools; nil means none
+	}{
+		{"router with its own tool", lookupTool},
+		{"router with no tools", nil},
+	} {
+		for _, mode := range []string{"invoke", "stream"} {
+			t.Run(tc.name+"/"+mode, func(t *testing.T) {
+				router := enabledConfig("P", "agent", map[string]any{"instructions": "route it"})
+				if tc.tools != nil {
+					router["tools"] = tc.tools
+				}
+				withFake(t, map[string]any{
+					"route": map[string]any{"root": "router", "edges": map[string]any{"router": []any{
+						map[string]any{"key": "billing-team"}, map[string]any{"key": "support"}}}},
+					"router":       router,
+					"billing-team": nodeCfg("billing work"),
+					"support":      nodeCfg("support work"),
+				})
+				rh := &recordingHandler{pick: map[string]string{"router": "billing_team"}, stream: mode == "stream"}
+				opts := GraphOptions{Handlers: []*ProviderHandler{rh.handler()},
+					ToolHandlers: map[string]ToolHandler{"lookup": ToolFunc(func(context.Context, map[string]any) (any, error) { return "found", nil })}}
+				g := Graph("route", opts)
+				if mode == "stream" {
+					for _, err := range g.Stream(bg, "q", userCtx) {
+						if err != nil {
+							t.Fatal(err)
+						}
+					}
+				} else if _, err := g.Invoke(bg, "q", userCtx); err != nil {
+					t.Fatal(err)
+				}
+
+				// The config and tool handlers the handler actually received.
+				got := rh.calls[0].Req
+				if got.Config.Instructions != "route it"+wantRoutingSuffix {
+					t.Errorf("router instructions = %q", got.Config.Instructions)
+				}
+				for _, h := range []struct{ tool, want string }{
+					{"__handoff_billing_team", wantBillingHandoff},
+					{"__handoff_support", wantSupportHandoff},
+				} {
+					fn, ok := got.ToolHandlers[h.tool].(ToolFunc)
+					if !ok {
+						t.Fatalf("handler got no %s tool handler: %v", h.tool, got.ToolHandlers)
+					}
+					if res, err := fn(bg, nil); err != nil || res != h.want {
+						t.Errorf("%s result = %q, %v; want %q", h.tool, res, err, h.want)
+					}
+				}
+				// Real tools are left alone: present exactly when the node has them.
+				_, hasLookup := got.Config.Tools["lookup"]
+				_, hasLookupHandler := got.ToolHandlers["lookup"].(ToolFunc)
+				if hasLookup != (tc.tools != nil) || (tc.tools != nil && !hasLookupHandler) {
+					t.Errorf("lookup tool = %v, handler = %v, node tools = %v", hasLookup, hasLookupHandler, tc.tools != nil)
+				}
+				// Only the router routes; its target ran with its own instructions untouched.
+				if keys := rh.keys(); !reflect.DeepEqual(keys, []string{"router", "billing-team"}) {
+					t.Fatalf("nodes run = %v", keys)
+				}
+				if got := rh.calls[1].Req.Config.Instructions; got != "billing work" {
+					t.Errorf("leaf instructions = %q", got)
+				}
+			})
+		}
+	}
+}
+
 func TestGraphHandoffFailure(t *testing.T) {
 	f := withFake(t, multiEdge())
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeAgent}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeAgent}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		if fn, ok := req.ToolHandlers["__handoff_support"].(ToolFunc); ok {
 			_, _ = fn(ctx, nil)
 		}
@@ -442,7 +575,7 @@ func TestGraphStreamAbandonAndErrors(t *testing.T) {
 func TestGraphJudge(t *testing.T) {
 	withFake(t, twoNode(map[string]any{"gj": enabledConfig("P", "judge", nil)}))
 	var reqs []HandlerRequest
-	h := CreateHandlerInternal(ProvidesFor{"P", ModeAgent}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+	h := createHandler(ProvidesFor{"P", ModeAgent}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 		if req.Variables["response_to_evaluate"] != nil {
 			reqs = append(reqs, req)
 			return HandlerResult{Output: `{"score":0.9,"reasoning":"fine"}`}, nil
@@ -548,7 +681,7 @@ func TestGraphSpanStatusOnEveryPath(t *testing.T) {
 	t.Run("node panic", func(t *testing.T) {
 		f := withFake(t, twoNode(nil))
 		exp := withSpans(t)
-		h := CreateHandlerInternal(ProvidesFor{"P", ModeAgent}, func(context.Context, HandlerRequest) (HandlerResult, error) { panic("node bug") }, nil, false)
+		h := createHandler(ProvidesFor{"P", ModeAgent}, func(context.Context, HandlerRequest) (HandlerResult, error) { panic("node bug") }, nil, false)
 		if r := run(func() { _, _ = Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}}).Invoke(bg, "q", userCtx) }); r == nil {
 			t.Fatal("the panic was swallowed")
 		}
@@ -620,7 +753,7 @@ func TestGraphRoutingNormalizesHandlerMode(t *testing.T) {
 	})
 	var served []string
 	mk := func(mode Mode, tag string) *ProviderHandler {
-		return CreateHandlerInternal(ProvidesFor{"P", mode}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
+		return createHandler(ProvidesFor{"P", mode}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
 			served = append(served, tag+":"+req.Variables[VarLD].(TrackData).ConfigKey)
 			return HandlerResult{Output: "out"}, nil
 		}, nil, false)
