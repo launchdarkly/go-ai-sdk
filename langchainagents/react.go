@@ -68,7 +68,7 @@ func (messagesSchema) Update(current, update any) (any, error) {
 			return nil, fmt.Errorf("langchainagents: %q update is %T, not []llms.MessageContent", messagesKey, v)
 		}
 		if cur, ok := next[messagesKey].([]llms.MessageContent); ok {
-			next[messagesKey] = append(cur, add...)
+			next[messagesKey] = slices.Concat(cur, add)
 		} else {
 			next[messagesKey] = add
 		}

@@ -516,6 +516,21 @@ func TestToLangGraphRealStateGraph(t *testing.T) {
 	}
 }
 
+// Two updates from the same state must not share the messages backing array.
+func TestMessagesSchemaUpdateDoesNotAlias(t *testing.T) {
+	base := map[string]any{messagesKey: append(make([]llms.MessageContent, 0, 4), llms.TextParts(human, "q"))}
+	a, err := (messagesSchema{}).Update(base, map[string]any{messagesKey: llms.TextParts(ai, "a")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (messagesSchema{}).Update(base, map[string]any{messagesKey: llms.TextParts(ai, "b")}); err != nil {
+		t.Fatal(err)
+	}
+	if got := messagesOf(a); len(got) != 2 || text(got[1]) != "a" {
+		t.Errorf("first update changed by a second update from the same state: %v", turns(got))
+	}
+}
+
 // LangChainGraph: key, one handler, options and llm forwarded.
 func TestLangChainGraph(t *testing.T) {
 	ld := &fakeLD{variations: map[string]map[string]any{"g": graphFlag("solo", nil), "solo": node("Solo", "test-model", "lookup")}}
