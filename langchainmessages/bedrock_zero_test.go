@@ -41,8 +41,12 @@ func TestBedrockExplicitZeroTemperatureReachesTheModel(t *testing.T) {
 	}
 	h := newHandler(Options{})
 	for _, temp := range []float64{0, 0.4} {
+		params := map[string]any{"temperature": temp}
+		if temp != 0 {
+			params["max_tokens"] = 300
+		}
 		cfg := aiserver.AiConfig{Instructions: "judge", Model: aiserver.Model{Name: "anthropic.claude-sonnet-4-5-20250929-v1:0",
-			Parameters: map[string]any{"temperature": temp}}}
+			Parameters: params}}
 		cfg.Provider.Name = "Bedrock"
 		res, err := h.Invoke(bg, aiserver.HandlerRequest{Config: cfg, UserInput: "score this"})
 		if err != nil {
@@ -67,7 +71,11 @@ func TestBedrockExplicitZeroTemperatureReachesTheModel(t *testing.T) {
 	if got, _ := inference(1)["temperature"].(float64); math.Abs(got-0.4) > 1e-6 {
 		t.Errorf("temperature 0.4 = %v", inference(1)["temperature"])
 	}
-	if got := inference(0)["maxTokens"]; got != float64(2048) {
-		t.Errorf("default maxTokens = %v, want 2048", got)
+	// max_tokens is forwarded only when the config sets it; there is no default.
+	if got, ok := inference(0)["maxTokens"]; ok {
+		t.Errorf("unset max_tokens sent maxTokens = %v", got)
+	}
+	if got := inference(1)["maxTokens"]; got != float64(300) {
+		t.Errorf("max_tokens 300 sent maxTokens = %v", got)
 	}
 }

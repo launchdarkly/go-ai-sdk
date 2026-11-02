@@ -16,9 +16,6 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/internal/bedrockwire"
 )
 
-// DefaultBedrockMaxTokens is sent when the call sets no max tokens.
-const DefaultBedrockMaxTokens = 2048
-
 // bedrockEmptyText stands in for a message with no content, which Converse
 // rejects.
 const bedrockEmptyText = "."
@@ -137,8 +134,8 @@ func (m *Bedrock) input(messages []MessageContent, o CallOptions) (*bedrockrunti
 			in.Messages[i].Content = []types.ContentBlock{&types.ContentBlockMemberText{Value: bedrockEmptyText}}
 		}
 	}
-	cfg := &types.InferenceConfiguration{MaxTokens: aws.Int32(DefaultBedrockMaxTokens)}
-	if o.MaxTokens > 0 {
+	cfg := &types.InferenceConfiguration{}
+	if o.MaxTokens > 0 { // unset: no maxTokens, the model's own limit applies
 		cfg.MaxTokens = aws.Int32(int32(o.MaxTokens))
 	}
 	if o.Temperature != nil {

@@ -55,11 +55,14 @@ func TestBedrockRequest(t *testing.T) {
 		t.Errorf("system = %v", b["system"])
 	}
 	inf := b["inferenceConfig"].(map[string]any)
-	if inf["temperature"] != 0.0 || inf["maxTokens"] != 2048.0 || !reflect.DeepEqual(inf["stopSequences"], []any{"END"}) {
+	if inf["temperature"] != 0.0 || !reflect.DeepEqual(inf["stopSequences"], []any{"END"}) {
 		t.Errorf("inferenceConfig = %v", inf)
 	}
 	if _, ok := inf["topP"]; ok {
 		t.Error("unset topP was sent")
+	}
+	if _, ok := inf["maxTokens"]; ok {
+		t.Error("unset maxTokens was sent")
 	}
 	if !reflect.DeepEqual(b["additionalModelRequestFields"], map[string]any{"top_k": 3.0}) {
 		t.Errorf("additionalModelRequestFields = %v", b["additionalModelRequestFields"])
