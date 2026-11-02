@@ -7,7 +7,7 @@ runs:
     - uses: actions/setup-go@v5
       with:
         # Latest 1.26 patch, not go.mod's 1.26.0 minimum: govulncheck flags stdlib CVEs fixed in later patches.
-        # ponytail: bump this when go.mod moves to a new minor version.
+        # Bump this when go.mod moves to a new minor version.
         go-version: '1.26.x'
         check-latest: true
 
