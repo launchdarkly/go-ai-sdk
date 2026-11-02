@@ -1,5 +1,9 @@
 name: CI
 description: Format check, vet, vulnerability check and test the Go module
+inputs:
+  vulncheck:
+    description: "Run govulncheck. The release job turns it off so a CVE published after merge doesn't fail a release."
+    default: 'true'
 
 runs:
   using: composite
@@ -24,6 +28,7 @@ runs:
       run: make build
 
     - name: Vulnerability check
+      if: inputs.vulncheck == 'true'
       shell: bash
       run: make vulncheck
 

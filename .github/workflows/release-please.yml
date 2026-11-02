@@ -32,5 +32,7 @@ jobs:
         with:
           ref: ${{ needs.release-please.outputs.tag-name }}
       - uses: ./.github/actions/ci
+        with:
+          vulncheck: 'false'
       - name: Publish to the Go module proxy
         run: curl -sSf "https://proxy.golang.org/github.com/launchdarkly/go-ai-sdk/@v/${{ needs.release-please.outputs.tag-name }}.info"
