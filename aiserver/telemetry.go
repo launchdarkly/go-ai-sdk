@@ -106,7 +106,18 @@ const (
 	// ldContextValue holds the typed context alongside the template map; Go
 	// templates need a map but identity needs the typed ldcontext.Context.
 	varLDContextTyped = "__ldContextTyped"
+	// varLDSpanAttributes holds extra root span attributes. Its unexported
+	// type means template variables cannot set it.
+	varLDSpanAttributes = "__ldSpanAttributes"
 )
+
+type spanAttributes []attribute.KeyValue
+
+// varLDNoFlagEvent marks a run whose root span gets no feature_flag event.
+// Its unexported value type keeps template variables from setting it.
+const varLDNoFlagEvent = "__ldNoFlagEvent"
+
+type noFlagEvent struct{}
 
 // SetLDSpanAttributes writes the LaunchDarkly config-association and context
 // identity attributes on a handler's root span from variables. Without an
@@ -119,13 +130,21 @@ func SetLDSpanAttributes(span trace.Span, variables map[string]any) {
 		return
 	}
 	c, _ := variables[varLDContextTyped].(ldcontext.Context)
-	SetLDSpanAttributesFor(span, td, c)
+	_, skipFlagEvent := variables[varLDNoFlagEvent].(noFlagEvent)
+	setLDSpanAttributes(span, td, c, !skipFlagEvent)
+	if extra, ok := variables[varLDSpanAttributes].(spanAttributes); ok {
+		span.SetAttributes(extra...)
+	}
 }
 
 // SetLDSpanAttributesFor writes the same attributes for a span that has no
 // handler variables, such as a native graph runner's graph span. A zero
 // Context writes no identity.
 func SetLDSpanAttributesFor(span trace.Span, td TrackData, userCtx ldcontext.Context) {
+	setLDSpanAttributes(span, td, userCtx, true)
+}
+
+func setLDSpanAttributes(span trace.Span, td TrackData, userCtx ldcontext.Context, flagEvent bool) {
 	attrs := []attribute.KeyValue{
 		attribute.String("launchdarkly.operation.type", "gen_ai"),
 		attribute.String("launchdarkly.config.key", td.ConfigKey),
@@ -153,5 +172,7 @@ func SetLDSpanAttributesFor(span trace.Span, td TrackData, userCtx ldcontext.Con
 		}
 	}
 	span.SetAttributes(attrs...)
-	span.AddEvent("feature_flag", trace.WithAttributes(eventAttrs...))
+	if flagEvent {
+		span.AddEvent("feature_flag", trace.WithAttributes(eventAttrs...))
+	}
 }
