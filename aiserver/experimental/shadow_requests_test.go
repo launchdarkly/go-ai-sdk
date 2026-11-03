@@ -1166,3 +1166,22 @@ func TestDeferredTaskKeepsUnmodeledVariationFields(t *testing.T) {
 		}
 	}
 }
+
+func TestSamplingRateOfOneOrMoreAlwaysRuns(t *testing.T) {
+	for _, rate := range []float64{1, 1.5} {
+		for i := 0; i < 1000; i++ {
+			if !inSample("shadow-1", ldcontext.New(fmt.Sprintf("u%d", i)), rate) {
+				t.Fatalf("rate %v skipped u%d", rate, i)
+			}
+		}
+	}
+}
+
+func TestErrorWithoutAMessageIsNeverEmpty(t *testing.T) {
+	p := newPair()
+	_, task := deferredTask(t, p, ShadowOptions{})
+	p.b.err = errors.New("")
+	if res := RunShadow(context.Background(), task, p.handlers()); res.Error == "" {
+		t.Fatal("a failed shadow returned an empty error")
+	}
+}

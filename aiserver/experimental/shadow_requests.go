@@ -297,6 +297,9 @@ func inSample(shadowID string, c ldcontext.Context, samplingRate float64) bool {
 	if !ok {
 		return false
 	}
+	if samplingRate >= 1 {
+		return true
+	}
 	sum := sha1.Sum([]byte(shadowID + "." + canonical)) //nolint:gosec // a sampling bucket
 	n, _ := strconv.ParseUint(hex.EncodeToString(sum[:])[:15], 16, 64)
 	return float64(n)/bucketScale < samplingRate
@@ -404,7 +407,7 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 	}()
 	ctx = bridge.WithExactConversationID(ctx, task.ConversationID)
 	if err := ctx.Err(); err != nil {
-		res.Error = err.Error()
+		res.Error = errorText(err)
 		return res
 	}
 	h := handlerFor(task.Config, task.Meta, handlers)
@@ -441,7 +444,7 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 	resp, err := run.Invoke(ctx, task.UserInput, task.UserContext,
 		aiserver.WithVariables(vars), aiserver.WithHistory(copyHistory(task.History)))
 	if err != nil {
-		res.Error = err.Error()
+		res.Error = errorText(err)
 		return res
 	}
 	res.Usage = resp.Usage
@@ -542,6 +545,14 @@ func deepCopy(v any) any {
 		return out
 	}
 	return v
+}
+
+// errorText is never empty, so a worker that checks Error sees every failure.
+func errorText(err error) string {
+	if msg := err.Error(); msg != "" {
+		return msg
+	}
+	return fmt.Sprintf("%T", err)
 }
 
 // jsonCopy detaches m from the caller: a background shadow reads it after
