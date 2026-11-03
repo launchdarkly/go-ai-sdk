@@ -1181,7 +1181,40 @@ func TestErrorWithoutAMessageIsNeverEmpty(t *testing.T) {
 	p := newPair()
 	_, task := deferredTask(t, p, ShadowOptions{})
 	p.b.err = errors.New("")
-	if res := RunShadow(context.Background(), task, p.handlers()); res.Error == "" {
-		t.Fatal("a failed shadow returned an empty error")
+	if res := RunShadow(context.Background(), task, p.handlers()); res.Error != "error" {
+		t.Fatalf("error %q, want %q", res.Error, "error")
+	}
+}
+
+func TestFailedOrAbandonedServedCallHandsOverNoTask(t *testing.T) {
+	install(t, fallthroughPayload(), ldreason.NewEvalReasonFallthrough())
+	p := newPair()
+	var tasks []ShadowTask
+	s := mustShadow(t, p.handlers(), ShadowOptions{OnTask: func(task ShadowTask) { tasks = append(tasks, task) }})
+	for range s.Stream(context.Background(), "hello", shadowUser) {
+		break
+	}
+	p.a.err = errors.New("served failed")
+	if _, err := s.Invoke(context.Background(), "hello", shadowUser); err == nil {
+		t.Fatal("the served call should fail")
+	}
+	running.Wait()
+	if len(tasks) != 0 || p.b.count() != 0 {
+		t.Fatalf("tasks %d, shadow calls %d", len(tasks), p.b.count())
+	}
+}
+
+func TestShadowWithMalformedToolsStillRuns(t *testing.T) {
+	payload := fallthroughPayload()
+	variation := payload["shadowConfiguration"].(map[string]any)["variations"].(map[string]any)["claude-candidate"].(map[string]any)
+	variation["tools"] = "not-a-tools-map"
+	install(t, payload, ldreason.NewEvalReasonFallthrough())
+	p := newPair()
+	invokeAndWait(t, mustShadow(t, p.handlers(), ShadowOptions{}))
+	if p.b.count() != 1 {
+		t.Fatalf("shadow calls %d", p.b.count())
+	}
+	if _, ok := p.b.last().Config.Raw["tools"]; ok {
+		t.Fatal("the shadow kept tools")
 	}
 }

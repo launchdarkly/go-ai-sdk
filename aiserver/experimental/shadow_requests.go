@@ -552,7 +552,7 @@ func errorText(err error) string {
 	if msg := err.Error(); msg != "" {
 		return msg
 	}
-	return fmt.Sprintf("%T", err)
+	return "error"
 }
 
 // jsonCopy detaches m from the caller: a background shadow reads it after
