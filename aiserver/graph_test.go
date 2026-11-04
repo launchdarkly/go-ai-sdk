@@ -291,7 +291,7 @@ func TestGraphResolvesEachCallAndIsolation(t *testing.T) {
 	}
 }
 
-// A reused Graph sees flag changes, including the kill switch, on the next call (TESTING.md §3.11).
+// A reused Graph sees flag changes, including the kill switch, on the next call.
 func TestGraphSeesFlagChanges(t *testing.T) {
 	f := withFake(t, map[string]any{"g": map[string]any{"root": "only"}, "only": nodeCfg("v1")})
 	rh := &recordingHandler{}
@@ -386,9 +386,9 @@ func TestGraphModelSelectedHandoff(t *testing.T) {
 	}
 }
 
-// The routing text is pinned byte-for-byte by TESTING.md §3.15a and must match
-// the TypeScript and Python SDKs (AIC-3601). The literals are spelled out here
-// on purpose: building them from the production constants would not catch drift.
+// The routing text must match the TypeScript and Python SDKs byte-for-byte.
+// The literals are spelled out here on purpose: building them from the
+// production constants would not catch drift.
 const (
 	wantRoutingSuffix  = "\n\nComplete your task using your available tools first. Only once your own part is done, call exactly one transfer tool to route to the next agent. Do not answer the parts of the request that belong to the agent you route to."
 	wantBillingHandoff = "Handoff to billing-team recorded. billing-team takes over when your turn ends. Finish your own part, then end your turn. Do not answer for billing-team."

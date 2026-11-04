@@ -115,8 +115,8 @@ to pre-warm.
 |---|---|
 | `github.com/launchdarkly/go-ai-sdk/aiserver` | Handler contract, prompt composition, span helpers, graph definition, tracking. |
 | `github.com/launchdarkly/go-ai-sdk/internal/langchainwire` | `llms` plumbing shared with `langchainmessages`. |
-| `github.com/launchdarkly/go-ai-sdk/llms` | `llms.Model`, message and tool types, built-in models (routed via langchainwire). Replaces langchaingo (AIC-3609). |
-| `github.com/launchdarkly/go-ai-sdk/internal/stategraph` | `Graph`, `Command`, `END`: the state-graph runner (replaces langgraphgo, AIC-3609). |
+| `github.com/launchdarkly/go-ai-sdk/llms` | `llms.Model`, message and tool types, built-in models (routed via langchainwire). Replaces langchaingo. |
+| `github.com/launchdarkly/go-ai-sdk/internal/stategraph` | `Graph`, `Command`, `END`: the state-graph runner (replaces langgraphgo). |
 | `github.com/google/uuid` | Per-run id for graph tracking. |
 | `go.opentelemetry.io/otel` | `ld.ai.graph` span. |
 | `github.com/launchdarkly/go-sdk-common/v3/ldcontext` | Context arguments. |
