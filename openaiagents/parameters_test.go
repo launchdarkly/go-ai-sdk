@@ -87,6 +87,7 @@ func TestNestedParameters(t *testing.T) {
 		{"reasoning not an object", map[string]any{"reasoning": "low"}, "reasoning", nil},
 		{"tool_choice string", map[string]any{"tool_choice": "required"}, "tool_choice", "required"},
 		{"tool_choice object", map[string]any{"tool_choice": map[string]any{"type": "function", "name": "a"}}, "tool_choice", nil},
+		{"store false", map[string]any{"store": false}, "store", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, p := range paths {
