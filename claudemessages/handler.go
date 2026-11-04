@@ -96,38 +96,86 @@ func ClaudeMessages(ctx context.Context, configKey, userInput string, userCtx ld
 	}).Invoke(ctx, userInput, userCtx, aiserver.WithVariables(opts.Variables))
 }
 
-// forwardedParameters are the config.model.parameters keys sent verbatim: the
-// JavaScript handler's allowlist (claude-messages FORWARDED_MODEL_PARAMETER_KEYS).
-// Handler-owned fields (model, messages, system, tools, max_tokens) and stream,
-// which would fight the method the handler calls, are deliberately absent.
-var forwardedParameters = []string{
-	"cache_control", "container", "inference_geo", "metadata", "output_config", "service_tier",
-	"stop_sequences", "temperature", "thinking", "tool_choice", "top_k", "top_p",
+// forwardedParameters are the config.model.parameters keys sent as given; the
+// typed objects in typedShapes and output_config are rebuilt, and everything
+// else is dropped. Handler-owned fields (model, messages, system, tools,
+// max_tokens) and stream are deliberately absent, as are deployment settings:
+// container and inference_geo (server-side state and data location) and
+// metadata (attribution).
+var forwardedParameters = []string{"service_tier", "stop_sequences", "temperature", "top_k", "top_p"}
+
+// shape lists the sub-keys, besides type, of one variant of a typed object.
+type shape struct{ required, optional []string }
+
+// typedShapes are the variants anthropic-sdk-go declares for each typed object
+// (ThinkingConfigParamUnion, ToolChoiceUnionParam, CacheControlEphemeralParam),
+// except thinking between_tools, which is not forwarded.
+var typedShapes = map[string]map[string]shape{
+	"thinking": {
+		"enabled":  {required: []string{"budget_tokens"}, optional: []string{"display"}},
+		"adaptive": {optional: []string{"display"}},
+		"disabled": {},
+	},
+	"tool_choice": {
+		"auto": {optional: []string{"disable_parallel_tool_use"}},
+		"any":  {optional: []string{"disable_parallel_tool_use"}},
+		"tool": {required: []string{"name"}, optional: []string{"disable_parallel_tool_use"}},
+		"none": {},
+	},
+	"cache_control": {
+		"ephemeral": {optional: []string{"ttl"}},
+	},
 }
 
-// modelParameters picks the forwarded parameters, after moving a top-level
-// effort (the LaunchDarkly UI's shape) into output_config.effort (the Messages
-// API's). An explicit output_config.effort wins over the moved value.
-func modelParameters(params map[string]any) map[string]any {
-	in := params
-	if effort, ok := params["effort"]; ok && effort != nil {
-		in = make(map[string]any, len(params))
-		for k, v := range params {
-			in[k] = v
-		}
-		merged := map[string]any{"effort": effort}
-		if oc, ok := params["output_config"].(map[string]any); ok {
-			for k, v := range oc {
-				merged[k] = v
-			}
-		}
-		in["output_config"] = merged
+// rebuildTyped returns v with only the sub-keys its type takes. ok is false
+// when v is not an object, its type is missing or unknown, or a required
+// sub-key is missing: the API rejects all of those.
+func rebuildTyped(v any, shapes map[string]shape) (out map[string]any, ok bool) {
+	m, _ := v.(map[string]any)
+	typ, _ := m["type"].(string)
+	s, known := shapes[typ]
+	if !known {
+		return nil, false
 	}
+	out = map[string]any{"type": typ}
+	for _, k := range s.required {
+		if m[k] == nil {
+			return nil, false
+		}
+		out[k] = m[k]
+	}
+	for _, k := range s.optional {
+		if m[k] != nil {
+			out[k] = m[k]
+		}
+	}
+	return out, true
+}
+
+// modelParameters picks the forwarded parameters. output_config keeps only a
+// string effort: format is structured output, which the handler owns through
+// outputFormat. A top-level effort (the LaunchDarkly UI's shape) moves into
+// output_config.effort, and an explicit output_config.effort wins.
+func modelParameters(params map[string]any) map[string]any {
 	out := map[string]any{}
 	for _, k := range forwardedParameters {
-		if v, ok := in[k]; ok && v != nil {
+		if v, ok := params[k]; ok && v != nil {
 			out[k] = v
 		}
+	}
+	for k, shapes := range typedShapes {
+		if v, ok := rebuildTyped(params[k], shapes); ok {
+			out[k] = v
+		}
+	}
+	effort, hasEffort := params["effort"].(string)
+	if oc, ok := params["output_config"].(map[string]any); ok {
+		if e, ok := oc["effort"].(string); ok {
+			effort, hasEffort = e, true
+		}
+	}
+	if hasEffort {
+		out["output_config"] = map[string]any{"effort": effort}
 	}
 	return out
 }

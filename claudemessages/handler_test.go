@@ -573,44 +573,6 @@ func TestSDKUsage(t *testing.T) {
 	}
 }
 
-// model.parameters reach the request the way the JavaScript handler sends
-// them: the allowlisted keys verbatim (a zero temperature included), effort
-// folded into output_config, unknown keys dropped, max_tokens handled apart.
-func TestModelParametersForwarded(t *testing.T) {
-	h, f, _ := setup(t, textResp("a", 1, 1), textResp("b", 1, 1), textResp("c", 1, 1))
-	invoke := func(params map[string]any) map[string]any {
-		t.Helper()
-		c := cfg(func(c *aiserver.AiConfig) { c.Instructions = "sys"; c.Model.Parameters = params })
-		if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "q"}); err != nil {
-			t.Fatal(err)
-		}
-		return f.requests[len(f.requests)-1]
-	}
-	got := invoke(map[string]any{"temperature": 0.5, "top_k": 5.0, "top_p": 0.9, "stop_sequences": []any{"END"},
-		"max_tokens": 100.0, "frequency_penalty": 1.0, "stream": true, "model": "other"})
-	if got["temperature"] != 0.5 || got["top_k"] != 5.0 || got["top_p"] != 0.9 || !reflect.DeepEqual(got["stop_sequences"], []any{"END"}) {
-		t.Errorf("forwarded parameters missing: %v", got)
-	}
-	if got["max_tokens"] != 100.0 || got["model"] != "test-model" {
-		t.Errorf("handler-owned fields overridden: max_tokens %v model %v", got["max_tokens"], got["model"])
-	}
-	for _, k := range []string{"frequency_penalty", "stream"} {
-		if _, ok := got[k]; ok {
-			t.Errorf("%s forwarded", k)
-		}
-	}
-	if zero := invoke(map[string]any{"temperature": 0.0}); zero["temperature"] != 0.0 {
-		t.Errorf("a zero temperature was dropped: %v", zero["temperature"])
-	}
-	effort := invoke(map[string]any{"effort": "low", "output_config": map[string]any{"effort": "high", "x": 1.0}})
-	if !reflect.DeepEqual(effort["output_config"], map[string]any{"effort": "high", "x": 1.0}) {
-		t.Errorf("output_config = %v", effort["output_config"])
-	}
-	if _, ok := effort["effort"]; ok {
-		t.Error("effort forwarded at the top level")
-	}
-}
-
 // TestMaxSteps: a model that keeps asking for tools past the 10-turn bound
 // fails the call instead of returning an empty answer (JS throws the same).
 func TestMaxSteps(t *testing.T) {

@@ -128,7 +128,10 @@ Behavior:
 - `outputFormat` is sent as `text.format` (`type: json_schema`, `name: output`, `strict: false`) on
   every blocking call. Follow-up tool turns chain with `previous_response_id` and re-send
   `tools` and `text`, which the Responses API does not carry over. Streaming ignores `outputFormat`.
-- Allowlisted `model.parameters` keys (for example `temperature`, `top_p`, `store`, `reasoning`)
-  are forwarded. `max_tokens` and `max_completion_tokens` are renamed to `max_output_tokens`.
+- These `model.parameters` keys are forwarded: `max_output_tokens`, `max_tool_calls`,
+  `parallel_tool_calls`, `prompt_cache_key`, `reasoning`, `service_tier`, `temperature`,
+  `tool_choice`, `top_logprobs`, `top_p`. Any other key is dropped. `max_tokens` and
+  `max_completion_tokens` are renamed to `max_output_tokens`. `reasoning` keeps only `effort` and
+  `summary`, and `tool_choice` must be a string or an object with a string `type`.
 - Usage is returned as `input_tokens` / `output_tokens` summed over all turns. OpenAI's input count
   already includes cached tokens.

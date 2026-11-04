@@ -161,8 +161,8 @@ Behavior:
   value is returned. Unparseable output is returned as the raw string. Streaming ignores
   `outputFormat`.
 - Forwarded `model.parameters`: `temperature`, `top_p`, `max_output_tokens` (also from
-  `max_tokens` / `max_completion_tokens`), `parallel_tool_calls`, `tool_choice`, `reasoning`,
-  `store`, `truncation`, `prompt_cache_retention`, `context_management`, and `verbosity` (or
+  `max_tokens` / `max_completion_tokens`), `parallel_tool_calls`, `tool_choice` (a string only),
+  `reasoning` (`effort` and `summary` only), and `verbosity` (or
   `text.verbosity`, which wins) as `text.verbosity`. `max_turns` caps the run. camelCase spellings
   (`topP`, `maxTokens`) are accepted; the snake_case key wins when both are set.
 - Usage is `input_tokens` / `output_tokens` summed over every turn (OpenAI input already includes
