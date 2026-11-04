@@ -91,12 +91,22 @@ func TestInitReportsHelperUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = aiserver.Shutdown(context.Background()) })
+	// A failing Init still reports: usage comes before every check.
+	t.Setenv("LD_PROJECT_KEY", "")
+	t.Setenv("LD_API_TOKEN", "")
+	if _, err := Init(Options{}); !errors.Is(err, ErrMissingCredential) {
+		t.Fatalf("err = %v, want ErrMissingCredential", err)
+	}
+	if len(u.helpers) != 1 || u.helpers[0] != "experimental.initEvaluations" {
+		t.Fatalf("usage helpers after a failing Init = %v", u.helpers)
+	}
+	// The helper is reported once per process.
 	t.Setenv("LD_PROJECT_KEY", "proj")
 	t.Setenv("LD_API_TOKEN", "tok")
 	if _, err := Init(Options{}); err != nil {
 		t.Fatal(err)
 	}
-	if len(u.helpers) != 1 || u.helpers[0] != "experimental.initEvaluations" {
+	if len(u.helpers) != 1 {
 		t.Fatalf("usage helpers = %v", u.helpers)
 	}
 }
