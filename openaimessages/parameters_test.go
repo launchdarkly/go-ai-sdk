@@ -30,7 +30,8 @@ var allowed = map[string]any{
 }
 
 // request runs one turn with params through Invoke or Stream and returns the
-// request body, without the stream flag that tells the two apart.
+// request body. On Stream it checks the handler kept stream true, then
+// removes it so the two paths compare equal.
 func request(t *testing.T, params map[string]any, stream bool, edit func(*aiserver.HandlerRequest)) map[string]any {
 	t.Helper()
 	resp := textResp("ok", 1, 1)
@@ -52,7 +53,12 @@ func request(t *testing.T, params map[string]any, stream bool, edit func(*aiserv
 		t.Fatal(err)
 	}
 	body := f.requests[0]
-	delete(body, "stream")
+	if stream {
+		if body["stream"] != true {
+			t.Errorf("stream = %v, want the handler's true", body["stream"])
+		}
+		delete(body, "stream")
+	}
 	return body
 }
 

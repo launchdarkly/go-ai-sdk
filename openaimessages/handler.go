@@ -113,9 +113,9 @@ func toInput(p aiserver.Prompt) responses.ResponseInputParam {
 // tools, previous_response_id, text) and ones that would break the call
 // (stream, background, conversation, prompt) are deliberately absent, as are
 // instructions (prompt content), store, prompt_cache_retention, truncation and
-// context_management (data retention and server-side state), include and
-// moderation (they change what comes back), and metadata, user and
-// safety_identifier (identity and attribution).
+// context_management (data retention and server-side state), include (it
+// changes what comes back), moderation (safety configuration), and metadata,
+// user and safety_identifier (identity and attribution).
 var forwardedParameters = []string{
 	"max_output_tokens", "max_tool_calls", "parallel_tool_calls", "prompt_cache_key", "reasoning",
 	"service_tier", "temperature", "tool_choice", "top_logprobs", "top_p",
