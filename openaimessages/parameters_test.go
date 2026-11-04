@@ -189,7 +189,9 @@ func TestHandlerOwnedParametersWin(t *testing.T) {
 		tools, _ := body["tools"].([]any)
 		input, _ := body["input"].([]any)
 		_, hasInstructions := body["instructions"]
-		if body["model"] != "test-model" || hasInstructions || len(input) == 0 ||
+		turns := inputTurns(body)
+		if body["model"] != "test-model" || hasInstructions || len(input) != 2 ||
+			turns[0] != (turn{"system", "sys"}) || turns[1] != (turn{"user", "q"}) ||
 			len(tools) != 1 || tools[0].(map[string]any)["name"] != "a" {
 			t.Errorf("%s: handler-owned fields overridden: %v", p.name, body)
 		}

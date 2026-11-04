@@ -132,6 +132,7 @@ Behavior:
   `parallel_tool_calls`, `prompt_cache_key`, `reasoning`, `service_tier`, `temperature`,
   `tool_choice`, `top_logprobs`, `top_p`. Any other key is dropped. `max_tokens` and
   `max_completion_tokens` are renamed to `max_output_tokens`. `reasoning` keeps only `effort` and
-  `summary`, and `tool_choice` must be a string or an object with a string `type`.
+  `summary`, and `tool_choice` must be a string or an object with a string `type`. `store` (including
+  `store: false`) is not forwarded: set response retention in your OpenAI project instead.
 - Usage is returned as `input_tokens` / `output_tokens` summed over all turns. OpenAI's input count
   already includes cached tokens.
