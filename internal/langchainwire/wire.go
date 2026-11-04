@@ -1,4 +1,4 @@
-// Package langchainwire is the langchaingo plumbing shared by the LangChain
+// Package langchainwire is the llms plumbing shared by the LangChain
 // handlers (langchainmessages, langchainagents): model routing by provider,
 // prompt and tool conversion, call options, usage extraction, one model turn
 // (blocking or streamed) and one tool execution.
@@ -14,13 +14,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
-	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/llms/anthropic"
-	"github.com/tmc/langchaingo/llms/bedrock"
-	"github.com/tmc/langchaingo/llms/openai"
-
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
 var (
@@ -53,16 +48,6 @@ func ModelConfig(cfg aiserver.AiConfig) aiserver.AiConfig {
 	return cfg
 }
 
-// MarkExplicitZeroTemperature marks ctx when params sets temperature to 0,
-// so the Bedrock client middleware can restore the value langchaingo drops.
-// Call it before deriving span or model contexts from ctx.
-func MarkExplicitZeroTemperature(ctx context.Context, params map[string]any) context.Context {
-	if t, ok := Number(params["temperature"]); ok && t == 0 {
-		return withExplicitZeroTemperature(ctx)
-	}
-	return ctx
-}
-
 // ResolveModel returns model when set, else factory(cfg) when set, else the
 // built-in route for cfg's provider (DefaultModel). A non-nil schema binds
 // OpenAI's json_schema response format on the built-in route.
@@ -83,32 +68,22 @@ func ResolveModel(ctx context.Context, model llms.Model, factory func(aiserver.A
 	return DefaultModel(ctx, cfg, schema)
 }
 
-// DefaultModel builds a langchaingo model from config.provider.name:
-// "anthropic", "bedrock", or OpenAI for anything else. A non-nil schema binds
-// OpenAI's json_schema response format.
-func DefaultModel(ctx context.Context, cfg aiserver.AiConfig, schema map[string]any) (llms.Model, error) {
+// DefaultModel builds a model from config.provider.name: "anthropic",
+// "bedrock", or OpenAI Chat Completions for anything else (also any
+// OpenAI-compatible endpoint, through OPENAI_BASE_URL). A non-nil schema binds
+// OpenAI's json_schema response format, sent verbatim.
+func DefaultModel(_ context.Context, cfg aiserver.AiConfig, schema map[string]any) (llms.Model, error) {
 	var (
 		m   llms.Model
 		err error
 	)
-	switch p := ProviderName(cfg); p {
+	switch ProviderName(cfg) {
 	case "anthropic":
-		m, err = anthropic.New(anthropic.WithModel(cfg.Model.Name))
+		m, err = llms.NewAnthropic(llms.AnthropicOptions{Model: cfg.Model.Name})
 	case "bedrock":
-		var client *bedrockruntime.Client
-		if client, err = newBedrockClient(ctx); err == nil {
-			m, err = bedrock.NewWithContext(ctx, bedrock.WithModel(cfg.Model.Name), bedrock.WithClient(client))
-		}
+		m, err = llms.NewBedrock(llms.BedrockOptions{Model: cfg.Model.Name})
 	default:
-		opts := []openai.Option{openai.WithModel(cfg.Model.Name)}
-		if schema != nil {
-			rf, rerr := responseFormat(schema)
-			if rerr != nil {
-				return nil, rerr
-			}
-			opts = append(opts, openai.WithResponseFormat(rf))
-		}
-		m, err = openai.New(opts...)
+		m, err = llms.NewOpenAI(llms.OpenAIOptions{Model: cfg.Model.Name, JSONSchema: schema})
 	}
 	if err != nil {
 		return nil, fmt.Errorf("langchain: build %s model: %w", ProviderName(cfg), err)
@@ -116,23 +91,7 @@ func DefaultModel(ctx context.Context, cfg aiserver.AiConfig, schema map[string]
 	return m, nil
 }
 
-// responseFormat converts a raw JSON Schema into langchaingo's typed OpenAI
-// json_schema response format.
-// Known limitation: the typed struct drops JSON Schema keywords it has no field for
-// (anyOf, format, ...); pass a ModelFactory to send a schema verbatim.
-func responseFormat(schema map[string]any) (*openai.ResponseFormat, error) {
-	b, err := json.Marshal(schema)
-	if err != nil {
-		return nil, fmt.Errorf("langchain: encode outputFormat: %w", err)
-	}
-	var prop openai.ResponseFormatJSONSchemaProperty
-	if err := json.Unmarshal(b, &prop); err != nil {
-		return nil, fmt.Errorf("langchain: outputFormat is not a supported JSON Schema: %w", err)
-	}
-	return &openai.ResponseFormat{Type: "json_schema", JSONSchema: &openai.ResponseFormatJSONSchema{Name: "output", Schema: &prop}}, nil
-}
-
-// ToParts maps one message's content to langchaingo parts.
+// ToParts maps one message's content to llms parts.
 func ToParts(m aiserver.Message) []llms.ContentPart {
 	if m.Blocks == nil {
 		return []llms.ContentPart{llms.TextContent{Text: m.Text}}
@@ -143,8 +102,8 @@ func ToParts(m aiserver.Message) []llms.ContentPart {
 		case b.Type == "text":
 			parts = append(parts, llms.TextContent{Text: b.Text})
 		case b.Type == "image" && b.Source != nil && b.Source.Type == "base64":
-			// BinaryContent is the image form every langchaingo provider
-			// accepts; OpenAI renders it as a data: image_url.
+			// BinaryContent is the image form every built-in model accepts;
+			// OpenAI sends it as a data: image_url.
 			data, err := base64.StdEncoding.DecodeString(b.Source.Data)
 			if err != nil {
 				parts = append(parts, llms.ImageURLContent{URL: aiserver.ImageURL(*b.Source)})
@@ -158,7 +117,7 @@ func ToParts(m aiserver.Message) []llms.ContentPart {
 	return parts
 }
 
-// ToMessages maps a composed prompt to langchaingo messages: a system
+// ToMessages maps a composed prompt to llms messages: a system
 // message when System is set, then one message per turn.
 func ToMessages(p aiserver.Prompt) []llms.MessageContent {
 	out := make([]llms.MessageContent, 0, len(p.Turns)+1)
@@ -175,7 +134,7 @@ func ToMessages(p aiserver.Prompt) []llms.MessageContent {
 	return out
 }
 
-// FunctionTool is a langchaingo function tool definition.
+// FunctionTool is an llms function tool definition.
 func FunctionTool(name, description string, parameters map[string]any) llms.Tool {
 	return llms.Tool{Type: "function", Function: &llms.FunctionDefinition{Name: name, Description: description, Parameters: parameters}}
 }
@@ -217,7 +176,7 @@ func Number(v any) (float64, bool) {
 }
 
 // CallOptions maps the documented common config.model.parameters to
-// langchaingo call options. config.model.custom is never read.
+// llms call options. config.model.custom is never read.
 func CallOptions(params map[string]any) []llms.CallOption {
 	var out []llms.CallOption
 	num := func(keys ...string) (float64, bool) {
@@ -266,7 +225,7 @@ func CallOptions(params map[string]any) []llms.CallOption {
 }
 
 // choiceUsage reads token counts from a choice's GenerationInfo using the key
-// families langchaingo v0.1.15 writes: Anthropic (InputTokens, uncached),
+// families the built-in llms models write (langchaingo's key names): Anthropic (InputTokens, uncached),
 // OpenAI (PromptTokens, cache-inclusive) and Bedrock (input_tokens).
 func choiceUsage(info map[string]any) (aiserver.SpanUsage, bool) {
 	get := func(k string) float64 { v, _ := Number(info[k]); return v }
@@ -341,31 +300,10 @@ func FinishReason(resp *llms.ContentResponse) string {
 	return ""
 }
 
-// isToolCallChunk reports a streaming chunk that carries tool-call deltas
-// rather than text: langchaingo's OpenAI client passes the JSON-encoded
-// deltas to the same StreamingFunc as text.
-// Known limitation: a text delta that is itself a JSON array of {"function":...}
-// objects would be dropped; upgrade if langchaingo splits the callbacks.
-func isToolCallChunk(b []byte) bool {
-	if len(b) == 0 || b[0] != '[' {
-		return false
-	}
-	var calls []map[string]json.RawMessage
-	if json.Unmarshal(b, &calls) != nil || len(calls) == 0 {
-		return false
-	}
-	for _, c := range calls {
-		if _, ok := c["function"]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
 // IsEmptyResponse reports a model call that returned no content: this
-// package's ErrEmptyResponse or a langchaingo provider's.
+// package's ErrEmptyResponse or a model's llms.ErrEmptyResponse.
 func IsEmptyResponse(err error) bool {
-	return errors.Is(err, ErrEmptyResponse) || errors.Is(err, anthropic.ErrEmptyResponse) || errors.Is(err, openai.ErrEmptyResponse)
+	return errors.Is(err, ErrEmptyResponse) || errors.Is(err, llms.ErrEmptyResponse)
 }
 
 // Turn performs one model call. When onText is set it streams text chunks;
@@ -375,7 +313,7 @@ func Turn(ctx context.Context, model llms.Model, msgs []llms.MessageContent, opt
 	var streamed strings.Builder
 	if onText != nil {
 		opts = append(slices.Clone(opts), llms.WithStreamingFunc(func(_ context.Context, chunk []byte) error {
-			if len(chunk) == 0 || isToolCallChunk(chunk) {
+			if len(chunk) == 0 {
 				return nil
 			}
 			streamed.Write(chunk)

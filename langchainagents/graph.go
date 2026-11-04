@@ -12,8 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
-	"github.com/smallnest/langgraphgo/graph"
-	"github.com/tmc/langchaingo/llms"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -21,6 +19,8 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
+	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
+	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
 // LangChainGraph returns aiserver's model-driven graph runner with this
@@ -45,7 +45,7 @@ type NativeGraphOptions struct {
 	Context ldcontext.Context
 }
 
-// LangGraph runs a resolved graph as one langgraphgo StateGraph: one node
+// LangGraph runs a resolved graph as one stategraph.Graph: one node
 // per GraphNode, each a ReAct agent with its tools and a transfer_to_<key>
 // handoff tool per outgoing edge.
 type LangGraph struct {
@@ -53,7 +53,7 @@ type LangGraph struct {
 	opts NativeGraphOptions
 }
 
-// ToLangGraph translates def into a langgraphgo StateGraph runner.
+// ToLangGraph translates def into a stategraph runner.
 // opts may be nil. Errors for a nil, disabled or
 // rootless definition are returned by Invoke.
 func ToLangGraph(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *LangGraph {
@@ -74,8 +74,8 @@ func handoffToolName(targetKey string) string { return "transfer_to_" + sanitize
 
 // handoffCommand is a transfer_to_<target> tool's result: a Command routing
 // the graph to the target node.
-func handoffCommand(targetKey string) *graph.Command {
-	return &graph.Command{Goto: sanitizeName(targetKey)}
+func handoffCommand(targetKey string) *stategraph.Command {
+	return &stategraph.Command{Goto: sanitizeName(targetKey)}
 }
 
 // Invoke runs the graph from the root with input; variables fill each node's
@@ -176,10 +176,10 @@ func (r *graphRun) build(ctx context.Context) (stateGraph, error) {
 			}
 		}
 		name := sanitizeName(n.Key)
-		// StateGraph.AddNode replaces a node of the same name, and END is the
-		// langgraphgo stop sentinel, so either collision would misroute the run.
-		if prev, ok := names[name]; ok || name == graph.END {
-			return nil, fmt.Errorf("%w: graph %q: node %q is named %q, which is taken by %q", ErrNodeName, def.Key, n.Key, name, cmp.Or(prev, graph.END))
+		// Graph.AddNode replaces a node of the same name, and END is the
+		// stategraph stop sentinel, so either collision would misroute the run.
+		if prev, ok := names[name]; ok || name == stategraph.END {
+			return nil, fmt.Errorf("%w: graph %q: node %q is named %q, which is taken by %q", ErrNodeName, def.Key, n.Key, name, cmp.Or(prev, stategraph.END))
 		}
 		names[name] = n.Key
 		b.AddNode(name, n.Key, r.nodeFunc(n))
@@ -188,14 +188,14 @@ func (r *graphRun) build(ctx context.Context) (stateGraph, error) {
 			// the JavaScript and Python adapters.
 			b.AddEdge(name, sanitizeName(outgoing[0].TargetKey))
 		} else {
-			b.AddEdge(name, graph.END)
+			b.AddEdge(name, stategraph.END)
 		}
 		return nil, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	b.SetEntryPoint(sanitizeName(def.Root.Key)) // langgraphgo's START → root
+	b.SetEntryPoint(sanitizeName(def.Root.Key)) // the entry point is START → root
 	return b, nil
 }
 
@@ -263,7 +263,6 @@ func (r *graphRun) nodeFunc(n *aiserver.GraphNode) func(context.Context, any) (a
 		td := n.TrackData(r.g.def.Key, r.runID)
 		start := time.Now()
 		cfg := langchainwire.ModelConfig(n.Config)
-		ctx = langchainwire.MarkExplicitZeroTemperature(ctx, cfg.Model.Parameters)
 
 		in := messagesOf(state)
 		if n == r.g.def.Root {
@@ -303,7 +302,7 @@ func (r *graphRun) nodeFunc(n *aiserver.GraphNode) func(context.Context, any) (a
 		r.handoff(n, "$ld:ai:graph:handoff_success")
 		update := map[string]any{messagesKey: res.messages[len(in):]}
 		if res.next != "" {
-			return &graph.Command{Update: update, Goto: res.next}, nil
+			return &stategraph.Command{Update: update, Goto: res.next}, nil
 		}
 		return update, nil
 	}
@@ -386,7 +385,7 @@ func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.Too
 	}
 
 	chosen := "" // the first handoff in this node run wins
-	exec := func(ctx context.Context, tc llms.ToolCall) (llms.MessageContent, *graph.Command, error) {
+	exec := func(ctx context.Context, tc llms.ToolCall) (llms.MessageContent, *stategraph.Command, error) {
 		name := ""
 		if tc.FunctionCall != nil {
 			name = tc.FunctionCall.Name

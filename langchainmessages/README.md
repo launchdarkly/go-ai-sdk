@@ -1,9 +1,9 @@
 # langchainmessages
 
-LangChain messages handler for the LaunchDarkly AI SDK for Go, built on
-[langchaingo](https://github.com/tmc/langchaingo) (`github.com/tmc/langchaingo` v0.1.15).
-One handler serves any provider: it picks a langchaingo model from the AI Config's
-`provider.name`, or uses the model you inject.
+LangChain messages handler for the LaunchDarkly AI SDK for Go, built on the SDK's own
+[`llms`](../llms) package. LangChain publishes no official Go SDK, so this package does not
+depend on a community port. One handler serves any provider: it picks a built-in `llms` model
+from the AI Config's `provider.name`, or uses the model you inject.
 
 ```bash
 go get github.com/launchdarkly/go-ai-sdk/langchainmessages
@@ -55,9 +55,9 @@ func main() {
 Single handler with `aiserver.Config`, an injected model, and streaming:
 
 ```go
-import "github.com/tmc/langchaingo/llms/openai"
+import "github.com/launchdarkly/go-ai-sdk/llms"
 
-llm, err := openai.New() // reads OPENAI_API_KEY
+llm, err := llms.NewOpenAI(llms.OpenAIOptions{Model: "gpt-4o"}) // reads OPENAI_API_KEY
 if err != nil {
 	return err
 }
@@ -88,10 +88,14 @@ Build the model per request from the evaluated config:
 ```go
 h := langchainmessages.NewHandler(langchainmessages.Options{
 	ModelFactory: func(c aiserver.AiConfig) (llms.Model, error) {
-		return anthropic.New(anthropic.WithModel(c.Model.Name), anthropic.WithToken(key))
+		return llms.NewAnthropic(llms.AnthropicOptions{Model: c.Model.Name, APIKey: key})
 	},
 })
 ```
+
+Any type with `GenerateContent(ctx, []llms.MessageContent, ...llms.CallOption)` is a model. The
+`llms` names follow `github.com/tmc/langchaingo/llms`, so an existing langchaingo model can be
+wrapped in a short adapter that converts the messages and options.
 
 ## Model selection
 
@@ -99,11 +103,13 @@ h := langchainmessages.NewHandler(langchainmessages.Options{
 |---|---|
 | `Model` set | that `llms.Model` for every call |
 | `ModelFactory` set | `ModelFactory(config)` per call |
-| neither | built from lowercased `provider.name`: `anthropic` → `llms/anthropic`, `bedrock` → `llms/bedrock` (model id prefixed with `model.region`), anything else → `llms/openai` |
+| neither | built from lowercased `provider.name`: `anthropic` → `llms.NewAnthropic` (Messages API), `bedrock` → `llms.NewBedrock` (Converse API; model id prefixed with `model.region`), anything else → `llms.NewOpenAI` (Chat Completions, so any OpenAI-compatible endpoint works through `OPENAI_BASE_URL`) |
 
-`config.model.parameters` maps to langchaingo call options: `max_tokens`/`maxTokens`,
+`config.model.parameters` maps to `llms` call options: `max_tokens`/`maxTokens`,
 `temperature`, `top_p`/`topP`, `top_k`/`topK`, `seed`, `frequency_penalty`,
-`presence_penalty`, `stop`/`stop_sequences`. `config.model.custom` is never read.
+`presence_penalty`, `stop`/`stop_sequences`. An explicit `0` is sent, not dropped; an unset
+value is left to the provider's default. Bedrock sends `top_k` to Anthropic models only, as
+an additional model request field. `config.model.custom` is never read.
 
 ## Environment variables
 
@@ -112,11 +118,13 @@ h := langchainmessages.NewHandler(langchainmessages.Options{
 | `LD_SDK_KEY` | `aiserver` lazy init | Required unless you call `aiserver.InitWithClient` |
 | `ANTHROPIC_API_KEY` | built-in Anthropic model | Required for `provider.name = Anthropic` without an injected model |
 | `OPENAI_API_KEY` | built-in OpenAI model | Required for OpenAI / fallback providers without an injected model |
-| `OPENAI_BASE_URL` / `OPENAI_API_BASE` | built-in OpenAI model | Optional: OpenAI-compatible endpoint |
+| `OPENAI_BASE_URL` / `OPENAI_API_BASE` | built-in OpenAI model | Optional: OpenAI-compatible endpoint (`OPENAI_API_BASE` applies only when `OPENAI_BASE_URL` is unset) |
 | `OPENAI_ORGANIZATION` | built-in OpenAI model | Optional |
+| `OPENAI_MODEL` | built-in OpenAI model | Optional: model when the config names none (default `gpt-4o`) |
 | AWS credential chain (`AWS_REGION`, `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, ...) | built-in Bedrock model | Required for `provider.name = Bedrock` without an injected model |
 
-The package itself reads no environment variables; langchaingo and the core client do.
+The handler package reads no environment variables itself; the built-in `llms` models and the
+core client do.
 
 ## API reference
 

@@ -30,14 +30,14 @@ LaunchDarkly), `OTEL_EXPORTER_OTLP_ENDPOINT`, `LD_SERVICE_NAME`,
 | `graph-streaming` | `Graph().Stream` built inside a conversation scope and iterated after it; text on stdout, `[node_start]` / `[node_done]` / `[handoff]` on stderr; no JSON file | `travel-agent-flow` |
 | `graph-history` | `Graph().Invoke` with a generated image in history, two shapes; fails unless both answers name the colour | `travel-agent-flow` |
 | `native-graph` | `ResolveGraph` + `claudeagents.ToClaudeAgents` | `travel-agent-flow` |
-| `native-graph-langchain` | `ResolveGraph` + `langchainagents.ToLangGraph`: the graph runs as one langgraphgo `StateGraph` (community port); tracked for the example context | `travel-agent-flow` |
+| `native-graph-langchain` | `ResolveGraph` + `langchainagents.ToLangGraph`: the graph runs as one state graph on the SDK's own runner; tracked for the example context | `travel-agent-flow` |
 
 Failure cases exit 1 with one `Error: …` line, e.g.
 `go run ./examples agent doesnt-exist "hi"` and
 `go run ./examples graph travel-agent-flow-wrong-key "hi"`.
 
-`native-graph-langchain` runs on community ports (`langchaingo`, `langgraphgo`), not
-an official LangGraph; with a missing or disabled graph flag it exits 1 with
+`native-graph-langchain` runs on the SDK's own `llms` models and state-graph runner (there is
+no official LangChain for Go); with a missing or disabled graph flag it exits 1 with
 `ToLangGraph`'s `ErrGraphDisabled` error.
 
 ## Files
