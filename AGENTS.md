@@ -113,6 +113,7 @@ One module (`go.mod`); each package imports only what it needs.
 | `github.com/openai/openai-go/v3` | `openaimessages`, `openaiagents`, `llms` | OpenAI Responses API; Chat Completions in `llms` |
 | `github.com/aws/aws-sdk-go-v2` (+ `config`, `credentials`, `service/bedrockruntime`, `eventstream`), `github.com/aws/smithy-go` | `bedrockmessages`, `bedrockagents`, `llms` | Bedrock Converse / ConverseStream |
 | `golang.org/x/sys` | `internal/skills` | `*at()` filesystem calls for skill materialization |
+| `golang.org/x/text` | `internal/evaluations` | Unicode case folding for the tool key collision check |
 
 ## Common pitfalls
 
