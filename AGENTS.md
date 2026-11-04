@@ -8,7 +8,7 @@ where it leaves a detail open, the JavaScript SDK decides, then the Python SDK.
 
 ```
 Tier 0  aiserver                 core: no provider SDK imports
-        aiserver/experimental    experimental entry point (skills, evaluations)
+        aiserver/experimental    experimental entry point (skills, evaluations, shadow requests)
         internal/{bridge,trajectory,judging}   shared internals
 Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         claudeagents   openaiagents   bedrockagents

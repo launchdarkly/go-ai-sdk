@@ -8,6 +8,9 @@
 //   - Agent Skills (skills.go): version-pinned skill references on AI Configs,
 //     verified skill content from a SkillStore, materialization to disk, the
 //     FDv2 delivery transport, and a watcher that keeps disk in sync.
+//   - Evaluations from Code (evaluations.go).
+//   - Shadow requests (shadow_requests.go): ShadowConfig runs a candidate
+//     variation on the served call's input and tracks it without serving it.
 //
 // When a feature is promoted to core, its names here stay as deprecated
 // aliases of the aiserver names until the next major release.
