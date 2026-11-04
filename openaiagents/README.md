@@ -165,7 +165,6 @@ Behavior:
   `reasoning` (`effort` and `summary` only), and `verbosity` (or
   `text.verbosity`, which wins) as `text.verbosity`. `max_turns` caps the run. camelCase spellings
   (`topP`, `maxTokens`) are accepted; the snake_case key wins when both are set.
-  `store` (including `store: false`) is not forwarded, so the request uses the API's default for
-  `store`.
+  `store` (including `store: false`) is not forwarded; the handler never sets `store`.
 - Usage is `input_tokens` / `output_tokens` summed over every turn (OpenAI input already includes
   cached tokens).

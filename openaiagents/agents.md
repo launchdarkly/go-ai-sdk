@@ -117,9 +117,8 @@ the connection.
 
 ## Common pitfalls
 
-- **Follow-up turns rely on `previous_response_id`.** Tool loops and handoffs need OpenAI to
-  store each response. `store` in `model.parameters` is never forwarded, so a config cannot turn
-  storage off, and the request uses the API's default.
+- **Follow-up turns rely on `previous_response_id`.** `store` in `model.parameters`, including
+  `store: false`, is not forwarded; the handler never sets `store`.
 - **A `NativeTool`'s `ToolName` is the Responses API tool type** (`web_search`, `file_search`,
   ...), not the LD tool key. Hosted-tool settings such as `vector_store_ids` go in the config
   tool's `customParameters`.
