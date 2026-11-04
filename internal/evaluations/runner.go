@@ -124,14 +124,11 @@ func orNil(s *string) any {
 	return *s
 }
 
-func (r *runState) project() string { return segment(r.args.ProjectKey) }
+func (r *runState) project() string { return segment(r.m.projectKey) }
 
 // --- validation before any I/O ------------------------------------
 
 func (m *Module) prepare(a RunArgs) (*runState, error) {
-	if strings.TrimSpace(a.ProjectKey) == "" {
-		return nil, invalid("ProjectKey must not be blank")
-	}
 	if strings.TrimSpace(a.Key) == "" {
 		return nil, invalid("Key must not be blank")
 	}
@@ -259,7 +256,7 @@ func (r *runState) execute(ctx context.Context) (*EvalRunResult, error) {
 			return nil, err
 		}
 	}
-	em := newEmitter(r.client, r.m.flushBound, r.m.logger, r.args.ProjectKey, r.evaluationID, r.runID,
+	em := newEmitter(r.client, r.m.flushBound, r.m.logger, r.m.projectKey, r.evaluationID, r.runID,
 		r.evaluationKey, r.evalVersion, r.datasetID, r.datasetKey)
 	if err := r.runPhases(ctx, em); err != nil {
 		return nil, err
@@ -272,7 +269,7 @@ func (r *runState) execute(ctx context.Context) (*EvalRunResult, error) {
 		// A failed row is one LaunchDarkly ruled against its criteria, so it
 		// fails the gate as an error row does.
 		Passed: summary.ErrorRows == 0 && summary.FailedRows == 0,
-		URL: fmt.Sprintf("%s/projects/%s/ai/evaluations/%s/runs/%s", UIBaseURI, r.project(),
+		URL: fmt.Sprintf("%s/projects/%s/ai/evaluations/%s/runs/%s", r.m.uiBase, r.project(),
 			segment(r.evaluationID), segment(r.runID)),
 		RunID:   r.runID,
 		Summary: summary,
@@ -477,7 +474,7 @@ func generationFields(g *genResult) map[string]any {
 // --- evaluation phase ---------------------------------------------
 
 func (r *runState) resolveJudges(ctx context.Context) error {
-	lctx := ldcontext.NewBuilder(r.args.ProjectKey).Kind("evaluation").Build()
+	lctx := ldcontext.NewBuilder(r.m.projectKey).Kind("evaluation").Build()
 	var problems []string
 	for _, c := range r.criteria {
 		j, ok := c.(*Judge)
@@ -494,7 +491,7 @@ func (r *runState) resolveJudges(ctx context.Context) error {
 		}
 		if err != nil {
 			return fmt.Errorf("evaluations: %w: failed to resolve LaunchDarkly judge %q: %w; if the judge does not exist in project %q, create it in the LaunchDarkly UI and try again",
-				ErrJudgeResolution, j.key, err, r.args.ProjectKey)
+				ErrJudgeResolution, j.key, err, r.m.projectKey)
 		}
 		meta, _ := raw["_ldMeta"].(map[string]any)
 		rj := &resolvedJudge{}

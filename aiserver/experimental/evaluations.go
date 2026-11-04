@@ -12,9 +12,8 @@ import (
 // judges and scorers, reports each result to LaunchDarkly as a custom event,
 // and polls the run summary for the verdict:
 //
-//	evals, err := experimental.InitEvaluations(experimental.EvaluationsOptions{})
+//	evals, err := experimental.InitEvaluations(experimental.EvaluationsOptions{ProjectKey: "my-project"})
 //	res, err := evals.Run(ctx, experimental.EvaluationRunArgs{
-//		ProjectKey: "my-project",
 //		Key:        "support-bot-" + time.Now().Format("20060102-150405"),
 //		Dataset:    experimental.DatasetKey("support-questions"),
 //		Handler:    openaimessages.NewHandler(openaimessages.Options{}),
@@ -27,10 +26,11 @@ import (
 // Experimental.
 type Evaluations = evaluations.Module
 
-// EvaluationsOptions configure InitEvaluations: the API access token
-// (default LD_API_TOKEN), the SDK key (default LD_SDK_KEY), and the HTTP
-// client, timeout, attempts and logger of the management API client. The
-// API and UI hosts are fixed. Experimental.
+// EvaluationsOptions configure InitEvaluations: the project key (default
+// LD_PROJECT_KEY), the API access token (default LD_API_TOKEN), the SDK key
+// (default LD_SDK_KEY), the API and UI hosts (default LD_API_BASE_URI and
+// LD_UI_BASE_URI, then https://app.launchdarkly.com), and the HTTP client,
+// timeout, attempts and logger of the management API client. Experimental.
 type EvaluationsOptions = evaluations.Options
 
 // EvaluationRunArgs are the arguments to Evaluations.Run. Experimental.
@@ -127,8 +127,8 @@ var (
 	ErrEvalPollTimeout       = evaluations.ErrPollTimeout
 )
 
-// InitEvaluations resolves both credentials and returns the evaluations
-// module. It performs no network I/O. Experimental.
+// InitEvaluations resolves the project key and both credentials and returns
+// the evaluations module. It performs no network I/O. Experimental.
 func InitEvaluations(opts EvaluationsOptions) (*Evaluations, error) { return evaluations.Init(opts) }
 
 // NewJudge validates a judge reference. Thresholds default to 0.5 (row) and

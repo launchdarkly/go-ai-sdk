@@ -21,20 +21,22 @@ go get github.com/launchdarkly/go-ai-sdk/openaimessages   # or any handler packa
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `LD_API_TOKEN` | yes, unless `EvaluationsOptions.APIToken` | LaunchDarkly API access token; authorizes every management API request. Checked first. |
+| `LD_PROJECT_KEY` | yes, unless `EvaluationsOptions.ProjectKey` | The project holding the evaluations, runs, tools, datasets and judges. Checked first. |
+| `LD_API_TOKEN` | yes, unless `EvaluationsOptions.APIToken` | LaunchDarkly API access token; authorizes every management API request. Checked second. |
 | `LD_SDK_KEY` | yes, unless `EvaluationsOptions.SDKKey` or a client is already initialized (`aiserver.InitClient` / `InitWithClient`) | Server-side SDK key for the client that sends result events. When a client is already installed it is used and this key is ignored (with a warning). |
+| `LD_API_BASE_URI` | no | Management API host, unless `EvaluationsOptions.APIBaseURI`. Default `https://app.launchdarkly.com`. `LD_BASE_URI` is never used for it. |
+| `LD_UI_BASE_URI` | no | Host of the run link in the result, unless `EvaluationsOptions.UIBaseURI`. Default `https://app.launchdarkly.com`; not derived from the API host. |
 
 Handlers read their provider's own variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, AWS chain).
-Missing credentials fail `InitEvaluations` with `ErrEvalMissingCredential`, before any network I/O.
+A blank value counts as unset, and a trailing `/` on a host is stripped. A missing project key or credential fails `InitEvaluations` with `ErrEvalMissingCredential`, before any network I/O.
 
 ### Example
 
 ```go
-evals, err := experimental.InitEvaluations(experimental.EvaluationsOptions{}) // LD_API_TOKEN, LD_SDK_KEY
+evals, err := experimental.InitEvaluations(experimental.EvaluationsOptions{}) // LD_PROJECT_KEY, LD_API_TOKEN, LD_SDK_KEY
 if err != nil { log.Fatal(err) }
 judge, _ := experimental.NewJudge("accuracy", nil)
 res, err := evals.Run(ctx, experimental.EvaluationRunArgs{
-	ProjectKey: "my-project",
 	Key:        "support-bot-" + time.Now().Format("20060102-150405"), // unique per run
 	Dataset:    experimental.DatasetKey("support-questions"),
 	Handler:    openaimessages.NewHandler(openaimessages.Options{}),
@@ -62,7 +64,6 @@ if !res.Passed { os.Exit(1) }
 
 The SDK never computes a verdict: it reports scores, and LaunchDarkly rules on them against the
 thresholds pinned on the evaluation. `Passed` is true only when no row errored or failed.
-The management API host is fixed at `https://app.launchdarkly.com`.
 
 ### API reference
 
@@ -75,7 +76,7 @@ func NewScorer(name string, fn ScorerFunc, opts *ScorerOptions) (*Scorer, error)
 
 | Type | Key fields |
 | --- | --- |
-| `EvaluationsOptions` | `APIToken` (default `LD_API_TOKEN`), `SDKKey` (default `LD_SDK_KEY`), `HTTPClient` (default `http.DefaultClient`), `RequestTimeout` (30s per attempt), `MaxAttempts` (4), `Logger` |
+| `EvaluationsOptions` | `ProjectKey` (default `LD_PROJECT_KEY`), `APIToken` (default `LD_API_TOKEN`), `SDKKey` (default `LD_SDK_KEY`), `APIBaseURI` / `UIBaseURI` (default `LD_API_BASE_URI` / `LD_UI_BASE_URI`, then `https://app.launchdarkly.com`), `HTTPClient` (default `http.DefaultClient`), `RequestTimeout` (30s per attempt), `MaxAttempts` (4), `Logger` |
 | `EvalRunResult` | `Passed` (true iff the final summary has no error and no failed rows), `URL` (the run in the LaunchDarkly UI), `RunID`, `Summary` |
 | `RunSummary` | `TotalRows`, `PassedRows`, `FailedRows`, `ErrorRows`, `PendingRows` |
 

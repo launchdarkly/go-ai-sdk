@@ -22,13 +22,14 @@ func TestEvaluationsWrappersAreCallable(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = aiserver.Shutdown(ctx) })
+	t.Setenv("LD_PROJECT_KEY", "")
 	t.Setenv("LD_API_TOKEN", "")
 	t.Setenv("LD_SDK_KEY", "")
 
-	if _, err := experimental.InitEvaluations(experimental.EvaluationsOptions{}); !errors.Is(err, experimental.ErrEvalMissingCredential) {
+	if _, err := experimental.InitEvaluations(experimental.EvaluationsOptions{ProjectKey: "proj"}); !errors.Is(err, experimental.ErrEvalMissingCredential) {
 		t.Fatalf("no API token: %v", err)
 	}
-	evals, err := experimental.InitEvaluations(experimental.EvaluationsOptions{APIToken: "api-test", SDKKey: "sdk-test"})
+	evals, err := experimental.InitEvaluations(experimental.EvaluationsOptions{ProjectKey: "proj", APIToken: "api-test", SDKKey: "sdk-test"})
 	if err != nil || evals == nil || evals.SDKKey() != "sdk-test" {
 		t.Fatalf("InitEvaluations: %v %v", evals, err)
 	}

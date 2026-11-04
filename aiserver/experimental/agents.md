@@ -15,7 +15,7 @@ one-line constructors.
 | File | Responsibility |
 | --- | --- |
 | `evaluations.go` | Public aliases (`Evaluations`, `EvaluationRunArgs`, `GenerationConfig`, `InlineTool`, `Judge`, `Scorer`, …), `InitEvaluations`, `NewJudge`, `NewScorer`, `ErrEval*` sentinels. Sentinels carry an `Eval` prefix because `ErrInvalidArgument` is taken by skills. |
-| `../../internal/evaluations/api.go` | Management API client: fixed host, headers, retry policy (429 always; 5xx/transport only for GET/HEAD and idempotent POSTs), `Retry-After`, injectable sleep/jitter. |
+| `../../internal/evaluations/api.go` | Management API client: host resolved at init, headers, retry policy (429 always; 5xx/transport only for GET/HEAD and idempotent POSTs), `Retry-After`, injectable sleep/jitter. |
 | `.../types.go` | Public types, sentinel errors, criterion constructors and wire shapes. |
 | `.../validate.go` | Every pre-I/O check: pool, generation mode/coverage/prompt, tools, inline rows (strict JSON), criteria. Shared `selectHandler`. |
 | `.../steps.go` | Management API steps, in order: AI Config reads, tool and dataset resolution, record creation, inline upload/cancel, summary polling. |

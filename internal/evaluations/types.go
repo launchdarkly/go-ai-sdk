@@ -23,7 +23,7 @@ import (
 var (
 	// ErrInvalidArgument: a run argument failed validation before any I/O.
 	ErrInvalidArgument = errors.New("invalid argument")
-	// ErrMissingCredential: Init could not resolve LD_API_TOKEN or LD_SDK_KEY.
+	// ErrMissingCredential: Init could not resolve LD_PROJECT_KEY, LD_API_TOKEN or LD_SDK_KEY.
 	ErrMissingCredential = errors.New("missing credential")
 	// ErrNoClient: no LaunchDarkly client is available to emit result events.
 	ErrNoClient = errors.New("no LaunchDarkly client")
@@ -304,8 +304,6 @@ func validateThresholds(threshold, passRate float64) error {
 
 // RunArgs are the arguments to Module.Run.
 type RunArgs struct {
-	// ProjectKey is the project holding the evaluation, tools and dataset.
-	ProjectKey string
 	// Key names the evaluation Run creates. Every Run creates a new
 	// evaluation, so the key must be unique per run (e.g. timestamp-suffixed).
 	Key string

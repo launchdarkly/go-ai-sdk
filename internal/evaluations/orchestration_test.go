@@ -290,9 +290,9 @@ func TestPathSegmentsAreEncoded(t *testing.T) {
 	e.route("POST", runs, resp{body: map[string]any{"id": run, "evaluationId": ev, "state": "PENDING"}})
 	e.route("GET", runs+"/"+enc(run)+"/summary", resp{body: map[string]any{"total": 1, "passed": 1}})
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-	args.ProjectKey, args.Dataset = p, DatasetKey(ds)
+	args.Dataset = DatasetKey(ds)
 	args.Tools = map[string]aiserver.ToolHandler{tool: noopTool}
-	res := mustRun(t, e.module(), args)
+	res := mustRun(t, e.moduleWith(Options{ProjectKey: p}), args)
 	if !strings.HasSuffix(res.URL, "/projects/my%20proj/ai/evaluations/ev%2F1/runs/run%3F1") {
 		t.Fatalf("url %s", res.URL)
 	}
@@ -303,7 +303,7 @@ func TestPathSegmentsAreEncoded(t *testing.T) {
 	e2.route("POST", runs+"/"+enc(run)+"/dataset-rows", resp{status: 400})
 	e2.route("POST", runs+"/"+enc(run)+"/cancel", resp{status: 200})
 	args.Dataset, args.Tools = InlineRows{map[string]any{"input": "x"}}, nil
-	runErr(t, e2.module(), args, ErrUploadFailed)
+	runErr(t, e2.moduleWith(Options{ProjectKey: p}), args, ErrUploadFailed)
 	if e2.count("run%3F1/dataset-rows") != 1 || e2.count("run%3F1/cancel") != 1 {
 		t.Fatalf("encoded upload/cancel paths: %v", e2.sequence())
 	}

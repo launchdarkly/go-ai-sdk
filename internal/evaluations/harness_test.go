@@ -244,11 +244,16 @@ func (e *fakeEnv) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: status, Header: h, Body: io.NopCloser(bytes.NewReader(b)), Request: req}, nil
 }
 
-// module builds a Module over the fake transport with instant sleeps.
-func (e *fakeEnv) module() *Module {
+// module builds a Module for project "proj" over the fake transport with
+// instant sleeps.
+func (e *fakeEnv) module() *Module { return e.moduleWith(Options{ProjectKey: "proj"}) }
+
+// moduleWith is module with caller options; the transport and logger are set here.
+func (e *fakeEnv) moduleWith(opts Options) *Module {
 	e.t.Helper()
 	e.t.Setenv("LD_API_TOKEN", "api-token")
-	m, err := Init(Options{HTTPClient: &http.Client{Transport: e}, Logger: slog.New(slog.NewTextHandler(e.logs, nil))})
+	opts.HTTPClient, opts.Logger = &http.Client{Transport: e}, slog.New(slog.NewTextHandler(e.logs, nil))
+	m, err := Init(opts)
 	if err != nil {
 		e.t.Fatalf("Init: %v", err)
 	}
@@ -355,7 +360,7 @@ func gen() *GenerationConfig {
 // baseArgs is a valid hosted, generation-source run over one OpenAI
 // messages handler.
 func baseArgs(h *aiserver.ProviderHandler) RunArgs {
-	return RunArgs{ProjectKey: "proj", Key: "eval-key", Dataset: DatasetKey("ds"), Handler: h, Generation: gen(), PollTimeout: time.Second}
+	return RunArgs{Key: "eval-key", Dataset: DatasetKey("ds"), Handler: h, Generation: gen(), PollTimeout: time.Second}
 }
 
 // judgeVariation is what flag delivery serves for a judge.
