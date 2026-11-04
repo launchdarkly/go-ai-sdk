@@ -131,7 +131,7 @@ func (m *Anthropic) params(messages []MessageContent, o CallOptions) (anthropic.
 			return p, fmt.Errorf("llms: anthropic: role %q not supported", msg.Role)
 		}
 	}
-	if system.Len() > 0 {
+	if strings.TrimSpace(system.String()) != "" {
 		p.System = []anthropic.TextBlockParam{{Text: system.String()}}
 	}
 	if o.Temperature != nil {
@@ -202,7 +202,9 @@ func anthropicUserBlocks(parts []ContentPart) ([]anthropic.ContentBlockParamUnio
 	for _, part := range parts {
 		switch v := part.(type) {
 		case TextContent:
-			out = append(out, anthropic.NewTextBlock(v.Text))
+			if strings.TrimSpace(v.Text) != "" { // the Messages API rejects blank text blocks
+				out = append(out, anthropic.NewTextBlock(v.Text))
+			}
 		case BinaryContent:
 			out = append(out, anthropic.NewImageBlockBase64(v.MIMEType, base64.StdEncoding.EncodeToString(v.Data)))
 		case ImageURLContent:
@@ -228,7 +230,9 @@ func anthropicAssistantBlocks(parts []ContentPart) ([]anthropic.ContentBlockPara
 	for _, part := range parts {
 		switch v := part.(type) {
 		case TextContent:
-			out = append(out, anthropic.NewTextBlock(v.Text))
+			if strings.TrimSpace(v.Text) != "" { // the Messages API rejects blank text blocks
+				out = append(out, anthropic.NewTextBlock(v.Text))
+			}
 		case ToolCall:
 			if v.FunctionCall == nil {
 				return nil, fmt.Errorf("llms: anthropic: tool call %q has no function", v.ID)

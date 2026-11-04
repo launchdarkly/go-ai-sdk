@@ -113,6 +113,40 @@ func TestAnthropicMergesParallelToolResults(t *testing.T) {
 	}
 }
 
+func TestAnthropicDropsBlankText(t *testing.T) {
+	f, url := newFake(t, "application/json", anthropicReply)
+	msgs := []MessageContent{
+		{Role: ChatMessageTypeHuman, Parts: []ContentPart{TextContent{Text: ""}, TextContent{Text: "q"}}},
+		// Claude often returns a blank text block beside tool_use.
+		{Role: ChatMessageTypeAI, Parts: []ContentPart{
+			TextContent{Text: " \n"},
+			ToolCall{ID: "tu_1", FunctionCall: &FunctionCall{Name: "w", Arguments: `{}`}},
+		}},
+		{Role: ChatMessageTypeTool, Parts: []ContentPart{ToolCallResponse{ToolCallID: "tu_1", Content: "sunny"}}},
+	}
+	if _, err := newTestAnthropic(t, url).GenerateContent(bg, msgs); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range f.bodies[0]["messages"].([]any) {
+		for _, b := range m.(map[string]any)["content"].([]any) {
+			if b := b.(map[string]any); b["type"] == "text" && strings.TrimSpace(b["text"].(string)) == "" {
+				mb, _ := json.Marshal(f.bodies[0]["messages"])
+				t.Fatalf("blank text block sent: %s", mb)
+			}
+		}
+	}
+
+	// A blank system prompt is dropped too, as Bedrock does.
+	if _, err := newTestAnthropic(t, url).GenerateContent(bg, []MessageContent{
+		TextParts(ChatMessageTypeSystem, " "), TextParts(ChatMessageTypeHuman, "q"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if s, ok := f.bodies[1]["system"]; ok {
+		t.Errorf("blank system prompt sent: %v", s)
+	}
+}
+
 func TestAnthropicResponse(t *testing.T) {
 	_, url := newFake(t, "application/json", anthropicReply)
 	resp, err := newTestAnthropic(t, url).GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")})
