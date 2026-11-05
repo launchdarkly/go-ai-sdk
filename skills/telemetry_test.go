@@ -241,8 +241,11 @@ func TestMaterializedRevokedAndAllowlist(t *testing.T) {
 			}
 		}
 	}
-	if len(fake.tracks) != 0 {
-		t.Fatalf("skills operations called client.track: %v", fake.tracks)
+	// The only track a skills operation makes is its own usage event.
+	for _, tr := range fake.tracks {
+		if tr != "$ld:ai:sdk:usage" {
+			t.Fatalf("skills operations called client.track: %v", fake.tracks)
+		}
 	}
 	_ = logs
 }

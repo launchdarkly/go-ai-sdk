@@ -6,8 +6,24 @@ Tier 0, core, in its own package. Not a handler: no `providesFor`. It imports `a
 the provider packages do, and `aiserver` never imports it. `public_test.go` exercises the exported
 names from outside the package. The names are pinned in `surface_test.go`'s `skillsSurface`, and
 `aiserver/surface_test.go` asserts that none of them is on the `aiserver` root.
-Skills report no `$ld:ai:sdk:usage` helper yet. JS and Python report `client.*` IDs for the public
-skills helpers; Go does not, and `TestSkillsHelpersReportNoUsage` pins that until it is added.
+
+**Usage IDs.** The first statement of each public helper is `aiserver.ReportUsage("client.<id>", "", "")`,
+before any argument or store check, so a failing call still reports. The IDs match JS and Python:
+
+| ID | Reported by |
+| --- | --- |
+| `client.allSkills` | `AllSkills` |
+| `client.getSkill` | `GetSkill` |
+| `client.getSkillResult` | `GetSkillResult` |
+| `client.getSkills` | `GetSkills` |
+| `client.skillRefs` | `SkillRefs` |
+| `client.writeSkills` | `WriteSkills`, `WriteAllSkills` |
+| `client.watchSkills` | `WatchSkills`, `WatchAllSkills` |
+
+No helper calls another: the watcher's initial and later reconciles run the unexported
+`writeSkills`, `WriteSkills` resolves through `resolveFromStore` and raw objects, and the accessors
+share `resolveFromStore`. Keep it that way, or call a non-reporting version. `SetSkillStore`, the
+store constructors and methods, and the watcher's methods report nothing. `usage_test.go` checks all of this.
 
 | File | Responsibility |
 | --- | --- |
@@ -42,7 +58,7 @@ only (never an `InitOptions` field).
 `aiserver.Shutdown` clears the store and emitter through the bridge hook; it does not close a
 `LaunchDarklySkillStore`.
 
-**OTel.** Skills emit no spans and never call `client.track`, not even `$ld:ai:sdk:usage`. The
+**OTel.** Skills emit no spans, and the only `client.track` they cause is their `$ld:ai:sdk:usage` event. The
 tracer provider is set up by `aiserver.InitClient`.
 
 **Security posture (non-relaxable).** The root is pinned once per reconcile; every read and write

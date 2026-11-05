@@ -80,51 +80,6 @@ func (f *usageFakeLD) usage() []string {
 	return out
 }
 
-// The Go skills helpers do not report usage yet (JavaScript and Python report client.* IDs),
-// and skills code never tracks, so none of them sends a usage event.
-func TestSkillsHelpersReportNoUsage(t *testing.T) {
-	ctx := context.Background()
-	fake := &usageFakeLD{}
-	if _, err := aiserver.InitWithClient(ctx, fake, aiserver.InitOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = aiserver.Shutdown(ctx) })
-	store := skills.NewInMemorySkillStore(nil)
-	skills.SetSkillStore(store)
-	root := t.TempDir()
-	calls := []struct {
-		helper string
-		call   func()
-	}{
-		{"WatchAllSkills", func() {
-			_, w, err := skills.WatchAllSkills(ctx, root, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			w.Close()
-		}},
-		{"GetSkill", func() { _, _ = skills.GetSkill("a", 0) }},
-		{"GetSkillResult", func() { _, _ = skills.GetSkillResult("a", 0) }},
-		{"GetSkills", func() { _, _ = skills.GetSkills([]skills.SkillKey{"a"}) }},
-		{"AllSkills", func() { _, _ = skills.AllSkills() }},
-		{"WriteAllSkills", func() { _, _ = skills.WriteAllSkills(root, nil) }},
-	}
-	for _, c := range calls {
-		before := len(fake.usage())
-		c.call()
-		c.call()
-		if got := fake.usage()[before:]; len(got) != 0 {
-			t.Fatalf("%s: usage events %v", c.helper, got)
-		}
-	}
-	// SkillRefs is pure: no usage event, no track at all.
-	before := len(fake.tracks)
-	_, _ = skills.SkillRefs(&aiserver.AiConfig{})
-	if len(fake.tracks) != before {
-		t.Fatal("SkillRefs called track")
-	}
-}
-
 func TestShutdownClearsTheStore(t *testing.T) {
 	// A client exists, so the usage event is sent now rather than held for
 	// the next test's client.
