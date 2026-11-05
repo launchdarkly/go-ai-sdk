@@ -63,8 +63,8 @@ wire objects (`key`, `version`, `content`, `contentHash`, optional `name`, `desc
 
 | Function | Returns | Notes |
 | --- | --- | --- |
-| `SetSkillStore(store)` | — | nil is ignored; `Shutdown` clears it. Does not close a replaced store; a running watcher keeps the store it started with. |
-| `SkillRefs(*AiConfig)` | `[]SkillReference, error` | Needs no client and no store; its only telemetry is its usage event. A nil config, a non-array `skills`, or any malformed entry is an error (never a partial list, which `WriteSkills` with pruning would act on). |
+| `SetSkillStore(store)` | — | nil is ignored; `aiserver.Shutdown` clears it. Does not close a replaced store; a running watcher keeps the store it started with. |
+| `SkillRefs(*aiserver.AiConfig)` | `[]SkillReference, error` | Needs no client and no store; its only telemetry is its usage event. A nil config, a non-array `skills`, or any malformed entry is an error (never a partial list, which `WriteSkills` with pruning would act on). |
 | `GetSkill(key, version)` | `*Skill, error` | nil when missing, at another version, or withheld. |
 | `GetSkillResult(key, version)` | `SkillOutcome, error` | `absent`, `integrity_failure`, `ok`, `store_unavailable`, `wrong_version`. |
 | `GetSkills(refs)` | `[]Skill, error` | `[]SkillKey`, `[]SkillReference` or mixed `[]SkillRequest`; input order, misses omitted. |

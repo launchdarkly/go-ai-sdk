@@ -1,6 +1,7 @@
 // Package bridge holds the internal hooks between the core client and the
-// packages built on it (the experimental entry point, skills, handlers). It imports nothing from the SDK,
-// so both sides can depend on it without an import cycle.
+// packages built on it (the experimental entry point, skills, handlers). It
+// imports nothing from the SDK, so both sides can depend on it without an
+// import cycle.
 package bridge
 
 import (

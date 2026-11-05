@@ -23,7 +23,8 @@ before any argument or store check, so a failing call still reports. The IDs mat
 No helper calls another: the watcher's initial and later reconciles run the unexported
 `writeSkills`, `WriteSkills` resolves through `resolveFromStore` and raw objects, and the accessors
 share `resolveFromStore`. Keep it that way, or call a non-reporting version. `SetSkillStore`, the
-store constructors and methods, and the watcher's methods report nothing. `usage_test.go` checks all of this.
+store constructors and methods, and the watcher's methods report nothing. `usage_test.go` checks the
+helpers, the watcher's reconciles, `SetSkillStore` and the constructors.
 
 | File | Responsibility |
 | --- | --- |
