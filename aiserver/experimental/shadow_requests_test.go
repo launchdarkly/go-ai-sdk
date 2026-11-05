@@ -830,6 +830,9 @@ func TestTaskSurvivesJSONAndMatchesBackgroundMode(t *testing.T) {
 	res := RunShadow(context.Background(), decoded, p.handlers())
 	deferred := f.events(true)
 
+	// InitWithClient keeps an installed client, so switch clients through Shutdown.
+	running.Wait()
+	_ = aiserver.Shutdown(context.Background())
 	f2 := install(t, fallthroughPayload(), ldreason.NewEvalReasonFallthrough())
 	invokeAndWait(t, mustShadow(t, p.handlers(), ShadowOptions{}))
 	if res.Error != "" || !reflect.DeepEqual(withoutRunID(deferred), withoutRunID(f2.events(true))) {
