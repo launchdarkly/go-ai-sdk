@@ -28,9 +28,8 @@ type Evaluations = evaluations.Module
 
 // EvaluationsOptions configure InitEvaluations: the project key (default
 // LD_PROJECT_KEY), the API access token (default LD_API_TOKEN), the SDK key
-// (default LD_SDK_KEY), the API and UI hosts (default LD_API_BASE_URI and
-// LD_UI_BASE_URI, then https://app.launchdarkly.com), and the HTTP client,
-// timeout, attempts and logger of the management API client. Experimental.
+// (default LD_SDK_KEY), and the HTTP client, timeout, attempts and logger of
+// the management API client. The API and UI hosts are fixed. Experimental.
 type EvaluationsOptions = evaluations.Options
 
 // EvaluationRunArgs are the arguments to Evaluations.Run. Experimental.

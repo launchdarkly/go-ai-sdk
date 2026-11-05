@@ -269,7 +269,7 @@ func (r *runState) execute(ctx context.Context) (*EvalRunResult, error) {
 		// A failed row is one LaunchDarkly ruled against its criteria, so it
 		// fails the gate as an error row does.
 		Passed: summary.ErrorRows == 0 && summary.FailedRows == 0,
-		URL: fmt.Sprintf("%s/projects/%s/ai/evaluations/%s/runs/%s", r.m.uiBase, r.project(),
+		URL: fmt.Sprintf("%s/projects/%s/ai/evaluations/%s/runs/%s", UIBaseURI, r.project(),
 			segment(r.evaluationID), segment(r.runID)),
 		RunID:   r.runID,
 		Summary: summary,

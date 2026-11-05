@@ -38,7 +38,8 @@ var (
 const defaultConcurrency = 10
 
 // Options configure Init. Each string option falls back to its environment
-// variable; a blank value at either level counts as unset.
+// variable; a blank value at either level counts as unset. The management API
+// and UI hosts are fixed (APIBaseURI, UIBaseURI) and have no option.
 type Options struct {
 	// ProjectKey is the project holding the evaluations, runs, tools,
 	// datasets and judges. Default: LD_PROJECT_KEY.
@@ -58,21 +59,12 @@ type Options struct {
 	MaxAttempts int
 	// Logger receives warnings. Default: the SDK logger (aiserver.SetLogger).
 	Logger *slog.Logger
-	// APIBaseURI is the management API host. Default: LD_API_BASE_URI, then
-	// https://app.launchdarkly.com. LD_BASE_URI is never used: it configures
-	// flag delivery and may point at a relay proxy.
-	APIBaseURI string
-	// UIBaseURI is the host of the run link in the result. Default:
-	// LD_UI_BASE_URI, then https://app.launchdarkly.com. It is not derived
-	// from APIBaseURI.
-	UIBaseURI string
 }
 
 // Module runs evaluations from code. Create it with Init.
 type Module struct {
 	api        *apiClient
 	projectKey string
-	uiBase     string
 	sdkKey     string
 	logger     *slog.Logger
 	flushBound int
@@ -86,16 +78,6 @@ func option(explicit, name string) string {
 		return v
 	}
 	return env(name)
-}
-
-// host resolves a host option: explicit, then env, then the default, with
-// any trailing "/" stripped.
-func host(explicit, name string) string {
-	v := option(explicit, name)
-	if v == "" {
-		v = defaultBaseURI
-	}
-	return strings.TrimRight(v, "/")
 }
 
 // Init resolves the project key and both credentials and returns the
@@ -122,8 +104,8 @@ func Init(opts Options) (*Module, error) {
 	if logger == nil {
 		logger = bridge.Logger()
 	}
-	return &Module{api: newAPIClient(host(opts.APIBaseURI, "LD_API_BASE_URI"), token, opts.HTTPClient, opts.RequestTimeout, opts.MaxAttempts),
-		projectKey: project, uiBase: host(opts.UIBaseURI, "LD_UI_BASE_URI"), sdkKey: sdkKey, logger: logger, flushBound: defaultFlushBound}, nil
+	return &Module{api: newAPIClient(token, opts.HTTPClient, opts.RequestTimeout, opts.MaxAttempts),
+		projectKey: project, sdkKey: sdkKey, logger: logger, flushBound: defaultFlushBound}, nil
 }
 
 // SDKKey is the key the module initializes a client with; "" when it relies

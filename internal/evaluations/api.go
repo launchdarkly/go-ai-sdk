@@ -17,10 +17,11 @@ import (
 )
 
 const (
-	// defaultBaseURI is the management API and UI host when neither the
-	// option nor its environment variable is set. LD_BASE_URI is never read:
-	// it configures flag delivery and may point at a relay proxy.
-	defaultBaseURI = "https://app.launchdarkly.com"
+	// APIBaseURI is the fixed LaunchDarkly management API host. It is
+	// deliberately not configurable and is unrelated to LD_BASE_URI.
+	APIBaseURI = "https://app.launchdarkly.com"
+	// UIBaseURI is the fixed host used only to build run links.
+	UIBaseURI = "https://app.launchdarkly.com"
 
 	// apiVersion is the LD-API-Version date sent on every request:
 	// YYYYMMDD or "beta"; the value matches the Python SDK.
@@ -58,7 +59,6 @@ type param struct {
 }
 
 type apiClient struct {
-	base        string
 	token       string
 	http        *http.Client
 	timeout     time.Duration
@@ -69,7 +69,7 @@ type apiClient struct {
 	now    func() time.Time
 }
 
-func newAPIClient(base, token string, hc *http.Client, timeout time.Duration, maxAttempts int) *apiClient {
+func newAPIClient(token string, hc *http.Client, timeout time.Duration, maxAttempts int) *apiClient {
 	if hc == nil {
 		hc = http.DefaultClient
 	}
@@ -79,7 +79,7 @@ func newAPIClient(base, token string, hc *http.Client, timeout time.Duration, ma
 	if maxAttempts < 1 {
 		maxAttempts = defaultMaxAttempts
 	}
-	return &apiClient{base: base, token: token, http: hc, timeout: timeout, maxAttempts: maxAttempts,
+	return &apiClient{token: token, http: hc, timeout: timeout, maxAttempts: maxAttempts,
 		sleep: sleepCtx, random: rand.Float64, now: time.Now}
 }
 
@@ -102,7 +102,7 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 func segment(s string) string { return strings.ReplaceAll(url.QueryEscape(s), "+", "%20") }
 
 func (c *apiClient) urlFor(path string, params []param) string {
-	u := c.base + "/api/v2/" + strings.TrimPrefix(path, "/")
+	u := APIBaseURI + "/api/v2/" + strings.TrimPrefix(path, "/")
 	var q []string
 	for _, p := range params {
 		if p.value == nil {
