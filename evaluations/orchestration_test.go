@@ -129,6 +129,19 @@ func TestToolsGet(t *testing.T) {
 			t.Fatal("a literal must be inline")
 		}
 	})
+	t.Run("a tool edited after Get fails Run before any request", func(t *testing.T) {
+		e := newEnv(t, 1)
+		m := e.module()
+		tool := e.libTool(m, "lookup", noopTool, map[string]any{"version": 4, "schema": map[string]any{"type": "object"}})
+		tool.Schema["type"] = "string" // the returned map is the caller's copy, not the pin
+		args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
+		args.Tools = []EvalTool{tool}
+		runErr(t, m, args, ErrInvalidArgument, `library tool "lookup" was changed`)
+		e.assertNoRequests()
+		if tool.library.schema["type"] != "object" {
+			t.Fatal("editing the returned schema must not change the pin")
+		}
+	})
 	t.Run("404 names the tool and project", func(t *testing.T) {
 		e := newEnv(t, 1)
 		_, err := e.module().Tools().Get(context.Background(), "lokup", noopTool)

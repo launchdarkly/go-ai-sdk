@@ -45,6 +45,7 @@ func (c *ToolsClient) Get(ctx context.Context, key string, impl aiserver.ToolHan
 		schema = map[string]any{}
 	}
 	description, _ := obj["description"].(string)
-	return EvalTool{Key: key, Implementation: impl, Schema: schema, Description: description,
-		library: &libraryPin{version: version, projectKey: project}}, nil
+	pin := &libraryPin{key: key, description: description, schema: schema, version: version, projectKey: project}
+	clone, _ := cloneJSON(schema).(map[string]any)
+	return EvalTool{Key: key, Implementation: impl, Schema: clone, Description: description, library: pin}, nil
 }

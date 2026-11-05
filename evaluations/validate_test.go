@@ -17,7 +17,8 @@ var noopTool = aiserver.ToolFunc(func(context.Context, map[string]any) (any, err
 // ErrInvalidArgument, name what is wrong, and send zero requests.
 // lib is a library tool as Tools().Get returns it for project "proj".
 func lib(key string, impl aiserver.ToolHandler) EvalTool {
-	return EvalTool{Key: key, Implementation: impl, Schema: map[string]any{}, library: &libraryPin{version: 1, projectKey: "proj"}}
+	return EvalTool{Key: key, Implementation: impl, Schema: map[string]any{},
+		library: &libraryPin{key: key, schema: map[string]any{}, version: 1, projectKey: "proj"}}
 }
 
 func TestRunValidationBeforeIO(t *testing.T) {
@@ -142,6 +143,26 @@ func TestRunValidationBeforeIO(t *testing.T) {
 			other.library.projectKey = "other"
 			a.Tools = []EvalTool{other}
 		}, []string{`"t"`, `project "other"`, `cannot run in project "proj"`}},
+		{"library tool renamed after Get", func(a *RunOptions) {
+			t := lib("lookup", noopTool)
+			t.Key = "refund"
+			a.Tools = []EvalTool{t}
+		}, []string{`library tool "refund" was changed`, `read as "lookup"`, "inline tool"}},
+		{"library tool schema replaced after Get", func(a *RunOptions) {
+			t := lib("lookup", noopTool)
+			t.Schema = map[string]any{"type": "object"}
+			a.Tools = []EvalTool{t}
+		}, []string{`library tool "lookup" was changed`}},
+		{"library tool schema edited in place after Get", func(a *RunOptions) {
+			t := lib("lookup", noopTool)
+			t.Schema["type"] = "object"
+			a.Tools = []EvalTool{t}
+		}, []string{`library tool "lookup" was changed`}},
+		{"library tool description changed after Get", func(a *RunOptions) {
+			t := lib("lookup", noopTool)
+			t.Description = "other"
+			a.Tools = []EvalTool{t}
+		}, []string{`library tool "lookup" was changed`}},
 		{"same key from both sources", func(a *RunOptions) {
 			a.Tools = []EvalTool{lib("lookup_order", noopTool), {Key: "lookup_order", Implementation: noopTool, Schema: map[string]any{}}}
 		}, []string{`"lookup_order" (inline) collides with "lookup_order" (library)`, "once in Tools"}},

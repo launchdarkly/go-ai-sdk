@@ -135,7 +135,9 @@ const (
 // A key must be lowercase. An *aiserver.NativeTool implementation is valid
 // only for a library tool, because the provider supplies its schema. Run
 // copies Schema when it validates the tool, so later changes to the caller's
-// map do not reach the run.
+// map do not reach the run. Do not change Key, Schema or Description of a
+// library tool: Run rejects it, because the run would record the pinned
+// version for a different tool. Define an inline tool instead.
 type EvalTool struct {
 	// Key is the tool key. Must be lowercase.
 	Key string
@@ -150,10 +152,13 @@ type EvalTool struct {
 	library *libraryPin // set only by ToolsClient.Get
 }
 
-// libraryPin is what ToolsClient.Get records about a library tool.
+// libraryPin is what ToolsClient.Get read. Run checks the exported fields
+// against it, so a copy edited after Get cannot be recorded as this version.
 type libraryPin struct {
-	version    int
-	projectKey string
+	key, description string
+	schema           map[string]any
+	version          int
+	projectKey       string
 }
 
 // Source is ToolSourceLibrary for a tool from ToolsClient.Get, else

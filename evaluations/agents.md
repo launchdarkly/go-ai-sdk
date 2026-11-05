@@ -21,7 +21,7 @@ Seams (package vars, replaced by tests): `getClient`, `initClient`,
 `resolveJudgeConfig` (flag delivery via `internal/bridge.ExtractVariationRaw`),
 `defaultPollInterval`, `defaultPollTimeout`; `EvaluationsModule.flushBound`; `apiClient.sleep/random/now`.
 
-Rules that are easy to break: `Run` issues no tool request (library tools come pinned from `Tools().Get`); only `Get` can make a library `EvalTool`; judges never get tools; the judge config is passed unrendered;
+Rules that are easy to break: `Run` issues no tool request (library tools come pinned from `Tools().Get`); only `Get` can make a library `EvalTool`, and `Run` rejects one whose `Key`, `Schema` or `Description` no longer match what `Get` pinned; judges never get tools; the judge config is passed unrendered;
 `message_history` comes only from `internal/judging.BuildMessageHistory`; a row that failed
 generation gets no criterion event; the final flush is deferred; an inline run omits
 `datasetId`/`datasetKey` everywhere; the default thresholds, event names and hosts stay unexported.

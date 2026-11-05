@@ -200,12 +200,12 @@ func validateTools(tools []EvalTool, projectKey string) ([]runTool, error) {
 		case t.library.projectKey != projectKey:
 			return nil, invalid("tool %q was read from project %q and cannot run in project %q; read it from %q instead",
 				key, t.library.projectKey, projectKey, projectKey)
+		case key != t.library.key || t.Description != t.library.description || !reflect.DeepEqual(t.Schema, t.library.schema):
+			return nil, invalid("library tool %q was changed after Tools().Get (read as %q): its key, schema and description are pinned "+
+				"with version %d; define an inline tool to change them", key, t.library.key, t.library.version)
 		default:
-			rt.version = t.library.version
-			rt.schema, _ = cloneJSON(t.Schema).(map[string]any)
-			if rt.schema == nil {
-				rt.schema = map[string]any{}
-			}
+			rt.version, rt.description = t.library.version, t.library.description
+			rt.schema, _ = cloneJSON(t.library.schema).(map[string]any)
 		}
 		// One key names one tool. Never pick one silently: the run record
 		// would then misdescribe where the model's tool came from.
