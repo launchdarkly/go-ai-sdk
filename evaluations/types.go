@@ -110,17 +110,77 @@ type AIConfigRef struct {
 	Variation string
 }
 
-// EvalTool defines a tool in code: the executable plus the schema and
-// description the model is shown. The schema is copied when the run is
-// validated, so later changes to the caller's map do not reach the run.
+// ToolSource says where an EvalTool came from.
+type ToolSource string
+
+const (
+	// ToolSourceInline is a tool defined in code.
+	ToolSourceInline ToolSource = "inline"
+	// ToolSourceLibrary is a tool read from the LaunchDarkly tool library
+	// with ToolsClient.Get.
+	ToolSourceLibrary ToolSource = "library"
+)
+
+// EvalTool is a tool a run gives to its handler. Pass a slice of these in
+// RunOptions.Tools.
+//
+// Write a struct literal to define a tool in code. Schema is required, and
+// an empty map is valid. Source is then ToolSourceInline and Version is 0.
+// Neither can be set in a literal, so a literal is always inline.
+//
+// Call EvaluationsModule.Tools().Get instead to use a tool from the
+// LaunchDarkly tool library. That returns a tool with Source
+// ToolSourceLibrary and the version it pinned.
+//
+// A key must be lowercase. An *aiserver.NativeTool implementation is valid
+// only for a library tool, because the provider supplies its schema. Run
+// copies Schema when it validates the tool, so later changes to the caller's
+// map do not reach the run.
 type EvalTool struct {
-	// Implementation is the aiserver.ToolFunc the handler calls. A
-	// NativeTool is not allowed: a native tool has no schema to define.
+	// Key is the tool key. Must be lowercase.
+	Key string
+	// Implementation is what the handler calls: an aiserver.ToolFunc, or an
+	// *aiserver.NativeTool for a library tool.
 	Implementation aiserver.ToolHandler
-	// Schema is the tool's JSON Schema; required, {} for a no-argument tool.
+	// Schema is the JSON Schema of the tool's parameters.
 	Schema map[string]any
-	// Description defaults to "".
+	// Description is shown to the model. Default "".
 	Description string
+
+	library *libraryPin // set only by ToolsClient.Get
+}
+
+// libraryPin is what ToolsClient.Get records about a library tool.
+type libraryPin struct {
+	version    int
+	projectKey string
+}
+
+// Source is ToolSourceLibrary for a tool from ToolsClient.Get, else
+// ToolSourceInline.
+func (t EvalTool) Source() ToolSource {
+	if t.library != nil {
+		return ToolSourceLibrary
+	}
+	return ToolSourceInline
+}
+
+// Version is the library version ToolsClient.Get pinned; 0 for an inline
+// tool.
+func (t EvalTool) Version() int {
+	if t.library != nil {
+		return t.library.version
+	}
+	return 0
+}
+
+// ProjectKey is the project ToolsClient.Get read a library tool from; "" for
+// an inline tool.
+func (t EvalTool) ProjectKey() string {
+	if t.library != nil {
+		return t.library.projectKey
+	}
+	return ""
 }
 
 // DatasetRow is the public dataset row type: what a scorer receives, and
@@ -321,13 +381,13 @@ type RunOptions struct {
 	Generation *GenerationConfig
 	AIConfig   *AIConfigRef
 	Overrides  *GenerationOverrides
-	// Tools are library tools, resolved by key against LaunchDarkly.
-	// InlineTools are defined in code. With AIConfig, leaving both nil
-	// while the variation lists tools is an ErrInvalidConfig, because
-	// the run has no implementation for them; a variation tool neither map
-	// supplies is logged as unused.
-	Tools       map[string]aiserver.ToolHandler
-	InlineTools map[string]EvalTool
+	// Tools are the tools the handler may call: inline tools written as
+	// literals, and library tools from Tools().Get. Run issues no tool
+	// request. A key may appear once, compared without case. With AIConfig,
+	// nil Tools while the variation lists tools is an ErrInvalidConfig,
+	// because the run has no implementation for them; a variation tool
+	// missing from Tools is logged as unused.
+	Tools []EvalTool
 	// Criteria are judges and scorers. nil with AIConfig uses the
 	// variation's judges; a non-nil empty slice runs generation only.
 	Criteria []Criterion

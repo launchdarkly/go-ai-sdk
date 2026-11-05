@@ -410,6 +410,21 @@ func constScorer(v float64) ScorerFunc {
 
 func ptr[T any](v T) *T { return &v }
 
+// libTool reads library tool key with Tools().Get over a route answering
+// body, then clears the request logs so the test sees only Run's requests.
+func (e *fakeEnv) libTool(m *EvaluationsModule, key string, impl aiserver.ToolHandler, body map[string]any) EvalTool {
+	e.t.Helper()
+	e.route("GET", "projects/proj/ai-tools/"+segment(key), resp{body: body})
+	tool, err := m.Tools().Get(context.Background(), key, impl)
+	if err != nil {
+		e.t.Fatalf("Tools().Get(%q): %v", key, err)
+	}
+	e.mu.Lock()
+	e.reqs, e.log = nil, nil
+	e.mu.Unlock()
+	return tool
+}
+
 func mustRun(t *testing.T, m *EvaluationsModule, args RunOptions) *EvalRunResult {
 	t.Helper()
 	res, err := m.Run(context.Background(), args)

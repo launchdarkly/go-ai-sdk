@@ -9,8 +9,9 @@ by provider and mode. Its exported names are pinned in `surface_test.go`.
 | `module.go` | `InitEvaluationsOptions`, `EvaluationsModule`, `InitEvaluations` (project key, token, SDK key, in that order; reports `client.initEvaluations` before any check), client resolution, `Run`. |
 | `api.go` | Management API client: host resolved at init (never `LD_BASE_URI`), headers, retry policy (429 always; 5xx/transport only for GET/HEAD and idempotent POSTs), `Retry-After`, injectable sleep/jitter. `APIError`. |
 | `types.go` | Public types, sentinel errors, criterion constructors (`NewJudge`, `NewScorer`) and wire shapes. |
-| `validate.go` | Every pre-I/O check: pool, generation mode/coverage/prompt, tools, inline rows (strict JSON), criteria. Shared `selectHandler`. |
-| `steps.go` | Management API steps, in order: AI Config reads, tool and dataset resolution, record creation, inline upload/cancel, summary polling. |
+| `tools.go` | `ToolsClient` (`EvaluationsModule.Tools`): `Get` validates the key and implementation, reads `ai-tools/<key>` and returns a library `EvalTool` with its pinned version and project. The only tool request. |
+| `validate.go` | Every pre-I/O check: pool, generation mode/coverage/prompt, tools (key, implementation, inline schema or library project, case-folded collisions, in list order), inline rows (strict JSON), criteria. Shared `selectHandler`. |
+| `steps.go` | Management API steps, in order: AI Config reads (variation tool warnings), dataset resolution, record creation, inline upload/cancel, summary polling. No tool request. |
 | `runner.go` | Validation entry, orchestration, bounded worker pool, generation phase (trajectory recorder per row), judge resolution and invocation, scorers. |
 | `spans.go` | Row, criterion, and fallback `chat` / `execute_tool` spans; content on them follows the capture setting. |
 | `events.go` | Canonical JSON / `eventId` (byte-identical to Python), payload building, flush-bounded emitter with per-event failure isolation. |
@@ -20,7 +21,7 @@ Seams (package vars, replaced by tests): `getClient`, `initClient`,
 `resolveJudgeConfig` (flag delivery via `internal/bridge.ExtractVariationRaw`),
 `defaultPollInterval`, `defaultPollTimeout`; `EvaluationsModule.flushBound`; `apiClient.sleep/random/now`.
 
-Rules that are easy to break: judges never get tools; the judge config is passed unrendered;
+Rules that are easy to break: `Run` issues no tool request (library tools come pinned from `Tools().Get`); only `Get` can make a library `EvalTool`; judges never get tools; the judge config is passed unrendered;
 `message_history` comes only from `internal/judging.BuildMessageHistory`; a row that failed
 generation gets no criterion event; the final flush is deferred; an inline run omits
 `datasetId`/`datasetKey` everywhere; the default thresholds, event names and hosts stay unexported.
@@ -28,11 +29,13 @@ Check: `gofmt -l evaluations && go vet ./evaluations/ && go test -race ./evaluat
 
 ```go
 // evaluations exports (matches `go doc -short ./evaluations`)
-type EvaluationsModule           // methods: Run(ctx, RunOptions) (*EvalRunResult, error), SDKKey() string
-type InitEvaluationsOptions RunOptions GenerationConfig GenerationMode GenerationOverrides AIConfigRef EvalTool
+type EvaluationsModule           // methods: Run(ctx, RunOptions) (*EvalRunResult, error), SDKKey() string, Tools() *ToolsClient
+type ToolsClient                 // method: Get(ctx, key string, impl aiserver.ToolHandler) (EvalTool, error)
+type EvalTool                    // methods: Source() ToolSource, Version() int, ProjectKey() string
+type InitEvaluationsOptions RunOptions GenerationConfig GenerationMode GenerationOverrides AIConfigRef ToolSource
 type DatasetRow Dataset DatasetKey InlineRows Criterion Judge JudgeOptions Scorer ScorerOptions
 type ScorerFunc SuccessDirection EvalRunResult RunSummary APIError
-const GenerationModeCompletion GenerationModeAgent HigherIsBetter LowerIsBetter
+const GenerationModeCompletion GenerationModeAgent ToolSourceInline ToolSourceLibrary HigherIsBetter LowerIsBetter
 var ErrInvalidArgument ErrMissingCredential ErrNoClient ErrAPI ErrTransport
 var ErrInvalidResponse ErrNotFound ErrInvalidConfig ErrJudgeResolution
 var ErrUploadFailed ErrPollTimeout

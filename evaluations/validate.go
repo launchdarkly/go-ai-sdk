@@ -3,7 +3,6 @@ package evaluations
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"math"
 	"reflect"
 	"slices"
@@ -126,8 +125,7 @@ func validateGenerationFields(g *GenerationConfig) error {
 
 // --- tools --------------------------------------------------
 
-// runTool is one tool after validation; source is decided here and never
-// re-examined downstream.
+// runTool is one tool after validation.
 type runTool struct {
 	key         string
 	impl        aiserver.ToolHandler
@@ -149,70 +147,76 @@ func isNilTool(h aiserver.ToolHandler) bool {
 	return false
 }
 
-func (t runTool) sourceName() string {
-	if t.inline {
-		return "inline tool (InlineTools)"
+// validateToolKey rejects a blank or uppercase tool key.
+func validateToolKey(key string) error {
+	if strings.TrimSpace(key) == "" {
+		return invalid("tool keys must not be blank")
 	}
-	return "library tool (Tools)"
+	if lower := strings.ToLower(key); key != lower {
+		return invalid("tool key %q must not use uppercase letters; use %q instead", key, lower)
+	}
+	return nil
 }
 
-// validateTools checks both maps before any I/O and returns the tools in
-// key order (Go maps have no declaration order). Keys are checked on both
-// sources: non-blank, lowercase, and unique under Unicode case folding
-// (straße and strasse collide), so the collision check covers library vs
-// inline, library vs library and inline vs inline.
-func validateTools(library map[string]aiserver.ToolHandler, inline map[string]EvalTool) ([]runTool, error) {
-	var out []runTool
+// validateToolImplementation rejects a nil implementation.
+func validateToolImplementation(key string, impl aiserver.ToolHandler) error {
+	if isNilTool(impl) {
+		return invalid("tool %q implementation must be an aiserver.ToolFunc or *aiserver.NativeTool", key)
+	}
+	return nil
+}
+
+// validateTools checks the run's tools before any I/O and issues no request.
+// Per tool, in list order: key, implementation, then the inline schema or the
+// library tool's project, then the key against every earlier tool under
+// Unicode case folding (straße and strasse collide).
+func validateTools(tools []EvalTool, projectKey string) ([]runTool, error) {
 	fold := cases.Fold()
-	seen := map[string]runTool{}
-	checkKey := func(t runTool) error {
-		if strings.TrimSpace(t.key) == "" {
-			return invalid("tool keys must not be blank: %s has the key %q", t.sourceName(), t.key)
+	seen := map[string]EvalTool{}
+	out := make([]runTool, 0, len(tools))
+	for _, t := range tools {
+		key := t.Key
+		if err := validateToolKey(key); err != nil {
+			return nil, err
 		}
-		if lower := strings.ToLower(t.key); t.key != lower {
-			return invalid("%s key %q must not use uppercase letters; use %q", t.sourceName(), t.key, lower)
+		if err := validateToolImplementation(key, t.Implementation); err != nil {
+			return nil, err
 		}
-		f := fold.String(t.key)
-		if prev, dup := seen[f]; dup {
-			if prev.key == t.key {
-				return invalid("tool %q is declared both as a %s and as an %s; declare it once", t.key, prev.sourceName(), t.sourceName())
+		rt := runTool{key: key, impl: t.Implementation, description: t.Description}
+		switch {
+		case t.library == nil:
+			if _, native := t.Implementation.(*aiserver.NativeTool); native {
+				return nil, invalid("inline tool %q must not use a NativeTool: the provider supplies a native tool's schema; "+
+					"call Tools().Get for a library tool, or give this tool an aiserver.ToolFunc", key)
 			}
-			return invalid("%s %q and %s %q are the same key under case folding; rename one", prev.sourceName(), prev.key, t.sourceName(), t.key)
+			if t.Schema == nil {
+				return nil, invalid("inline tool %q schema must be a JSON object, got null", key)
+			}
+			schema, err := strictCopy(t.Schema)
+			if err != nil {
+				return nil, invalid("inline tool %q schema must be JSON-serializable: %v", key, err)
+			}
+			rt.inline, rt.schema = true, schema
+		case t.library.projectKey != projectKey:
+			return nil, invalid("tool %q was read from project %q and cannot run in project %q; read it from %q instead",
+				key, t.library.projectKey, projectKey, projectKey)
+		default:
+			rt.version = t.library.version
+			rt.schema, _ = cloneJSON(t.Schema).(map[string]any)
+			if rt.schema == nil {
+				rt.schema = map[string]any{}
+			}
+		}
+		// One key names one tool. Never pick one silently: the run record
+		// would then misdescribe where the model's tool came from.
+		f := fold.String(key)
+		if prev, dup := seen[f]; dup {
+			return nil, invalid("tool %q (%s) collides with %q (%s); a key may appear once in Tools, compared without case",
+				key, t.Source(), prev.Key, prev.Source())
 		}
 		seen[f] = t
-		return nil
+		out = append(out, rt)
 	}
-	for _, key := range slices.Sorted(maps.Keys(library)) {
-		t := runTool{key: key, impl: library[key]}
-		if err := checkKey(t); err != nil {
-			return nil, err
-		}
-		if isNilTool(t.impl) {
-			return nil, invalid("tool %q implementation must be an aiserver.ToolFunc or *aiserver.NativeTool", key)
-		}
-		out = append(out, t)
-	}
-	for _, key := range slices.Sorted(maps.Keys(inline)) {
-		def := inline[key]
-		if err := checkKey(runTool{key: key, inline: true}); err != nil {
-			return nil, err
-		}
-		if _, native := def.Implementation.(*aiserver.NativeTool); native {
-			return nil, invalid("inline tool %q uses a NativeTool, but a native tool has no schema to define; pass it in Tools instead", key)
-		}
-		if isNilTool(def.Implementation) {
-			return nil, invalid("inline tool %q implementation must be an aiserver.ToolFunc", key)
-		}
-		if def.Schema == nil {
-			return nil, invalid("inline tool %q schema is required and must be a JSON object, got null", key)
-		}
-		schema, err := strictCopy(def.Schema)
-		if err != nil {
-			return nil, invalid("inline tool %q schema must be JSON-serializable: %v", key, err)
-		}
-		out = append(out, runTool{key: key, impl: def.Implementation, inline: true, description: def.Description, schema: schema})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].key < out[j].key })
 	return out, nil
 }
 

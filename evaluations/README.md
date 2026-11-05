@@ -48,6 +48,9 @@ handler call. Model, provider, usage, status, tool names and scores are written 
 evals, err := evaluations.InitEvaluations(evaluations.InitEvaluationsOptions{}) // LD_PROJECT_KEY, LD_API_TOKEN, LD_SDK_KEY
 if err != nil { log.Fatal(err) }
 judge, _ := evaluations.NewJudge("accuracy", nil)
+// A library tool: read and pinned now, so Run issues no tool request.
+lookup, err := evals.Tools().Get(ctx, "lookup-order", aiserver.ToolFunc(lookupOrder))
+if err != nil { log.Fatal(err) }
 res, err := evals.Run(ctx, evaluations.RunOptions{
 	Key:        "support-bot-" + time.Now().Format("20060102-150405"), // unique per run
 	Dataset:    evaluations.DatasetKey("support-questions"),
@@ -57,6 +60,7 @@ res, err := evals.Run(ctx, evaluations.RunOptions{
 		Mode:     evaluations.GenerationModeCompletion, // required: "completion" or "agent"
 		Messages: []aiserver.Message{{Role: "system", Text: "You are a support agent."}},
 	},
+	Tools:    []evaluations.EvalTool{lookup},
 	Criteria: []evaluations.Criterion{judge},
 })
 if err != nil { log.Fatal(err) }
@@ -69,7 +73,7 @@ if !res.Passed { os.Exit(1) }
 | `Dataset` | `DatasetKey("...")` for a hosted dataset, or `InlineRows{...}` (`DatasetRow` values or `map[string]any` with `input`, `expectedOutput`, `variables`, `metadata`, optional `rowIdx`). |
 | `Handler` / `Handlers` | Exactly one. Each config (generation and every judge) picks its handler by provider and mode; an exact provider beats `*`; there is no mode fallback. |
 | `Generation` / `AIConfig` | Exactly one. `AIConfig: &AIConfigRef{Key, Variation}` reads the latest variation version; `Overrides` replace single fields. |
-| `Tools` / `InlineTools` | Library tools (resolved and version-pinned by key) and tools defined in code (`EvalTool{Implementation, Schema, Description}`). Every key, library or inline, is non-blank and lowercase, and keys must differ under Unicode case folding (`straße` and `strasse` collide). |
+| `Tools` | One list of `EvalTool`. Define a tool in code with a literal (`EvalTool{Key, Implementation, Schema, Description}`; `Schema` is required, `{}` is valid). Use a library tool with `evals.Tools().Get(ctx, key, impl)`, which reads it and pins its version before `Run`; `Run` itself issues no tool request. Every key is non-blank and lowercase, may appear once, and must differ from every other under Unicode case folding (`straße` and `strasse` collide). A library tool must come from this module's project. With `AIConfig`, nil `Tools` fails when the variation lists tools. |
 | `Criteria` | `*Judge` (`NewJudge`) and `*Scorer` (`NewScorer`). With `AIConfig`, nil uses the variation's judges and `[]Criterion{}` runs none. |
 | `Concurrency` | In-flight handler, judge and scorer calls (default 10). |
 | `PollInterval` / `PollTimeout` | Summary polling (default 2s / 3m). Large datasets need a longer timeout. |
@@ -86,6 +90,8 @@ blank value counts as unset, and a trailing `/` is stripped. Both hosts are fixe
 ```go
 func InitEvaluations(opts InitEvaluationsOptions) (*EvaluationsModule, error)
 func (m *EvaluationsModule) Run(ctx context.Context, args RunOptions) (*EvalRunResult, error)
+func (m *EvaluationsModule) Tools() *ToolsClient
+func (c *ToolsClient) Get(ctx context.Context, key string, impl aiserver.ToolHandler) (EvalTool, error)
 func NewJudge(key string, opts *JudgeOptions) (*Judge, error)
 func NewScorer(name string, fn ScorerFunc, opts *ScorerOptions) (*Scorer, error)
 ```

@@ -61,7 +61,6 @@ type runState struct {
 	datasetKey string
 	datasetID  string
 
-	pinnedTools   map[string]int
 	evaluationID  string
 	evaluationKey string
 	evalVersion   int
@@ -181,7 +180,7 @@ func (m *EvaluationsModule) prepare(a RunOptions) (*runState, error) {
 	} else if err := r.checkGeneration(*a.Generation); err != nil {
 		return nil, err
 	}
-	if r.tools, err = validateTools(a.Tools, a.InlineTools); err != nil {
+	if r.tools, err = validateTools(a.Tools, r.m.projectKey); err != nil {
 		return nil, err
 	}
 	switch {
@@ -236,9 +235,6 @@ func (r *runState) execute(ctx context.Context) (*EvalRunResult, error) {
 		if err := r.readAIConfig(ctx); err != nil {
 			return nil, err
 		}
-	}
-	if err := r.resolveTools(ctx); err != nil {
-		return nil, err
 	}
 	if err := r.resolveJudges(ctx); err != nil {
 		return nil, err

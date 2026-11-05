@@ -24,7 +24,7 @@ var surface = []string{
 	"EvaluationsModule", "GenerationConfig", "GenerationMode", "GenerationModeAgent", "GenerationModeCompletion",
 	"GenerationOverrides", "HigherIsBetter", "InitEvaluations", "InitEvaluationsOptions", "InlineRows", "Judge",
 	"JudgeOptions", "LowerIsBetter", "NewJudge", "NewScorer", "RunOptions", "RunSummary", "Scorer", "ScorerFunc",
-	"ScorerOptions", "SuccessDirection",
+	"ScorerOptions", "SuccessDirection", "ToolSource", "ToolSourceInline", "ToolSourceLibrary", "ToolsClient",
 }
 
 // parseDir parses the non-test .go files matching glob.
@@ -122,6 +122,9 @@ func TestPublicNamesAreCallable(t *testing.T) {
 	evals, err := evaluations.InitEvaluations(evaluations.InitEvaluationsOptions{ProjectKey: "proj", APIToken: "api-test", SDKKey: "sdk-test"})
 	if err != nil || evals == nil || evals.SDKKey() != "sdk-test" {
 		t.Fatalf("InitEvaluations: %v %v", evals, err)
+	}
+	if evals.Tools() == nil || (evaluations.EvalTool{Key: "t"}).Source() != evaluations.ToolSourceInline {
+		t.Fatal("Tools() must return a client, and a literal EvalTool must be inline")
 	}
 	judge, err := evaluations.NewJudge("accuracy", nil)
 	if err != nil || judge.Key() != "accuracy" {

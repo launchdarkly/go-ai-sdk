@@ -146,15 +146,15 @@ func TestToolConfigIsSourceIndependent(t *testing.T) {
 	configs := make([]aiserver.AiConfig, 2)
 	for i, inline := range []bool{false, true} {
 		e := newEnv(t, 1)
-		e.route("GET", "projects/proj/ai-tools/lookup", resp{body: map[string]any{"version": 1, "description": "Find it", "schema": schema}})
+		m := e.module()
 		var rec recorder
 		args := baseArgs(handler("OpenAI", aiserver.ModeMessages, rec.wrap(nil)))
 		if inline {
-			args.InlineTools = map[string]EvalTool{"lookup": {Implementation: noopTool, Schema: schema, Description: "Find it"}}
+			args.Tools = []EvalTool{{Key: "lookup", Implementation: noopTool, Schema: schema, Description: "Find it"}}
 		} else {
-			args.Tools = map[string]aiserver.ToolHandler{"lookup": noopTool}
+			args.Tools = []EvalTool{e.libTool(m, "lookup", noopTool, map[string]any{"version": 1, "description": "Find it", "schema": schema})}
 		}
-		mustRun(t, e.module(), args)
+		mustRun(t, m, args)
 		configs[i] = rec.all()[0].Config
 	}
 	if !reflect.DeepEqual(configs[0], configs[1]) {
@@ -183,7 +183,7 @@ func TestInlineSchemaMutationsDoNotLeak(t *testing.T) {
 	})
 	args := baseArgs(h)
 	args.Concurrency = 1
-	args.InlineTools = map[string]EvalTool{"lookup": {Implementation: noopTool, Schema: schema}}
+	args.Tools = []EvalTool{{Key: "lookup", Implementation: noopTool, Schema: schema}}
 	mustRun(t, e.module(), args)
 	if len(seen) != 2 || seen[0] != want || seen[1] != want {
 		t.Fatalf("row configs %v, want %s for both", seen, want)
@@ -196,7 +196,7 @@ func TestInlineSchemaMutationsDoNotLeak(t *testing.T) {
 
 func TestToolHandlersKeepKeysAndPassThrough(t *testing.T) {
 	e := newEnv(t, 1)
-	e.route("GET", "projects/proj/ai-tools/lib", resp{body: map[string]any{"version": 1}})
+	m := e.module()
 	wantErr := errors.New("tool failed")
 	native := &aiserver.NativeTool{ToolName: "web_search"}
 	var results []any
@@ -212,14 +212,16 @@ func TestToolHandlersKeepKeysAndPassThrough(t *testing.T) {
 		return aiserver.HandlerResult{Output: "done"}, nil
 	})
 	args := baseArgs(h)
-	args.Tools = map[string]aiserver.ToolHandler{"lib": aiserver.ToolFunc(func(_ context.Context, a map[string]any) (any, error) {
-		return map[string]any{"from": a["k"]}, nil
-	}), "web": native}
-	args.InlineTools = map[string]EvalTool{"inl": {Schema: map[string]any{}, Implementation: aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) {
-		return nil, wantErr
-	})}}
-	e.route("GET", "projects/proj/ai-tools/web", resp{body: map[string]any{"version": 1}})
-	mustRun(t, e.module(), args)
+	args.Tools = []EvalTool{
+		e.libTool(m, "lib", aiserver.ToolFunc(func(_ context.Context, a map[string]any) (any, error) {
+			return map[string]any{"from": a["k"]}, nil
+		}), map[string]any{"version": 1}),
+		e.libTool(m, "web", native, map[string]any{"version": 1}),
+		{Key: "inl", Schema: map[string]any{}, Implementation: aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) {
+			return nil, wantErr
+		})},
+	}
+	mustRun(t, m, args)
 	if !reflect.DeepEqual(results[0], map[string]any{"from": "lib"}) || errs[0] != nil || errs[1] != wantErr {
 		t.Fatalf("results %v errs %v", results, errs)
 	}
@@ -323,7 +325,7 @@ func TestTrajectoryPerRow(t *testing.T) {
 	})
 	go func() { started.Wait(); close(gate) }()
 	args := baseArgs(h)
-	args.InlineTools = map[string]EvalTool{"lookup": {Implementation: tool, Schema: map[string]any{}}}
+	args.Tools = []EvalTool{{Key: "lookup", Implementation: tool, Schema: map[string]any{}}}
 	r, err := e.module().prepare(args)
 	if err != nil {
 		t.Fatal(err)

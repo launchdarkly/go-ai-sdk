@@ -59,12 +59,12 @@ func TestSDKNeverComputesAVerdict(t *testing.T) {
 
 func TestJudgeResolution(t *testing.T) {
 	e := newEnv(t, 3)
-	e.route("GET", "projects/proj/ai-tools/lib", resp{body: map[string]any{"version": 1}})
 	e.judges["acc"] = judgeVariation("OpenAI", "completion", map[string]any{"_ldMeta": map[string]any{"enabled": true}})
+	m := e.module()
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, verdict(1, "great")))
-	args.Tools = map[string]aiserver.ToolHandler{"lib": noopTool}
+	args.Tools = []EvalTool{e.libTool(m, "lib", noopTool, map[string]any{"version": 1})}
 	args.Criteria = []Criterion{mustJudge(t, "acc", nil)}
-	mustRun(t, e.module(), args)
+	mustRun(t, m, args)
 	if len(e.judgeCalls) != 1 {
 		t.Fatalf("resolved %d times; must be once per run", len(e.judgeCalls))
 	}
@@ -72,9 +72,8 @@ func TestJudgeResolution(t *testing.T) {
 		t.Fatalf("resolution context %v", c)
 	}
 	log := e.logSnapshot()
-	if !(slices.Index(log, "GET projects/proj/ai-tools/lib") < slices.Index(log, "judge acc") &&
-		slices.Index(log, "judge acc") < slices.Index(log, "GET projects/proj/datasets/ds")) {
-		t.Fatalf("resolution must sit between tool verification and dataset resolution: %v", log)
+	if i := slices.Index(log, "judge acc"); !(i == 0 && i < slices.Index(log, "GET projects/proj/datasets/ds")) {
+		t.Fatalf("resolution must come first, before dataset resolution: %v", log)
 	}
 	ev := e.ld.events(criterionEventName)[0].Data
 	if ev["variationKey"] != "" {
@@ -246,7 +245,8 @@ func TestJudgesGetNoTools(t *testing.T) {
 	var genTools map[string]aiserver.ToolHandler
 	e, args, rec := judgeEnv(t, 1, verdict(1, "ok"), map[string]any{"tools": map[string]any{
 		"t": map[string]any{"name": "t", "type": "function", "parameters": map[string]any{}}}})
-	e.route("GET", "projects/proj/ai-tools/lib", resp{body: map[string]any{"version": 1}})
+	m := e.module()
+	lib := e.libTool(m, "lib", noopTool, map[string]any{"version": 1})
 	inner := args.Handler.Invoke
 	args.Handler.Invoke = func(ctx context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
 		if _, isJudge := req.Variables["message_history"]; !isJudge {
@@ -254,9 +254,8 @@ func TestJudgesGetNoTools(t *testing.T) {
 		}
 		return inner(ctx, req)
 	}
-	args.Tools = map[string]aiserver.ToolHandler{"lib": noopTool}
-	args.InlineTools = map[string]EvalTool{"inl": {Implementation: noopTool, Schema: map[string]any{}}}
-	mustRun(t, e.module(), args)
+	args.Tools = []EvalTool{lib, {Key: "inl", Implementation: noopTool, Schema: map[string]any{}}}
+	mustRun(t, m, args)
 	if len(genTools) != 2 {
 		t.Fatalf("generation tools %v", genTools)
 	}
@@ -376,7 +375,7 @@ func TestMessageHistoryCarriesTheTrajectory(t *testing.T) {
 		}
 		return inner(ctx, req)
 	}
-	args.InlineTools = map[string]EvalTool{"lookup": {Schema: map[string]any{}, Implementation: aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) {
+	args.Tools = []EvalTool{{Key: "lookup", Schema: map[string]any{}, Implementation: aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) {
 		return "{{expected_output}} café 東京", nil
 	})}}
 	mustRun(t, e.module(), args)

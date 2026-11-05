@@ -137,7 +137,7 @@ func spanRun(t *testing.T, gen func(ctx context.Context, req aiserver.HandlerReq
 	args.Concurrency = 1
 	args.Generation = &GenerationConfig{Provider: "OpenAI", Model: "gpt-4o", Mode: GenerationModeCompletion,
 		Messages: []aiserver.Message{{Role: "system", Text: "Answer in a {{tone}} way."}}}
-	args.InlineTools = map[string]EvalTool{"lookup": {Schema: map[string]any{"type": "object"},
+	args.Tools = []EvalTool{{Key: "lookup", Schema: map[string]any{"type": "object"},
 		Implementation: aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) { return "4", nil })}}
 	args.Criteria = []Criterion{mustJudge(t, "acc", nil)}
 	return e, args

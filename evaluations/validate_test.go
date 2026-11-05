@@ -15,6 +15,11 @@ var noopTool = aiserver.ToolFunc(func(context.Context, map[string]any) (any, err
 
 // TestRunValidationBeforeIO covers every pre-I/O validation check: each must fail with
 // ErrInvalidArgument, name what is wrong, and send zero requests.
+// lib is a library tool as Tools().Get returns it for project "proj".
+func lib(key string, impl aiserver.ToolHandler) EvalTool {
+	return EvalTool{Key: key, Implementation: impl, Schema: map[string]any{}, library: &libraryPin{version: 1, projectKey: "proj"}}
+}
+
 func TestRunValidationBeforeIO(t *testing.T) {
 	msgs := []aiserver.Message{{Role: "user", Text: "hi"}}
 	messages := handler("OpenAI", aiserver.ModeMessages, nil)
@@ -105,53 +110,53 @@ func TestRunValidationBeforeIO(t *testing.T) {
 		{"nil criterion", func(a *RunOptions) { a.Criteria = []Criterion{(*Judge)(nil)} }, []string{"Criteria[0]"}},
 		{"zero-value judge", func(a *RunOptions) { a.Criteria = []Criterion{&Judge{}} }, []string{"judge key must not be blank"}},
 		{"blank inline key", func(a *RunOptions) {
-			a.InlineTools = map[string]EvalTool{" ": {Implementation: noopTool, Schema: map[string]any{}}}
-		}, []string{"tool keys must not be blank", "InlineTools"}},
-		{"blank library key", func(a *RunOptions) {
-			a.Tools = map[string]aiserver.ToolHandler{" ": noopTool}
-		}, []string{"tool keys must not be blank", "library"}},
-		{"uppercase library key", func(a *RunOptions) {
-			a.Tools = map[string]aiserver.ToolHandler{"Lookup": noopTool}
-		}, []string{"library", `"Lookup"`, "uppercase", `"lookup"`}},
+			a.Tools = []EvalTool{{Key: " ", Implementation: noopTool, Schema: map[string]any{}}}
+		}, []string{"tool keys must not be blank"}},
+		{"blank library key", func(a *RunOptions) { a.Tools = []EvalTool{lib(" ", noopTool)} }, []string{"tool keys must not be blank"}},
+		{"uppercase library key", func(a *RunOptions) { a.Tools = []EvalTool{lib("Lookup", noopTool)} }, []string{`"Lookup"`, "uppercase", `"lookup"`}},
 		{"uppercase inline key", func(a *RunOptions) {
-			a.InlineTools = map[string]EvalTool{"Lookup": {Implementation: noopTool, Schema: map[string]any{}}}
+			a.Tools = []EvalTool{{Key: "Lookup", Implementation: noopTool, Schema: map[string]any{}}}
 		}, []string{`"Lookup"`, "uppercase"}},
-		{"inline schema missing", func(a *RunOptions) { a.InlineTools = map[string]EvalTool{"t": {Implementation: noopTool}} }, []string{`"t"`, "schema", "null"}},
+		{"key checked before implementation", func(a *RunOptions) { a.Tools = []EvalTool{{Key: "Lookup"}} }, []string{`"Lookup"`, "uppercase"}},
+		{"inline schema missing", func(a *RunOptions) { a.Tools = []EvalTool{{Key: "t", Implementation: noopTool}} }, []string{`"t"`, "schema", "null"}},
 		{"inline schema NaN", func(a *RunOptions) {
-			a.InlineTools = map[string]EvalTool{"t": {Implementation: noopTool, Schema: map[string]any{"maximum": math.NaN()}}}
+			a.Tools = []EvalTool{{Key: "t", Implementation: noopTool, Schema: map[string]any{"maximum": math.NaN()}}}
 		}, []string{`"t"`, "NaN"}},
 		{"inline schema with a date", func(a *RunOptions) {
-			a.InlineTools = map[string]EvalTool{"t": {Implementation: noopTool, Schema: map[string]any{"d": time.Now()}}}
+			a.Tools = []EvalTool{{Key: "t", Implementation: noopTool, Schema: map[string]any{"d": time.Now()}}}
 		}, []string{`"t"`, "time.Time"}},
 		{"inline schema with a non-string key", func(a *RunOptions) {
-			a.InlineTools = map[string]EvalTool{"t": {Implementation: noopTool, Schema: map[string]any{"properties": map[int]any{1: "x"}}}}
+			a.Tools = []EvalTool{{Key: "t", Implementation: noopTool, Schema: map[string]any{"properties": map[int]any{1: "x"}}}}
 		}, []string{`"t"`, "$.properties", "non-string keys"}},
 		{"inline schema with a non-string key inside a list", func(a *RunOptions) {
-			a.InlineTools = map[string]EvalTool{"t": {Implementation: noopTool, Schema: map[string]any{"anyOf": []any{map[bool]any{true: "x"}}}}}
+			a.Tools = []EvalTool{{Key: "t", Implementation: noopTool, Schema: map[string]any{"anyOf": []any{map[bool]any{true: "x"}}}}}
 		}, []string{`"t"`, "$.anyOf[0]", "non-string keys"}},
 		{"inline native tool", func(a *RunOptions) {
-			a.InlineTools = map[string]EvalTool{"web": {Implementation: &aiserver.NativeTool{ToolName: "web"}, Schema: map[string]any{}}}
-		}, []string{`"web"`, "native tool has no schema to define"}},
-		{"inline without implementation", func(a *RunOptions) { a.InlineTools = map[string]EvalTool{"t": {Schema: map[string]any{}}} }, []string{`"t"`, "implementation"}},
-		{"library nil implementation", func(a *RunOptions) { a.Tools = map[string]aiserver.ToolHandler{"t": aiserver.ToolFunc(nil)} }, []string{`"t"`, "implementation"}},
-		{"library nil native", func(a *RunOptions) { a.Tools = map[string]aiserver.ToolHandler{"t": (*aiserver.NativeTool)(nil)} }, []string{`"t"`}},
+			a.Tools = []EvalTool{{Key: "web", Implementation: &aiserver.NativeTool{ToolName: "web"}, Schema: map[string]any{}}}
+		}, []string{`"web"`, "must not use a NativeTool", "Tools().Get"}},
+		{"inline without implementation", func(a *RunOptions) { a.Tools = []EvalTool{{Key: "t", Schema: map[string]any{}}} }, []string{`"t"`, "implementation"}},
+		{"library nil implementation", func(a *RunOptions) { a.Tools = []EvalTool{lib("t", aiserver.ToolFunc(nil))} }, []string{`"t"`, "implementation"}},
+		{"library nil native", func(a *RunOptions) { a.Tools = []EvalTool{lib("t", (*aiserver.NativeTool)(nil))} }, []string{`"t"`, "implementation"}},
+		{"library tool from another project", func(a *RunOptions) {
+			other := lib("t", noopTool)
+			other.library.projectKey = "other"
+			a.Tools = []EvalTool{other}
+		}, []string{`"t"`, `project "other"`, `cannot run in project "proj"`}},
 		{"same key from both sources", func(a *RunOptions) {
-			a.Tools = map[string]aiserver.ToolHandler{"lookup_order": noopTool}
-			a.InlineTools = map[string]EvalTool{"lookup_order": {Implementation: noopTool, Schema: map[string]any{}}}
-		}, []string{`"lookup_order"`, "library", "inline"}},
-		{"library keys differing only by case", func(a *RunOptions) {
-			a.Tools = map[string]aiserver.ToolHandler{"Lookup": noopTool, "lookup": noopTool}
-		}, []string{`"Lookup"`, "uppercase"}},
+			a.Tools = []EvalTool{lib("lookup_order", noopTool), {Key: "lookup_order", Implementation: noopTool, Schema: map[string]any{}}}
+		}, []string{`"lookup_order" (inline) collides with "lookup_order" (library)`, "once in Tools"}},
+		{"same library key twice", func(a *RunOptions) {
+			a.Tools = []EvalTool{lib("lookup", noopTool), lib("lookup", noopTool)}
+		}, []string{`"lookup" (library) collides with "lookup" (library)`}},
 		{"library and inline keys equal under case folding", func(a *RunOptions) {
-			a.Tools = map[string]aiserver.ToolHandler{"straße": noopTool}
-			a.InlineTools = map[string]EvalTool{"strasse": {Implementation: noopTool, Schema: map[string]any{}}}
-		}, []string{`"straße"`, `"strasse"`, "library", "inline", "case folding"}},
+			a.Tools = []EvalTool{lib("straße", noopTool), {Key: "strasse", Implementation: noopTool, Schema: map[string]any{}}}
+		}, []string{`"strasse" (inline) collides with "straße" (library)`, "without case"}},
 		{"inline keys equal under case folding", func(a *RunOptions) {
-			a.InlineTools = map[string]EvalTool{
-				"straße":  {Implementation: noopTool, Schema: map[string]any{}},
-				"strasse": {Implementation: noopTool, Schema: map[string]any{}},
+			a.Tools = []EvalTool{
+				{Key: "straße", Implementation: noopTool, Schema: map[string]any{}},
+				{Key: "strasse", Implementation: noopTool, Schema: map[string]any{}},
 			}
-		}, []string{`"straße"`, `"strasse"`, "case folding"}},
+		}, []string{`"strasse" (inline) collides with "straße" (inline)`}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
