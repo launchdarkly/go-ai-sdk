@@ -12,6 +12,7 @@ by provider and mode. Its exported names are pinned in `surface_test.go`.
 | `validate.go` | Every pre-I/O check: pool, generation mode/coverage/prompt, tools, inline rows (strict JSON), criteria. Shared `selectHandler`. |
 | `steps.go` | Management API steps, in order: AI Config reads, tool and dataset resolution, record creation, inline upload/cancel, summary polling. |
 | `runner.go` | Validation entry, orchestration, bounded worker pool, generation phase (trajectory recorder per row), judge resolution and invocation, scorers. |
+| `spans.go` | Row, criterion, and fallback `chat` / `execute_tool` spans; content on them follows the capture setting. |
 | `events.go` | Canonical JSON / `eventId` (byte-identical to Python), payload building, flush-bounded emitter with per-event failure isolation. |
 | `*_test.go` | One file per feature area; `harness_test.go` holds the recording transport, stub LD client and seams; `surface_test.go` pins the exported names and calls them from outside the package. |
 
@@ -42,8 +43,10 @@ func NewScorer(name string, fn ScorerFunc, opts *ScorerOptions) (*Scorer, error)
 
 **OTel.** Evaluations configures no tracer provider. The provider is registered by
 `aiserver.InitClient` / `InitWithClient` (see `../aiserver/agents.md`); generation and judge calls go
-through the handlers, which emit their usual spans under it. Results reach LaunchDarkly as SDK custom
-events, not spans.
+through the handlers, which emit their usual spans under it. The runner also writes a
+`launchdarkly.dataset_row` trace per row, an `evaluate {criterion}` span per criterion, and `chat` /
+`execute_tool` spans for a handler that opens none (`spans.go`). Results reach LaunchDarkly as SDK
+custom events, not spans.
 
 **`InitClient` — when to call it.** `InitEvaluations` resolves the project key and credentials only;
 it does no I/O. The client that emits result events is resolved before the first management API

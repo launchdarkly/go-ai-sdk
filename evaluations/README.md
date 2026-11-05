@@ -92,7 +92,7 @@ func NewScorer(name string, fn ScorerFunc, opts *ScorerOptions) (*Scorer, error)
 
 | Type | Key fields |
 | --- | --- |
-| `InitEvaluationsOptions` | `ProjectKey` (default `LD_PROJECT_KEY`), `APIToken` (default `LD_API_TOKEN`), `SDKKey` (default `LD_SDK_KEY`), `HTTPClient` (default `http.DefaultClient`), `RequestTimeout` (30s per attempt), `MaxAttempts` (4), `Logger` |
+| `InitEvaluationsOptions` | `ProjectKey` (default `LD_PROJECT_KEY`), `APIToken` (default `LD_API_TOKEN`), `SDKKey` (default `LD_SDK_KEY`), `HTTPClient` (default `http.DefaultClient`), `RequestTimeout` (30s per attempt), `MaxAttempts` (4), `Logger`, `APIBaseURI` (default `LD_API_BASE_URI`, then `https://app.launchdarkly.com`), `UIBaseURI` (default `LD_UI_BASE_URI`, then `https://app.launchdarkly.com`) |
 | `EvalRunResult` | `Passed` (true iff the final summary has no error and no failed rows), `URL` (the run in the LaunchDarkly UI), `RunID`, `Summary` |
 | `RunSummary` | `TotalRows`, `PassedRows`, `FailedRows`, `ErrorRows`, `PendingRows` |
 
