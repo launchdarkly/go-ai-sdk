@@ -531,7 +531,7 @@ func TestStream(t *testing.T) {
 	})
 }
 
-// openai-agents: outputType is the BuildOutputType envelope, sent as
+// openai-agents: outputType is the buildOutputType envelope, sent as
 // text.format; the parsed object is returned directly.
 func TestStructuredOutput(t *testing.T) {
 	format := map[string]any{"properties": map[string]any{"score": map[string]any{"type": "number"}}}
@@ -563,11 +563,11 @@ func TestStructuredOutput(t *testing.T) {
 }
 
 func TestBuildOutputType(t *testing.T) {
-	if BuildOutputType(nil) != nil || BuildOutputType(map[string]any{}) != nil {
+	if buildOutputType(nil) != nil || buildOutputType(map[string]any{}) != nil {
 		t.Error("nil / empty outputFormat must give nil")
 	}
 	in := map[string]any{"properties": map[string]any{"field2": map[string]any{}, "field1": map[string]any{}}, "required": []any{"field1"}}
-	ot := BuildOutputType(in)
+	ot := buildOutputType(in)
 	if ot.Type != "json_schema" || ot.Name != "output" || ot.Strict {
 		t.Errorf("envelope = %+v", ot)
 	}
@@ -577,7 +577,7 @@ func TestBuildOutputType(t *testing.T) {
 	if _, mutated := in["type"]; mutated {
 		t.Error("input mutated")
 	}
-	b, _ := json.Marshal(BuildOutputType(map[string]any{"type": "object", "properties": map[string]any{}, "required": []any{}}))
+	b, _ := json.Marshal(buildOutputType(map[string]any{"type": "object", "properties": map[string]any{}, "required": []any{}}))
 	if string(b) != `{"type":"json_schema","name":"output","strict":false,"schema":{"properties":{},"type":"object"}}` {
 		t.Errorf("empty properties: %s", b)
 	}

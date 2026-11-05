@@ -139,7 +139,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 
 	a := newAgent("assistant", p.System, cfg, req.ToolHandlers)
 	if onText == nil { // streaming ignores outputFormat
-		a.outputType = BuildOutputType(cfg.OutputFormat)
+		a.outputType = buildOutputType(cfg.OutputFormat)
 	}
 	r := &runner{client: h.client, maxTurns: maxTurns(cfg.Model.Parameters, h.maxTurns), span: span, onText: onText}
 	res, stopped, err := r.run(span.Context(), a, openaiwire.Turns(p.Turns))
