@@ -23,29 +23,35 @@ func (f failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
 
 func TestInitCredentials(t *testing.T) {
 	cases := []struct {
-		name               string
-		envToken, envSDK   string
-		optToken, optSDK   string
-		byoc               bool
-		wantErr            string
-		wantToken, wantKey string
+		name                         string
+		envProject, envToken, envSDK string
+		optProject, optToken, optSDK string
+		byoc                         bool
+		wantErr                      string
+		wantProject                  string
+		wantToken, wantKey           string
 	}{
-		{name: "env only", envToken: "env-tok", envSDK: "env-sdk", wantToken: "env-tok", wantKey: "env-sdk"},
-		{name: "explicit wins", envToken: "env-tok", envSDK: "env-sdk", optToken: "opt-tok", optSDK: "opt-sdk", wantToken: "opt-tok", wantKey: "opt-sdk"},
-		{name: "missing token", envSDK: "sdk", wantErr: "LD_API_TOKEN"},
-		{name: "missing both names the token first", wantErr: "LD_API_TOKEN"},
-		{name: "blank token env", envToken: "   ", envSDK: "sdk", wantErr: "LD_API_TOKEN"},
-		{name: "missing SDK key", envToken: "tok", wantErr: "LD_SDK_KEY"},
-		{name: "blank SDK key env", envToken: "tok", envSDK: " \t", wantErr: "LD_SDK_KEY"},
-		{name: "bring your own client", envToken: "tok", byoc: true, wantToken: "tok", wantKey: ""},
+		{name: "env only", envProject: "env-proj", envToken: "env-tok", envSDK: "env-sdk", wantProject: "env-proj", wantToken: "env-tok", wantKey: "env-sdk"},
+		{name: "explicit wins", envProject: "env-proj", envToken: "env-tok", envSDK: "env-sdk", optProject: "opt-proj", optToken: "opt-tok", optSDK: "opt-sdk",
+			wantProject: "opt-proj", wantToken: "opt-tok", wantKey: "opt-sdk"},
+		{name: "blank explicit project falls back to env", envProject: "env-proj", optProject: "  ", envToken: "tok", envSDK: "sdk", wantProject: "env-proj", wantToken: "tok", wantKey: "sdk"},
+		{name: "missing all names the project first", wantErr: "LD_PROJECT_KEY"},
+		{name: "missing project", envToken: "tok", envSDK: "sdk", wantErr: "LD_PROJECT_KEY"},
+		{name: "blank project env", envProject: " \t", envToken: "tok", envSDK: "sdk", wantErr: "LD_PROJECT_KEY"},
+		{name: "only the project names the token", envProject: "proj", wantErr: "LD_API_TOKEN"},
+		{name: "blank token env", envProject: "proj", envToken: "   ", envSDK: "sdk", wantErr: "LD_API_TOKEN"},
+		{name: "missing SDK key", envProject: "proj", envToken: "tok", wantErr: "LD_SDK_KEY"},
+		{name: "blank SDK key env", envProject: "proj", envToken: "tok", envSDK: " \t", wantErr: "LD_SDK_KEY"},
+		{name: "bring your own client", envProject: "proj", envToken: "tok", byoc: true, wantProject: "proj", wantToken: "tok", wantKey: ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, 1)
 			e.byoc = tc.byoc
+			t.Setenv("LD_PROJECT_KEY", tc.envProject)
 			t.Setenv("LD_API_TOKEN", tc.envToken)
 			t.Setenv("LD_SDK_KEY", tc.envSDK)
-			m, err := Init(Options{APIToken: tc.optToken, SDKKey: tc.optSDK, HTTPClient: &http.Client{Transport: failingTransport{t}}})
+			m, err := Init(Options{ProjectKey: tc.optProject, APIToken: tc.optToken, SDKKey: tc.optSDK, HTTPClient: &http.Client{Transport: failingTransport{t}}})
 			if tc.wantErr != "" {
 				if !errors.Is(err, ErrMissingCredential) || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("err = %v, want one naming %s", err, tc.wantErr)
@@ -55,8 +61,8 @@ func TestInitCredentials(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if m.api.token != tc.wantToken || m.SDKKey() != tc.wantKey {
-				t.Fatalf("token %q key %q", m.api.token, m.SDKKey())
+			if m.projectKey != tc.wantProject || m.api.token != tc.wantToken || m.SDKKey() != tc.wantKey {
+				t.Fatalf("project %q token %q key %q", m.projectKey, m.api.token, m.SDKKey())
 			}
 		})
 	}
@@ -85,11 +91,22 @@ func TestInitReportsHelperUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = aiserver.Shutdown(context.Background()) })
+	// A failing Init still reports: usage comes before every check.
+	t.Setenv("LD_PROJECT_KEY", "")
+	t.Setenv("LD_API_TOKEN", "")
+	if _, err := Init(Options{}); !errors.Is(err, ErrMissingCredential) {
+		t.Fatalf("err = %v, want ErrMissingCredential", err)
+	}
+	if len(u.helpers) != 1 || u.helpers[0] != "experimental.initEvaluations" {
+		t.Fatalf("usage helpers after a failing Init = %v", u.helpers)
+	}
+	// The helper is reported once per process.
+	t.Setenv("LD_PROJECT_KEY", "proj")
 	t.Setenv("LD_API_TOKEN", "tok")
 	if _, err := Init(Options{}); err != nil {
 		t.Fatal(err)
 	}
-	if len(u.helpers) != 1 || u.helpers[0] != "experimental.initEvaluations" {
+	if len(u.helpers) != 1 {
 		t.Fatalf("usage helpers = %v", u.helpers)
 	}
 }
@@ -97,6 +114,7 @@ func TestInitReportsHelperUsage(t *testing.T) {
 func TestFixedHostsIgnoreLDBaseURI(t *testing.T) {
 	e := newEnv(t, 1)
 	t.Setenv("LD_BASE_URI", "https://sdk.example.com")
+	t.Setenv("LD_UI_BASE_URI", "https://ui.example.com")
 	t.Setenv("LD_API_BASE_URI", "https://api.example.com")
 	res := mustRun(t, e.module(), baseArgs(handler("OpenAI", aiserver.ModeMessages, nil)))
 	for _, r := range e.requests() {

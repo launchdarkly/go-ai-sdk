@@ -28,7 +28,7 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 	base := "projects/" + r.project() + "/ai-configs/"
 	raw, err := r.m.api.get(ctx, base+segment(ref.Key))
 	if err != nil {
-		return notFound(err, "AI Config %q was not found in project %q", ref.Key, r.args.ProjectKey)
+		return notFound(err, "AI Config %q was not found in project %q", ref.Key, r.m.projectKey)
 	}
 	cfgObj, err := asObject(raw, "AI Config")
 	if err != nil {
@@ -50,7 +50,7 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 
 	raw, err = r.m.api.get(ctx, base+segment(ref.Key)+"/variations/"+segment(ref.Variation))
 	if err != nil {
-		return notFound(err, "variation %q of AI Config %q was not found in project %q", ref.Variation, ref.Key, r.args.ProjectKey)
+		return notFound(err, "variation %q of AI Config %q was not found in project %q", ref.Variation, ref.Key, r.m.projectKey)
 	}
 	varObj, err := asObject(raw, "AI Config variation")
 	if err != nil {
@@ -99,7 +99,7 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 			}
 			raw, err := r.m.api.get(ctx, base+"model-configs/"+segment(key), param{"version", version})
 			if err != nil {
-				return notFound(err, "model config %q was not found in project %q", key, r.args.ProjectKey)
+				return notFound(err, "model config %q was not found in project %q", key, r.m.projectKey)
 			}
 			mc, err := asObject(raw, "model config")
 			if err != nil {
@@ -274,7 +274,7 @@ func (r *runState) resolveTools(ctx context.Context) error {
 		}
 		raw, err := r.m.api.get(ctx, "projects/"+r.project()+"/ai-tools/"+segment(t.key))
 		if err != nil {
-			return notFound(err, "LaunchDarkly AI tool %q was not found in project %q", t.key, r.args.ProjectKey)
+			return notFound(err, "LaunchDarkly AI tool %q was not found in project %q", t.key, r.m.projectKey)
 		}
 		obj, err := asObject(raw, fmt.Sprintf("tool %q", t.key))
 		if err != nil {
@@ -302,7 +302,7 @@ func (r *runState) fetchDataset(ctx context.Context) error {
 	path := "projects/" + r.project() + "/datasets/" + segment(r.datasetKey)
 	raw, err := r.m.api.get(ctx, path)
 	if err != nil {
-		return notFound(err, "LaunchDarkly dataset %q was not found in project %q", r.datasetKey, r.args.ProjectKey)
+		return notFound(err, "LaunchDarkly dataset %q was not found in project %q", r.datasetKey, r.m.projectKey)
 	}
 	obj, err := asObject(raw, fmt.Sprintf("dataset %q", r.datasetKey))
 	if err != nil {

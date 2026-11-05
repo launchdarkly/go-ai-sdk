@@ -112,6 +112,7 @@ unset.
 | `LD_SERVICE_NAME` | no | `service.name` resource attribute; default `go-sdk` |
 | `LD_ENVIRONMENT` | no | `deployment.environment` resource attribute; omitted when unset |
 | `LD_ENVIRONMENT_ID` | no | LaunchDarkly environment ID for AI Config Monitoring trace correlation (`environmentId` / `feature_flag.set.id`); omitted when unset |
+| `LD_PROJECT_KEY` | only for Evaluations from Code | LaunchDarkly project key ([experimental](aiserver/experimental/README.md#evaluations-from-code)) |
 | `LD_API_TOKEN` | only for Evaluations from Code | LaunchDarkly API access token ([experimental](aiserver/experimental/README.md#evaluations-from-code)) |
 
 - **Providers:** each handler reads its provider's usual environment

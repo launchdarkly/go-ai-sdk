@@ -37,9 +37,13 @@ var (
 
 const defaultConcurrency = 10
 
-// Options configure Init. The management API and UI hosts are fixed
-// (APIBaseURI, UIBaseURI) and have no option.
+// Options configure Init. Each string option falls back to its environment
+// variable; a blank value at either level counts as unset. The management API
+// and UI hosts are fixed (APIBaseURI, UIBaseURI) and have no option.
 type Options struct {
+	// ProjectKey is the project holding the evaluations, runs, tools,
+	// datasets and judges. Default: LD_PROJECT_KEY.
+	ProjectKey string
 	// APIToken authorizes every management API request. Default: LD_API_TOKEN.
 	APIToken string
 	// SDKKey initializes the client that emits result events. Default:
@@ -60,6 +64,7 @@ type Options struct {
 // Module runs evaluations from code. Create it with Init.
 type Module struct {
 	api        *apiClient
+	projectKey string
 	sdkKey     string
 	logger     *slog.Logger
 	flushBound int
@@ -67,21 +72,28 @@ type Module struct {
 
 func env(name string) string { return strings.TrimSpace(os.Getenv(name)) }
 
-// Init resolves both credentials and returns the module. It performs no
-// network I/O and fails on a missing credential, token first.
+// option is the trimmed explicit value, else the trimmed environment value.
+func option(explicit, name string) string {
+	if v := strings.TrimSpace(explicit); v != "" {
+		return v
+	}
+	return env(name)
+}
+
+// Init resolves the project key and both credentials and returns the
+// module. It performs no network I/O and fails on a missing value in this
+// order: project key, token, SDK key.
 func Init(opts Options) (*Module, error) {
 	aiserver.ReportUsage(HelperName, "", "")
-	token := strings.TrimSpace(opts.APIToken)
-	if token == "" {
-		token = env("LD_API_TOKEN")
+	project := option(opts.ProjectKey, "LD_PROJECT_KEY")
+	if project == "" {
+		return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly project key; set LD_PROJECT_KEY or pass Options.ProjectKey", ErrMissingCredential)
 	}
+	token := option(opts.APIToken, "LD_API_TOKEN")
 	if token == "" {
 		return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly API access token; set LD_API_TOKEN or pass Options.APIToken", ErrMissingCredential)
 	}
-	sdkKey := strings.TrimSpace(opts.SDKKey)
-	if sdkKey == "" {
-		sdkKey = env("LD_SDK_KEY")
-	}
+	sdkKey := option(opts.SDKKey, "LD_SDK_KEY")
 	if sdkKey == "" {
 		if _, err := getClient(); err != nil {
 			return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly SDK key and no initialized client to emit result events with; "+
@@ -93,7 +105,7 @@ func Init(opts Options) (*Module, error) {
 		logger = bridge.Logger()
 	}
 	return &Module{api: newAPIClient(token, opts.HTTPClient, opts.RequestTimeout, opts.MaxAttempts),
-		sdkKey: sdkKey, logger: logger, flushBound: defaultFlushBound}, nil
+		projectKey: project, sdkKey: sdkKey, logger: logger, flushBound: defaultFlushBound}, nil
 }
 
 // SDKKey is the key the module initializes a client with; "" when it relies

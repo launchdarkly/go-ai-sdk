@@ -25,7 +25,6 @@ func TestRunValidationBeforeIO(t *testing.T) {
 		mutate func(*RunArgs)
 		want   []string
 	}{
-		{"blank project", func(a *RunArgs) { a.ProjectKey = " " }, []string{"ProjectKey"}},
 		{"blank key", func(a *RunArgs) { a.Key = "" }, []string{"Key must not be blank"}},
 		{"nil dataset", func(a *RunArgs) { a.Dataset = nil }, []string{"dataset is required", "DatasetKey or InlineRows"}},
 		{"blank dataset", func(a *RunArgs) { a.Dataset = DatasetKey("  ") }, []string{"dataset must not be blank"}},
