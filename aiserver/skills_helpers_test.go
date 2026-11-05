@@ -1,4 +1,4 @@
-package skills
+package aiserver
 
 import (
 	"context"
@@ -102,14 +102,14 @@ func (c *logCapture) contains(level slog.Level, substr string) bool {
 // setup resets module state and installs a recorder and a log capture.
 func setup(t *testing.T) (*recorder, *logCapture) {
 	t.Helper()
-	ClearState()
+	clearSkillState()
 	rec := &recorder{}
 	logs := &logCapture{}
-	SetEmitterForTesting(rec)
-	SetLogger(slog.New(logs))
+	setSkillEmitterForTesting(rec)
+	setSkillLogger(slog.New(logs))
 	t.Cleanup(func() {
-		ClearState()
-		SetLogger(nil)
+		clearSkillState()
+		setSkillLogger(nil)
 	})
 	return rec, logs
 }

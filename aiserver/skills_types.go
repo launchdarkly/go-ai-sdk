@@ -1,8 +1,7 @@
-// Package skills implements the experimental Agent Skills feature: value
-// types, the SkillStore seam, integrity verification, filesystem
-// materialization, the FDv2 delivery transport and the watcher. The public surface is re-exported by aiserver/experimental;
-// nothing in aiserver names these types.
-package skills
+// Agent Skills: value types, the SkillStore seam, integrity verification,
+// filesystem materialization, the FDv2 delivery transport and the watcher.
+
+package aiserver
 
 import "slices"
 

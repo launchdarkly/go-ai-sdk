@@ -1,5 +1,5 @@
 // Package aiserver is the core LaunchDarkly AI SDK client for Go: AI Config
-// resolution, provider-handler routing, tracking, and judges.
+// resolution, provider-handler routing, tracking, judges, and Agent Skills.
 package aiserver
 
 import (
@@ -106,7 +106,7 @@ type JudgeConfiguration struct {
 }
 
 // AiConfig is the AiConfigRep shape the JavaScript and Python SDKs share. Raw keeps the full variation so fields
-// this struct does not model (e.g. experimental `skills`) survive a round
+// this struct does not model (e.g. `skills`) survive a round
 // trip, matching TypeScript's `raw as AiConfigRep` passthrough.
 type AiConfig struct {
 	Instructions string    `json:"instructions,omitempty"`

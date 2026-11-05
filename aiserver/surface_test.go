@@ -35,6 +35,20 @@ var rootSurface = []string{
 	"TrackGraphEvent", "TraverseVisitor", "VarLD", "VarLDContext", "VariationMeta", "WildcardProvider",
 	"WithConversationID", "WithHistory", "WithOutputFormat", "WithVariables",
 	"WrapToolHandlers",
+	// Agent Skills.
+	"ActionError", "ActionRemoved", "ActionSkippedCurrent", "ActionUpdated", "ActionWritten", "AllSkills",
+	"ErrInvalidArgument", "ErrNoSkillStore", "ErrSkillsUnavailable", "ErrStoreClosed", "ErrStoreNotWatchable",
+	"ErrUnsupportedKind", "ErrUnsupportedPlatform", "GetSkill", "GetSkillResult", "GetSkills",
+	"InMemorySkillStore", "InitializationProber", "LaunchDarklySkillStore", "LaunchDarklySkillStoreMode",
+	"LaunchDarklySkillStoreModePoll", "LaunchDarklySkillStoreModeStream", "LaunchDarklySkillStoreOptions",
+	"Listener", "ListenerRemover", "ListenerStore", "ManifestFilename", "ManifestVersion",
+	"NewInMemorySkillStore", "NewLaunchDarklySkillStore", "NewListener", "NewSkill", "NewSkillOutcome",
+	"NewSkillReference", "OnUnavailable", "OnUnavailableKeep", "OnUnavailableRaise", "ReasonAbsent",
+	"ReasonIntegrityFailure", "ReasonOK", "ReasonStoreUnavailable", "ReasonWrongVersion", "ReconcileAction",
+	"ReconcileActionKind", "ReconcileReport", "SetSkillStore", "Skill", "SkillFields", "SkillFilename",
+	"SkillInput", "SkillKey", "SkillOutcome", "SkillOutcomeReason", "SkillReference", "SkillRefs",
+	"SkillRequest", "SkillStore", "SkillWatcher", "StoreDiagnostics", "WatchAllSkills", "WatchSkills",
+	"WatchSkillsOptions", "WriteAllSkills", "WriteSkills", "WriteSkillsOptions",
 }
 
 // exportedNames returns the package-level exported names declared in the
@@ -84,11 +98,12 @@ func TestRootSurfaceIsPinned(t *testing.T) {
 	}
 }
 
-// No experimental name (skills, evaluations or shadow requests) leaks onto the root.
+// No experimental name (evaluations or shadow requests) leaks onto the root,
+// and no Agent Skills name is left in the experimental entry point.
 func TestNoExperimentalNameOnRoot(t *testing.T) {
 	root := exportedNames(t, "*.go")
 	experimental := exportedNames(t, "experimental/*.go")
-	for _, must := range []string{"InitEvaluations", "NewJudge", "NewScorer", "Dataset", "GetSkill", "WriteSkills", "ShadowConfig", "RunShadow"} {
+	for _, must := range []string{"InitEvaluations", "NewJudge", "NewScorer", "Dataset", "ShadowConfig", "RunShadow"} {
 		if !slices.Contains(experimental, must) {
 			t.Fatalf("experimental surface lost %s; the leak check would be vacuous", must)
 		}
@@ -96,6 +111,19 @@ func TestNoExperimentalNameOnRoot(t *testing.T) {
 	for _, n := range experimental {
 		if slices.Contains(root, n) {
 			t.Errorf("experimental name %s is on the aiserver root", n)
+		}
+	}
+	for _, n := range []string{"GetSkill", "WriteSkills", "SkillStore"} {
+		if !slices.Contains(root, n) {
+			t.Fatalf("Agent Skills name %s is not on the aiserver root", n)
+		}
+	}
+	// Wire constants and defaults stay internal.
+	for _, n := range []string{"SkillObjectKind", "MaxSkillContentBytes", "FDv2ObjectKind", "FDv2PayloadKind",
+		"DefaultBaseURI", "DefaultStreamURI", "DefaultDebounce", "SkillsDefaultBaseURI", "SkillsDefaultStreamURI",
+		"SkillsDefaultDebounceMs"} {
+		if slices.Contains(root, n) {
+			t.Errorf("%s must not be exported", n)
 		}
 	}
 }

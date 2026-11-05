@@ -1,4 +1,4 @@
-package skills
+package aiserver
 
 import (
 	"context"
@@ -12,8 +12,6 @@ import (
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
-
-	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
 
 // immutability: Go has no runtime "assignment raises"; the equivalent
@@ -165,7 +163,7 @@ func TestSkillOutcomeInvariants(t *testing.T) {
 // skillRefs.
 func TestSkillRefs(t *testing.T) {
 	rec, _ := setup(t)
-	cfg := func(raw map[string]any) *aiserver.AiConfig { return &aiserver.AiConfig{Raw: raw} }
+	cfg := func(raw map[string]any) *AiConfig { return &AiConfig{Raw: raw} }
 
 	if _, err := SkillRefs(nil); err == nil || !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("nil config: err=%v, want ErrInvalidArgument", err)
@@ -203,18 +201,18 @@ func TestSkillRefs(t *testing.T) {
 // SkillRefs needs no client or store.
 func TestSkillRefsThroughInspectConfig(t *testing.T) {
 	_, _ = setup(t)
-	fake := &fakeLD{variations: map[string]any{"cfg": map[string]any{
+	fake := &fakeSkillsLD{variations: map[string]any{"cfg": map[string]any{
 		"_ldMeta":      map[string]any{"enabled": true, "variationKey": "v1"},
 		"model":        map[string]any{"name": "m"},
 		"provider":     map[string]any{"name": "p"},
 		"instructions": "hi",
 		"skills":       []any{map[string]any{"key": "pdf", "version": 2}},
 	}}}
-	if _, err := aiserver.InitWithClient(context.Background(), fake, aiserver.InitOptions{}); err != nil {
+	if _, err := InitWithClient(context.Background(), fake, InitOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = aiserver.Shutdown(context.Background()) })
-	res := aiserver.InspectConfig(context.Background(), "cfg", ldcontext.New("u"))
+	t.Cleanup(func() { _ = Shutdown(context.Background()) })
+	res := InspectConfig(context.Background(), "cfg", ldcontext.New("u"))
 	if res.Config == nil || res.Config.Raw["skills"] == nil {
 		t.Fatalf("skills did not ride through InspectConfig: %+v", res)
 	}
@@ -222,19 +220,19 @@ func TestSkillRefsThroughInspectConfig(t *testing.T) {
 	if err != nil || len(refs) != 1 || refs[0].Key() != "pdf" || refs[0].Version() != 2 {
 		t.Fatalf("refs=%v err=%v", refs, err)
 	}
-	failed := aiserver.InspectConfig(context.Background(), "missing", ldcontext.New("u"))
+	failed := InspectConfig(context.Background(), "missing", ldcontext.New("u"))
 	if _, err := SkillRefs(failed.Config); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("a failed InspectConfig must not yield an empty list: %v", err)
 	}
 }
 
-// fakeLD implements aiserver.LDClient and records tracks.
-type fakeLD struct {
+// fakeSkillsLD implements LDClient and records tracks.
+type fakeSkillsLD struct {
 	variations map[string]any
 	tracks     []string
 }
 
-func (f *fakeLD) JSONVariation(key string, _ ldcontext.Context, def ldvalue.Value) (ldvalue.Value, error) {
+func (f *fakeSkillsLD) JSONVariation(key string, _ ldcontext.Context, def ldvalue.Value) (ldvalue.Value, error) {
 	v, ok := f.variations[key]
 	if !ok {
 		return def, nil
@@ -242,9 +240,9 @@ func (f *fakeLD) JSONVariation(key string, _ ldcontext.Context, def ldvalue.Valu
 	b, _ := json.Marshal(v)
 	return ldvalue.Parse(b), nil
 }
-func (f *fakeLD) TrackMetric(event string, _ ldcontext.Context, _ float64, _ ldvalue.Value) error {
+func (f *fakeSkillsLD) TrackMetric(event string, _ ldcontext.Context, _ float64, _ ldvalue.Value) error {
 	f.tracks = append(f.tracks, event)
 	return nil
 }
-func (f *fakeLD) Flush()       {}
-func (f *fakeLD) Close() error { return nil }
+func (f *fakeSkillsLD) Flush()       {}
+func (f *fakeSkillsLD) Close() error { return nil }

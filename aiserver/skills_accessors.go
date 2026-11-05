@@ -1,22 +1,18 @@
-package skills
+package aiserver
 
-import (
-	"fmt"
-
-	"github.com/launchdarkly/go-ai-sdk/aiserver"
-)
+import "fmt"
 
 // SkillRefs projects a resolved AI Config's "skills" array into references.
 // It is pure: no network, no client, no store, no telemetry.
 //
-// A nil config, which is what a failed aiserver.InspectConfig returns, is an
+// A nil config, which is what a failed InspectConfig returns, is an
 // error rather than an empty list: an empty list handed to WriteSkills would
 // prune every managed skill. A config without "skills" returns an empty list.
 // A "skills" value that is not an array, or any malformed entry (reachable
-// only by a config that bypassed aiserver.ParseAiConfig), rejects the whole
+// only by a config that bypassed ParseAiConfig), rejects the whole
 // field, as the JavaScript and Python SDKs do: a partial list handed to
 // WriteSkills with pruning would delete the dropped skill's files.
-func SkillRefs(config *aiserver.AiConfig) ([]SkillReference, error) {
+func SkillRefs(config *AiConfig) ([]SkillReference, error) {
 	if config == nil {
 		return nil, invalidArg("SkillRefs was given a nil AI Config. A failed InspectConfig returns a nil " +
 			"Config; handle that before deriving skill references, because an empty list passed to " +

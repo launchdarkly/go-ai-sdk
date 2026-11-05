@@ -1,4 +1,4 @@
-package skills
+package aiserver
 
 import (
 	"encoding/json"
@@ -329,7 +329,7 @@ func TestReaderNonSkillObjectsAreSkippedAndCounted(t *testing.T) {
 	}
 }
 
-// Experimental-stage rule, asserted both ways so changing it is deliberate.
+// Keyless-object rule, asserted both ways so changing it is deliberate.
 func TestReaderKeylessObjectsAreIgnoredAndTheTransferCommits(t *testing.T) {
 	_, logs := setup(t)
 	h := newHarness(t)
@@ -392,7 +392,7 @@ func TestWireKindConstants(t *testing.T) {
 		t.Fatal("kind values")
 	}
 	fset := token.NewFileSet()
-	for _, file := range []string{"fdv2_reader.go", "types.go"} {
+	for _, file := range []string{"skills_fdv2_reader.go", "skills_types.go"} {
 		f, err := parser.ParseFile(fset, file, nil, 0)
 		if err != nil {
 			t.Fatal(err)
