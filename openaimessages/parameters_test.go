@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/openai/openai-go/v3/responses"
+
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/neverforward"
 )
@@ -74,7 +76,7 @@ func TestParameterListMatchesTable(t *testing.T) {
 	maps.Copy(probe, allowed)
 	for k, v := range map[string]any{"frequency_penalty": 1.0, "stream": false, "model": "other", "input": "other",
 		"tools": []any{}, "text": map[string]any{"verbosity": "low"}, "background": true, "prompt": map[string]any{"id": "p"},
-		"unknown_key": 1.0} {
+		"access_programs": []any{"x"}, "prompt_cache_options": map[string]any{"x": 1.0}, "unknown_key": 1.0} {
 		probe[k] = v
 	}
 	for _, p := range paths {
@@ -194,6 +196,32 @@ func TestHandlerOwnedParametersWin(t *testing.T) {
 			turns[0] != (turn{"system", "sys"}) || turns[1] != (turn{"user", "q"}) ||
 			len(tools) != 1 || tools[0].(map[string]any)["name"] != "a" {
 			t.Errorf("%s: handler-owned fields overridden: %v", p.name, body)
+		}
+	}
+}
+
+// Every ResponseNewParams field has a decision, so an openai-go bump that
+// adds one fails here until it is forwarded or excluded.
+func TestEveryRequestFieldDecided(t *testing.T) {
+	decided := map[string]bool{}
+	for _, k := range forwardedParameters {
+		decided[k] = true
+	}
+	for _, k := range []string{
+		"input", "model", "previous_response_id", "text", "tools", // handler-owned
+		"background", "conversation", "prompt", "stream_options", // would break the call
+		"instructions",                                                        // prompt content
+		"context_management", "prompt_cache_retention", "store", "truncation", // retention, server-side state
+		"include", "moderation", "metadata", "safety_identifier", "user", // output, safety, identity
+		"access_programs", "prompt_cache_options", // not generation settings
+	} {
+		decided[k] = true
+	}
+	ty := reflect.TypeFor[responses.ResponseNewParams]()
+	for i := range ty.NumField() {
+		k, _, _ := strings.Cut(ty.Field(i).Tag.Get("json"), ",")
+		if k != "" && k != "-" && !decided[k] {
+			t.Errorf("ResponseNewParams.%s (%q) has no forward or drop decision", ty.Field(i).Name, k)
 		}
 	}
 }

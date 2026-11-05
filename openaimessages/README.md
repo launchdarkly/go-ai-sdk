@@ -132,7 +132,20 @@ Behavior:
   `parallel_tool_calls`, `prompt_cache_key`, `reasoning`, `service_tier`, `temperature`,
   `tool_choice`, `top_logprobs`, `top_p`. Any other key is dropped. `max_tokens` and
   `max_completion_tokens` are renamed to `max_output_tokens`. `reasoning` keeps only `effort` and
-  `summary`, and `tool_choice` must be a string or an object with a string `type`. `store` (including
-  `store: false`) is not forwarded; the handler never sets `store`.
+  `summary`, and `tool_choice` must be a string or an object with a string `type`.
+- Some keys a config may already set are not forwarded, so OpenAI's defaults apply:
+  - `store`: OpenAI stores responses when `store` is omitted, so a config's `store: false` no
+    longer stops that.
+  - `truncation` and `context_management`: truncation defaults to `disabled`, so a long
+    `previous_response_id` chain that relied on `truncation: "auto"` or compaction can fail with a
+    context-length error.
+  - `include`: `top_logprobs` is forwarded, but without `include: ["message.output_text.logprobs"]`
+    no log probabilities come back, so it has no visible effect.
+
+  To send one of these anyway, pass a `Client` built with `option.WithJSONSet`, for example
+  `option.WithJSONSet("store", false)`. It is applied after the handler serializes the request, so
+  the handler cannot overwrite it. It applies to every request the client sends, including the
+  follow-up tool turns that chain with `previous_response_id`, so `store: false` there breaks the
+  tool loop.
 - Usage is returned as `input_tokens` / `output_tokens` summed over all turns. OpenAI's input count
   already includes cached tokens.

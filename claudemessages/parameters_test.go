@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/anthropics/anthropic-sdk-go"
+
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/neverforward"
 )
@@ -72,7 +74,7 @@ func TestParameterListMatchesTable(t *testing.T) {
 	probe := maps.Clone(neverforward.Params)
 	maps.Copy(probe, allowed)
 	for k, v := range map[string]any{"frequency_penalty": 1.0, "stream": false, "model": "other", "messages": []any{},
-		"system": "other", "tools": []any{}, "unknown_key": 1.0} {
+		"system": "other", "tools": []any{}, "diagnostics": map[string]any{"x": 1.0}, "unknown_key": 1.0} {
 		probe[k] = v
 	}
 	for _, p := range paths {
@@ -217,6 +219,32 @@ func TestHandlerOwnedParametersWin(t *testing.T) {
 		if body["model"] != "test-model" || system(body) != "sys" || lastText(body) != "q" ||
 			len(tools) != 1 || tools[0].(map[string]any)["name"] != "a" {
 			t.Errorf("%s: handler-owned fields overridden: %v", p.name, body)
+		}
+	}
+}
+
+// Every MessageNewParams field has a decision, so an anthropic-sdk-go bump
+// that adds one fails here until it is forwarded or excluded.
+func TestEveryRequestFieldDecided(t *testing.T) {
+	decided := map[string]bool{"output_config": true}
+	for _, k := range forwardedParameters {
+		decided[k] = true
+	}
+	for k := range typedShapes {
+		decided[k] = true
+	}
+	for _, k := range []string{
+		"max_tokens", "messages", "model", "system", "tools", // handler-owned
+		"container", "inference_geo", "metadata", // server-side state, data location, attribution
+		"diagnostics", // not a generation setting
+	} {
+		decided[k] = true
+	}
+	ty := reflect.TypeFor[anthropic.MessageNewParams]()
+	for i := range ty.NumField() {
+		k, _, _ := strings.Cut(ty.Field(i).Tag.Get("json"), ",")
+		if k != "" && k != "-" && !decided[k] {
+			t.Errorf("MessageNewParams.%s (%q) has no forward or drop decision", ty.Field(i).Name, k)
 		}
 	}
 }

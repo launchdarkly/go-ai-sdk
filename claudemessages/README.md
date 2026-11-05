@@ -149,3 +149,7 @@ Behaviour summary:
   `cache_control` keep only the sub-keys their `type` takes; a value with a missing or unknown
   `type`, or without a required sub-key, is dropped. `max_tokens` / `maxTokens` sets `max_tokens`
   (default 1024).
+- `inference_geo` is not forwarded, so a config that set it gets the workspace's default inference
+  region. An application that needs a fixed region can pass a `Client` built with
+  `option.WithJSONSet("inference_geo", "<region>")`. It is applied after the handler serializes the
+  request, so the handler cannot overwrite it, and it applies to every request the client sends.

@@ -39,4 +39,7 @@ var Params = map[string]any{
 	"prefix_messages": []any{Marker}, "instructions": Marker,
 	// safety configuration
 	"guardrails": Marker, "guardrail_config": map[string]any{"x": Marker}, "moderation": Marker,
+	// a forwarded key with a malformed nested value: a tool_choice with no
+	// string type, which every handler drops
+	"tool_choice": map[string]any{"name": Marker, "tools": []any{map[string]any{"type": "mcp", "server_url": Marker}}},
 }

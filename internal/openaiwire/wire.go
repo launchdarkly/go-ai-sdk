@@ -113,12 +113,17 @@ func ModelParameters(in map[string]any, allow []string) map[string]any {
 	return out
 }
 
-// reasoning keeps only effort and summary, or returns nil when v is not an
-// object or sets neither.
+// reasoningKeys are the ReasoningParam sub-keys forwarded, as in the
+// JavaScript handlers. context and mode are dropped (they are not in the
+// cross-SDK table), and so is the deprecated generate_summary.
+var reasoningKeys = []string{"effort", "summary"}
+
+// reasoning keeps only reasoningKeys, or returns nil when v is not an object
+// or sets neither.
 func reasoning(v any) map[string]any {
 	m, _ := v.(map[string]any)
 	out := map[string]any{}
-	for _, k := range []string{"effort", "summary"} {
+	for _, k := range reasoningKeys {
 		if m[k] != nil {
 			out[k] = m[k]
 		}
