@@ -535,6 +535,62 @@ func TestHostToolThroughHandler(t *testing.T) {
 	}
 }
 
+// tool call arguments and results reach the execute_tool span only when
+// content capture is on, for a function tool and a host built-in alike; the
+// tool's identity is written either way.
+func TestToolContentCapture(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		capture  aiserver.ContentCapture
+		want     bool
+		host     bool
+		span     string
+		args     string
+		result   string
+		response string
+	}{
+		{"function on", aiserver.CaptureOn, true, false, "execute_tool a", `{"city":"Paris"}`, "sunny", toolResp("a", `{"city":"Paris"}`)},
+		{"function off", aiserver.CaptureOff, false, false, "execute_tool a", "", "", toolResp("a", `{"city":"Paris"}`)},
+		{"host on", aiserver.CaptureOn, true, true, "execute_tool Read", `{"file_path":"notes.txt"}`, "     1\tremember the milk\n", toolResp("Read", `{"file_path":"notes.txt"}`)},
+		{"host off", aiserver.CaptureOff, false, true, "execute_tool Read", "", "", toolResp("Read", `{"file_path":"notes.txt"}`)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, "notes.txt"), "remember the milk\n")
+			e := setup(t, nil, tc.response, textResp("done", 1, 1))
+			e.opts.WorkDir, e.opts.CaptureContent = dir, tc.capture
+			c := cfg(func(c *aiserver.AiConfig) {
+				c.Instructions = "x"
+				c.Tools = map[string]aiserver.Tool{"a": {Name: "a", Type: "function", Parameters: map[string]any{"type": "object"}}}
+			})
+			tools := map[string]aiserver.ToolHandler{"a": aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) { return "sunny", nil })}
+			if tc.host {
+				c.Tools = map[string]aiserver.Tool{"reader": {Name: "reader"}}
+				tools = map[string]aiserver.ToolHandler{"reader": ClaudeRead}
+			}
+			if _, err := e.handler().Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "q", ToolHandlers: tools}); err != nil {
+				t.Fatal(err)
+			}
+			spans := e.spans(tc.span)
+			if len(spans) != 1 {
+				t.Fatalf("%s spans = %d", tc.span, len(spans))
+			}
+			got := attrs(spans[0])
+			if want := strings.TrimPrefix(tc.span, "execute_tool "); got["gen_ai.tool.name"] != want {
+				t.Errorf("gen_ai.tool.name = %q, want %q", got["gen_ai.tool.name"], want)
+			}
+			args, hasArgs := got["gen_ai.tool.call.arguments"]
+			result, hasResult := got["gen_ai.tool.call.result"]
+			if tc.want && (args != tc.args || result != tc.result) {
+				t.Errorf("arguments = %q result = %q", args, result)
+			}
+			if !tc.want && (hasArgs || hasResult) {
+				t.Errorf("content captured with CaptureOff: arguments = %q result = %q", args, result)
+			}
+		})
+	}
+}
+
 func TestHostToolConfigErrors(t *testing.T) {
 	c := cfg(func(c *aiserver.AiConfig) {
 		c.Tools = map[string]aiserver.Tool{"Read": {Name: "Read"}, "reader": {Name: "reader"}}

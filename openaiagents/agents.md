@@ -30,7 +30,7 @@ lives in `internal/openaiwire`, also used by `openaimessages`.
 const PackageName, PackageVersion, SpanName, StreamSpanName
 var ProvidesFor aiserver.ProvidesFor
 var ErrMaxTurns, ErrToolNotOffered, ErrNoRoot, ErrNilGraph error
-type Options struct{ Client *openai.Client; APIKey string; CaptureContent bool; MaxTurns int }
+type Options struct{ Client *openai.Client; APIKey string; CaptureContent aiserver.ContentCapture; MaxTurns int }
 func NewHandler(Options) *aiserver.ProviderHandler
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func OpenAIAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, *InvokeOptions) (aiserver.ProviderResponse, error)
@@ -40,6 +40,11 @@ type NativeGraph struct{ /* unexported */ }
 func ToOpenAIAgents(*aiserver.GraphDefinition, *NativeGraphOptions) *NativeGraph
 func (*NativeGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 ```
+
+`Options.CaptureContent` gates prompt, completion, tool and judge-explanation content on spans:
+`aiserver.CaptureDefault` (the zero value) follows `aiserver.Configure`, else on;
+`aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
+`gen_ai.tool.name` are written either way.
 
 `init()` calls `aiserver.RegisterAiSdkPackage(PackageName, PackageVersion)`. Usage helpers:
 `openai-agents.createOpenAIAgentsHandler` (`NewHandler`), `openai-agents.openaiAgents`,

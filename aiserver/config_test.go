@@ -134,7 +134,7 @@ func TestConfigHandlerErrorTracked(t *testing.T) {
 	boom := errors.New("boom")
 	h := createHandler(ProvidesFor{"P", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
 		return HandlerResult{}, boom
-	}, nil, false)
+	}, nil, CaptureDefault)
 	if _, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, "", userCtx); !errors.Is(err, boom) {
 		t.Fatalf("err = %v", err)
 	}
@@ -179,7 +179,7 @@ func TestStream(t *testing.T) {
 			}
 			yield(HandlerStreamEvent{Type: "done", Usage: map[string]any{"input": 1.0, "output": 2.0}}, nil)
 		}
-	}, false)
+	}, CaptureDefault)
 	var events []StreamEvent
 	for ev, err := range Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Stream(bg, "q", userCtx) {
 		if err != nil {
@@ -220,7 +220,7 @@ func TestJudges(t *testing.T) {
 			return HandlerResult{Output: `{"score":0.8,"reasoning":"good"}`}, nil
 		}
 		return HandlerResult{Output: "answer"}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	tools := map[string]ToolHandler{"t": ToolFunc(func(context.Context, map[string]any) (any, error) { return nil, nil })}
 
 	resp, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}, ToolHandlers: tools}).Invoke(bg, "question", userCtx)
@@ -439,19 +439,19 @@ func TestHandlerPanicTracksGenerationError(t *testing.T) {
 		consumer func(*AIConfig)
 		wantErr  int
 	}{
-		"invoke": {createHandler(ProvidesFor{"P", ModeMessages}, boom, nil, false),
+		"invoke": {createHandler(ProvidesFor{"P", ModeMessages}, boom, nil, CaptureDefault),
 			func(a *AIConfig) { _, _ = a.Invoke(bg, "q", userCtx) }, 1},
-		"stream": {createHandler(ProvidesFor{"P", ModeMessages}, boom, streamBoom, false),
+		"stream": {createHandler(ProvidesFor{"P", ModeMessages}, boom, streamBoom, CaptureDefault),
 			func(a *AIConfig) {
 				for range a.Stream(bg, "q", userCtx) {
 				}
 			}, 1},
-		"stream fallback": {createHandler(ProvidesFor{"P", ModeMessages}, boom, nil, false),
+		"stream fallback": {createHandler(ProvidesFor{"P", ModeMessages}, boom, nil, CaptureDefault),
 			func(a *AIConfig) {
 				for range a.Stream(bg, "q", userCtx) {
 				}
 			}, 1},
-		"consumer": {createHandler(ProvidesFor{"P", ModeMessages}, boom, chunky, false),
+		"consumer": {createHandler(ProvidesFor{"P", ModeMessages}, boom, chunky, CaptureDefault),
 			func(a *AIConfig) {
 				for range a.Stream(bg, "q", userCtx) {
 					panic("consumer bug")
@@ -514,7 +514,7 @@ func TestUnresolvableJudgeIsSkipped(t *testing.T) {
 			return HandlerResult{Output: `{"score":0.5,"reasoning":"ok"}`}, nil
 		}
 		return HandlerResult{Output: "answer"}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	resp, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, "q", userCtx)
 	if err != nil || resp.Response != "answer" || len(resp.JudgeResults) != 1 || resp.JudgeResults["judge"].Score != 0.5 {
 		t.Fatalf("inline: resp=%+v err=%v", resp, err)

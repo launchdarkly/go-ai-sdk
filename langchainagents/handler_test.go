@@ -114,11 +114,11 @@ func collect(t *testing.T, h *aiserver.ProviderHandler, req aiserver.HandlerRequ
 
 // factory and metadata.
 func TestFactory(t *testing.T) {
-	a, b := NewHandler(Options{}), NewHandler(Options{CaptureContent: true})
+	a, b := NewHandler(Options{}), NewHandler(Options{CaptureContent: aiserver.CaptureOn})
 	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "*", Mode: aiserver.ModeAgent}) {
 		t.Errorf("providesFor = %+v", a.ProvidesFor)
 	}
-	if a == b || a.Invoke == nil || a.Stream == nil || a.CaptureContent || !b.CaptureContent {
+	if a == b || a.Invoke == nil || a.Stream == nil || a.CaptureContent != aiserver.CaptureDefault || b.CaptureContent != aiserver.CaptureOn {
 		t.Errorf("handlers: %p %p capture %v %v", a, b, a.CaptureContent, b.CaptureContent)
 	}
 }
@@ -349,6 +349,44 @@ func TestTelemetry(t *testing.T) {
 		if s.Parent().SpanID() != root[0].SpanContext().SpanID() {
 			t.Errorf("%s is not a child of the root", s.Name())
 		}
+	}
+}
+
+// tool call arguments and results reach the execute_tool span only when
+// content capture is on; the tool's identity is written either way.
+func TestToolContentCapture(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		capture aiserver.ContentCapture
+		want    bool
+	}{{"on", aiserver.CaptureOn, true}, {"off", aiserver.CaptureOff, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			exp := withTracer(t)
+			h := newHandler(Options{Model: &fakeModel{turns: []scripted{toolTurn("a", map[string]any{"a": "Paris"}), textTurn("done", 1, 1)}},
+				CaptureContent: tc.capture})
+			c := instr("Sys")
+			c.Tools = threeTools()
+			if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "q",
+				ToolHandlers: map[string]aiserver.ToolHandler{"a": fn(func(map[string]any) (any, error) { return "r", nil })}}); err != nil {
+				t.Fatal(err)
+			}
+			s := spansByName(exp)["execute_tool a"]
+			if len(s) != 1 {
+				t.Fatalf("tool spans = %d", len(s))
+			}
+			got := spanAttrs(s[0])
+			if got["gen_ai.tool.name"] != "a" {
+				t.Errorf("gen_ai.tool.name = %q", got["gen_ai.tool.name"])
+			}
+			args, hasArgs := got["gen_ai.tool.call.arguments"]
+			result, hasResult := got["gen_ai.tool.call.result"]
+			if tc.want && (args != `{"a":"Paris"}` || result != "r") {
+				t.Errorf("arguments = %q result = %q", args, result)
+			}
+			if !tc.want && (hasArgs || hasResult) {
+				t.Errorf("content captured with CaptureOff: arguments = %q result = %q", args, result)
+			}
+		})
 	}
 }
 

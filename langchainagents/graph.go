@@ -99,6 +99,9 @@ func (g *LangGraph) Invoke(ctx context.Context, input string, opts ...aiserver.C
 	r.graphTD = def.TrackData()
 	r.graphTD.RunID = r.runID
 
+	// Nodes run without a handler, so the run binds the process default
+	// (Configure) itself, as an invocation.
+	ctx = sdkapi.StartInvocation(ctx, aiserver.CaptureDefault)
 	spanCtx, span := otel.Tracer(PackageName).Start(ctx, aiserver.GraphSpanName)
 	defer span.End()
 	span.SetAttributes(attribute.String("ld.ai.graph.key", def.Key))

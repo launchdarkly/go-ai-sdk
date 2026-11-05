@@ -25,11 +25,16 @@ Shared Anthropic wire mapping (turns, tools, max_tokens, finish reasons, usage) 
 const PackageName, PackageVersion, SpanName
 var ProvidesFor aiserver.ProvidesFor
 var ErrToolNotFound error
-type Options struct{ Client *anthropic.Client; APIKey string; CaptureContent bool }
+type Options struct{ Client *anthropic.Client; APIKey string; CaptureContent aiserver.ContentCapture }
 func NewHandler(Options) *aiserver.ProviderHandler
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func ClaudeMessages(ctx, configKey, userInput string, userCtx ldcontext.Context, *InvokeOptions) (aiserver.ProviderResponse, error)
 ```
+
+`Options.CaptureContent` gates prompt, completion, tool and judge-explanation content on spans:
+`aiserver.CaptureDefault` (the zero value) follows `aiserver.Configure`, else on;
+`aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
+`gen_ai.tool.name` are written either way.
 
 `init()` calls `aiserver.RegisterAiSdkPackage(PackageName, PackageVersion)`. `NewHandler` reports
 `claude-messages.createClaudeMessagesHandler` and `ClaudeMessages` reports

@@ -61,9 +61,9 @@ type Options struct {
 	Client *openai.Client
 	// APIKey is used only when Client is nil.
 	APIKey string
-	// CaptureContent is attached to the handler so the client core can gate
-	// judge explanations on it.
-	CaptureContent bool
+	// CaptureContent gates prompt, completion, tool and judge-explanation
+	// content on spans. CaptureDefault follows aiserver.Configure, else on.
+	CaptureContent aiserver.ContentCapture
 	// MaxTurns caps model turns per run; 0 means 10, the Agents SDK default.
 	// A variation's `max_turns` model parameter takes precedence.
 	MaxTurns int

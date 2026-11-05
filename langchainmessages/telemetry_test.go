@@ -103,3 +103,38 @@ func TestConversationID(t *testing.T) {
 		}
 	}
 }
+
+// tool call arguments and results reach the execute_tool span only when
+// content capture is on; the tool's identity is written either way.
+func TestToolContentCapture(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		capture aiserver.ContentCapture
+		want    bool
+	}{{"on", aiserver.CaptureOn, true}, {"off", aiserver.CaptureOff, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			exp := withTracer(t)
+			h := newHandler(Options{Model: &fakeModel{turns: []scripted{toolTurn("a", map[string]any{"city": "Paris"}), textTurn("done", 1, 1)}},
+				CaptureContent: tc.capture})
+			if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: cfg(threeTools), UserInput: "q", ToolHandlers: okA()}); err != nil {
+				t.Fatal(err)
+			}
+			s := spansByName(exp)["execute_tool a"]
+			if len(s) != 1 {
+				t.Fatalf("tool spans = %d", len(s))
+			}
+			got := spanAttrs(s[0])
+			if got["gen_ai.tool.name"] != "a" {
+				t.Errorf("gen_ai.tool.name = %q", got["gen_ai.tool.name"])
+			}
+			args, hasArgs := got["gen_ai.tool.call.arguments"]
+			result, hasResult := got["gen_ai.tool.call.result"]
+			if tc.want && (args != `{"city":"Paris"}` || result != "r") {
+				t.Errorf("arguments = %q result = %q", args, result)
+			}
+			if !tc.want && (hasArgs || hasResult) {
+				t.Errorf("content captured with CaptureOff: arguments = %q result = %q", args, result)
+			}
+		})
+	}
+}

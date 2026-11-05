@@ -111,7 +111,7 @@ func NewHandler(opts Options) *aiserver.ProviderHandler
 type Options struct {
 	Model          llms.Model   // used for every call when set
 	ModelFactory   ModelFactory // func(cfg aiserver.AiConfig) (llms.Model, error), per call
-	CaptureContent bool         // default false
+	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 }
 func LangChainAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph

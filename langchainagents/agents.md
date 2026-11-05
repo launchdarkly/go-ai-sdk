@@ -30,7 +30,7 @@ const PackageName, PackageVersion, SpanName
 var ProvidesFor
 var ErrRecursionLimit, ErrNoToolHandler, ErrEmptyResponse, ErrNoRoot, ErrNilGraph, ErrNodeName
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
-type Options struct{ Model llms.Model; ModelFactory ModelFactory; CaptureContent bool }
+type Options struct{ Model llms.Model; ModelFactory ModelFactory; CaptureContent aiserver.ContentCapture }
 func NewHandler(opts Options) *aiserver.ProviderHandler
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func LangChainAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
@@ -40,6 +40,11 @@ type LangGraph struct{ ... }
 func ToLangGraph(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *LangGraph
 func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 ```
+
+`Options.CaptureContent` gates prompt, completion, tool and judge-explanation content on spans:
+`aiserver.CaptureDefault` (the zero value) follows `aiserver.Configure`, else on;
+`aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
+`gen_ai.tool.name` are written either way.
 
 `init()` registers the package. Usage helpers: `langchain-agents.createLangChainAgentsHandler`,
 `langchain-agents.langchainAgents`, `langchain-agents.langchainGraph`,

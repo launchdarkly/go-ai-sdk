@@ -10,6 +10,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 // Prompt is a handler's provider-neutral request: a system prompt plus the
@@ -174,7 +176,8 @@ type HandlerRun struct {
 
 // StartHandlerRun opens the root span, writes model identity, the LD
 // config-association and context-identity attributes (from req.Variables),
-// and the prompt content (OpenLLMetry attributes + gen_ai.content.prompt).
+// and, when capture is enabled for ctx, the prompt content (OpenLLMetry
+// attributes + gen_ai.content.prompt).
 func StartHandlerRun(ctx context.Context, opts HandlerSpanOptions, req HandlerRequest, p Prompt) *HandlerRun {
 	if opts.Operation == "" {
 		opts.Operation = "chat"
@@ -189,7 +192,9 @@ func StartHandlerRun(ctx context.Context, opts HandlerSpanOptions, req HandlerRe
 	root.SetAttributes(attribute.String("gen_ai.operation.name", opts.Operation))
 	root.SetAttributes(r.identity()...)
 	SetLDSpanAttributes(root, req.Variables)
-	writePromptContent(root, p)
+	if telemetry.Enabled(ctx) {
+		writePromptContent(root, p)
+	}
 	return r
 }
 
@@ -266,6 +271,18 @@ func (r *HandlerRun) StartTool(name, callID string) trace.Span {
 // EndTool ends a tool span; a non-nil err marks it ERROR.
 func (r *HandlerRun) EndTool(s trace.Span, err error) { r.end(s, err) }
 
+// ToolArguments records a tool call's arguments on its execute_tool span,
+// subject to the content gate.
+func (r *HandlerRun) ToolArguments(s trace.Span, arguments any) {
+	telemetry.SetToolCallArguments(r.ctx, s, arguments)
+}
+
+// ToolResult records a tool call's result on its execute_tool span, subject
+// to the content gate.
+func (r *HandlerRun) ToolResult(s trace.Span, result any) {
+	telemetry.SetToolCallResult(r.ctx, s, result)
+}
+
 func (r *HandlerRun) end(s trace.Span, err error) {
 	if !r.open[s] {
 		return
@@ -290,16 +307,19 @@ func (r *HandlerRun) AddUsage(u SpanUsage) {
 }
 
 // Finish ends the root on success: response model, run usage, completion
-// content (gen_ai.completion.0.* + gen_ai.content.completion), status OK.
+// content (gen_ai.completion.0.* + gen_ai.content.completion) when
+// capture is enabled, status OK.
 func (r *HandlerRun) Finish(responseModel, output string) {
 	if responseModel == "" {
 		responseModel = r.opts.RequestModel
 	}
 	r.Root.SetAttributes(attribute.String("gen_ai.response.model", responseModel))
 	SetUsageSpanAttributes(r.Root, r.usage)
-	r.Root.SetAttributes(attribute.String("gen_ai.completion.0.role", "assistant"),
-		attribute.String("gen_ai.completion.0.content", output))
-	r.Root.AddEvent("gen_ai.content.completion", trace.WithAttributes(attribute.String("gen_ai.completion", output)))
+	if telemetry.Enabled(r.ctx) {
+		r.Root.SetAttributes(attribute.String("gen_ai.completion.0.role", "assistant"),
+			attribute.String("gen_ai.completion.0.content", output))
+		r.Root.AddEvent("gen_ai.content.completion", trace.WithAttributes(attribute.String("gen_ai.completion", output)))
+	}
 	r.end(r.Root, nil)
 }
 
@@ -356,19 +376,7 @@ func (r *HandlerRun) Abandon() {
 
 // ToolResultString renders a tool result for the provider: strings pass
 // through, anything else is JSON.
-func ToolResultString(v any) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	if v == nil {
-		return ""
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Sprint(v)
-	}
-	return string(b)
-}
+func ToolResultString(v any) string { return telemetry.ValueString(v) }
 
 // CallableTools returns the config tools that have a local ToolFunc,
 // keyed by the config map key — the name the model sees.

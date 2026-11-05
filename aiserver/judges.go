@@ -136,7 +136,7 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 			}
 			results[j.Key] = JudgeResult{Score: score, Response: reasoning, Usage: res.Usage}
 			explanation := ""
-			if h.CaptureContent {
+			if h.CaptureContent.enabled() {
 				explanation = reasoning
 			}
 			record(score, explanation)
@@ -254,7 +254,7 @@ func RunJudge(ctx context.Context, task JudgeTask, handlers []*ProviderHandler) 
 			return nil
 		}
 		explanation := ""
-		if h.CaptureContent {
+		if h.CaptureContent.enabled() {
 			explanation = reasoning
 		}
 		record(score, explanation)

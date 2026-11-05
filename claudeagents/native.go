@@ -19,6 +19,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/anthropicwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
+	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
 // SubAgentToolPrefix prefixes each sub-agent tool name, matching the
@@ -39,9 +40,10 @@ type AdapterOptions struct {
 // GraphRunner runs a GraphDefinition as nested agents: every child node is a
 // sub-agent tool of its parent, so the root drives the whole run.
 type GraphRunner struct {
-	def   *aiserver.GraphDefinition
-	tools map[string]aiserver.ToolHandler
-	agent *agent
+	def     *aiserver.GraphDefinition
+	tools   map[string]aiserver.ToolHandler
+	agent   *agent
+	capture aiserver.ContentCapture // opts.Handler.CaptureContent, bound for each run
 }
 
 // ToClaudeAgents adapts a resolved graph to nested Claude agents
@@ -52,7 +54,7 @@ func ToClaudeAgents(def *aiserver.GraphDefinition, opts *AdapterOptions) *GraphR
 	if opts == nil {
 		opts = &AdapterOptions{}
 	}
-	return &GraphRunner{def: def, tools: opts.ToolHandlers, agent: newAgent(opts.Handler)}
+	return &GraphRunner{def: def, tools: opts.ToolHandlers, agent: newAgent(opts.Handler), capture: opts.Handler.CaptureContent}
 }
 
 // subAgent is one node with the sub-agent tools for its children.
@@ -91,6 +93,9 @@ func (g *GraphRunner) Invoke(ctx context.Context, input string, opts ...aiserver
 	run := &graphRun{GraphRunner: g, userCtx: userCtx, tracking: userCtx.IsDefined(), runTD: g.def.TrackData(), variables: variables}
 	run.runTD.RunID = uuid.NewString()
 
+	// Anthropic nodes run the agent loop directly, not through a handler, so
+	// the run binds Handler.CaptureContent itself.
+	ctx = sdkapi.StartInvocation(ctx, g.capture)
 	ctx, span := otel.Tracer(PackageName).Start(ctx, aiserver.GraphSpanName)
 	defer span.End()
 	span.SetAttributes(attribute.String("ld.ai.graph.key", g.def.Key))

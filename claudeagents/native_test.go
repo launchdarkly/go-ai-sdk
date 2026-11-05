@@ -273,7 +273,7 @@ func TestClaudeGraph(t *testing.T) {
 	stub := sdkapi.CreateHandler(ProvidesFor, func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
 		stubCalled = true
 		return aiserver.HandlerResult{Output: "stub"}, nil
-	}, nil, false)
+	}, nil, aiserver.CaptureDefault)
 	looked := false
 	g := ClaudeGraph("g", GraphOptions{
 		Registry: aiserver.NewRegistry(aiserver.RegistryEntries{Handlers: []*aiserver.ProviderHandler{stub}}),

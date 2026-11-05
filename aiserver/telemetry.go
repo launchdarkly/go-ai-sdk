@@ -11,6 +11,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 // TracerPrefix scopes the tracers whose spans get a conversation id.
@@ -33,21 +35,39 @@ func conversationID(ctx context.Context) string {
 	return id
 }
 
-// ConversationIDSpanProcessor stamps gen_ai.conversation.id write-if-absent
-// on SDK spans only.
+// ConversationIDSpanProcessor stamps gen_ai.conversation.id and any
+// attributes the SDK bound on the span's context write-if-absent, and counts
+// the span for any SDK span counter bound there, on SDK spans only. With nothing bound it does
+// nothing.
 type ConversationIDSpanProcessor struct{}
 
 func (ConversationIDSpanProcessor) OnStart(parent context.Context, s sdktrace.ReadWriteSpan) {
-	id := conversationID(parent)
-	if id == "" || !strings.HasPrefix(s.InstrumentationScope().Name, TracerPrefix) {
+	if !strings.HasPrefix(s.InstrumentationScope().Name, TracerPrefix) {
 		return
 	}
+	telemetry.CountSpan(parent)
+	var stamp []attribute.KeyValue
+	if id := conversationID(parent); id != "" {
+		stamp = append(stamp, attribute.String("gen_ai.conversation.id", id))
+	}
+	stamp = append(stamp, telemetry.BoundAttributes(parent)...)
+	if len(stamp) == 0 {
+		return
+	}
+	has := map[attribute.Key]bool{}
 	for _, a := range s.Attributes() {
-		if a.Key == "gen_ai.conversation.id" {
-			return
+		has[a.Key] = true
+	}
+	var add []attribute.KeyValue
+	for _, a := range stamp {
+		if !has[a.Key] {
+			has[a.Key] = true
+			add = append(add, a)
 		}
 	}
-	s.SetAttributes(attribute.String("gen_ai.conversation.id", id))
+	if len(add) > 0 {
+		s.SetAttributes(add...)
+	}
 }
 func (ConversationIDSpanProcessor) OnEnd(sdktrace.ReadOnlySpan)      {}
 func (ConversationIDSpanProcessor) Shutdown(context.Context) error   { return nil }

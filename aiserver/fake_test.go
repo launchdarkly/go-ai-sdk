@@ -107,7 +107,7 @@ func stubHandler(provider string, mode Mode, out string, usage map[string]any, s
 			*seen = req
 		}
 		return HandlerResult{Output: out, Usage: usage}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 }
 
 var userCtx = ldcontext.NewBuilder("user-123").SetString("email", "user@example.com").Build()

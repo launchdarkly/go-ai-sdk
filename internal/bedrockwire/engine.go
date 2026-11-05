@@ -225,11 +225,15 @@ func (e *Engine) run(ctx context.Context, req aiserver.HandlerRequest, onText fu
 					r.Fail(err)
 					return "", usage, false, err
 				}
-				result, ferr := e.callTool(r.Context(), fn, name, v.Value)
+				args, result, ferr := e.callTool(r.Context(), fn, name, v.Value)
+				if args != nil {
+					r.ToolArguments(tool, args)
+				}
 				if ferr != nil {
 					r.Fail(ferr)
 					return "", usage, false, ferr // tool errors propagate
 				}
+				r.ToolResult(tool, result)
 				r.EndTool(tool, nil)
 				results = append(results, &types.ContentBlockMemberToolResult{Value: types.ToolResultBlock{
 					ToolUseId: aws.String(callID),
@@ -256,16 +260,18 @@ func (e *Engine) run(ctx context.Context, req aiserver.HandlerRequest, onText fu
 	return out, usage, false, nil
 }
 
-func (e *Engine) callTool(ctx context.Context, fn aiserver.ToolFunc, name string, use types.ToolUseBlock) (any, error) {
+// callTool decodes the tool input and calls fn. It also returns the decoded
+// arguments for the tool span; they are nil when decoding failed.
+func (e *Engine) callTool(ctx context.Context, fn aiserver.ToolFunc, name string, use types.ToolUseBlock) (map[string]any, any, error) {
 	args, err := documentArgs(use.Input)
 	if err != nil {
-		return nil, e.errorf("decode input for tool %q: %w", name, err)
+		return nil, nil, e.errorf("decode input for tool %q: %w", name, err)
 	}
 	res, err := fn(ctx, args)
 	if err != nil {
-		return nil, e.errorf("tool %q: %w", name, err)
+		return args, nil, e.errorf("tool %q: %w", name, err)
 	}
-	return res, nil
+	return args, res, nil
 }
 
 // turn performs one provider call: Converse when onText is nil, otherwise

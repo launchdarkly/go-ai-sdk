@@ -181,7 +181,7 @@ func TestWrappedToolsPreserveResults(t *testing.T) {
 		gotV, _ = req.ToolHandlers["ok"].(ToolFunc)(ctx, map[string]any{"a": 1.0})
 		_, gotErr = req.ToolHandlers["fail"].(ToolFunc)(ctx, nil)
 		return HandlerResult{Output: "done"}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	cfg := AiConfig{Tools: map[string]Tool{"ok": {Name: "ok", Type: "function"}, "fail": {Name: "fail", Type: "function"}}}
 	res, err := executeAndTrack(bg, execArgs{configKey: "cfg", config: cfg, userCtx: userCtx, handler: h, tools: tools})
 	if err != nil {
@@ -336,7 +336,7 @@ func TestInitClientTelemetryAndShutdown(t *testing.T) {
 		}
 	}
 	all := strings.Join(bodies, "")
-	for _, want := range []string{"highlight.project_id", "service.name", "go-sdk", "deployment.environment", "test-env"} {
+	for _, want := range []string{"launchdarkly.project_id", "service.name", "go-sdk", "deployment.environment", "test-env"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("exported resource lacks %q", want)
 		}
@@ -416,7 +416,7 @@ func streamHandler(provider string, out string, usage map[string]any, err error,
 			}
 			yield(HandlerStreamEvent{Type: EventDone, Usage: usage}, nil)
 		}
-	}, false)
+	}, CaptureDefault)
 }
 
 func drain(seq iter.Seq2[StreamEvent, error]) (events []StreamEvent, err error) {
@@ -471,7 +471,7 @@ func TestStructuredObjectOutputReturnedAsIs(t *testing.T) {
 	out := map[string]any{"answer": 42.0}
 	h := createHandler(ProvidesFor{"P", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
 		return HandlerResult{Output: out}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	resp, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, "q", userCtx)
 	if err != nil {
 		t.Fatal(err)
@@ -498,7 +498,7 @@ func TestInlineJudgeVariablesAreExact(t *testing.T) {
 		}
 		_, _ = req.ToolHandlers["lookup"].(ToolFunc)(ctx, nil)
 		return HandlerResult{Output: "answer"}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	th := map[string]ToolHandler{"lookup": ToolFunc(func(context.Context, map[string]any) (any, error) { return "found", nil })}
 	if _, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}, ToolHandlers: th}).Invoke(bg, "q", userCtx, WithVariables(map[string]any{"caller": "x"})); err != nil {
 		t.Fatal(err)
@@ -532,7 +532,7 @@ func TestGraphJudgeTrajectoryScope(t *testing.T) {
 			}
 		}
 		return HandlerResult{Output: "out"}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	th := map[string]ToolHandler{}
 	for _, n := range []string{"alpha", "beta"} {
 		th[n] = ToolFunc(func(context.Context, map[string]any) (any, error) { return n + " result", nil })
@@ -609,7 +609,7 @@ func TestConfigStreamTrackingJudgesAndRouting(t *testing.T) {
 		return func(yield func(HandlerStreamEvent, error) bool) {
 			yield(HandlerStreamEvent{Type: EventChunk, Text: "answer"}, nil)
 		}
-	}, false)
+	}, CaptureDefault)
 	events, err = drain(Config(ConfigArgs{Key: "judged", Handlers: []*ProviderHandler{judged}}).Stream(bg, "q", userCtx))
 	if done := events[len(events)-1]; err != nil || done.JudgeResults["judge"].Score != 0.4 || done.JudgeResults["judge"].Response != "meh" {
 		t.Errorf("judged done = %+v err=%v", done, err)
@@ -658,7 +658,7 @@ func TestGraphStreamParity(t *testing.T) {
 			return HandlerResult{Output: `{"score":0.8,"reasoning":"good"}`}, nil
 		}
 		return HandlerResult{Output: req.Variables[VarLD].(TrackData).ConfigKey + " out", Usage: map[string]any{"input": 1.0, "output": 1.0}}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	events, err := drainGraph(Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}, GraphJudge: "gj"}).Stream(bg, "q", userCtx))
 	if err != nil {
 		t.Fatal(err)
@@ -833,7 +833,7 @@ func TestNativeToolOutOfTrajectory(t *testing.T) {
 		_, _ = req.ToolHandlers["lookup"].(ToolFunc)(ctx, nil)
 		req.ToolHandlers["web_search"].(*NativeTool).Track()
 		return HandlerResult{Output: "answer"}, nil
-	}, nil, false)
+	}, nil, CaptureDefault)
 	th := map[string]ToolHandler{
 		"lookup":     ToolFunc(func(context.Context, map[string]any) (any, error) { return "found", nil }),
 		"web_search": &NativeTool{ToolName: "web_search"},
@@ -868,7 +868,7 @@ func TestFailedInvocationKeepsItsTrajectory(t *testing.T) {
 	h := createHandler(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		_, _ = req.ToolHandlers["lookup"].(ToolFunc)(ctx, map[string]any{"q": "x"})
 		return HandlerResult{}, boom
-	}, nil, false)
+	}, nil, CaptureDefault)
 	cfg := AiConfig{Tools: map[string]Tool{"lookup": {Name: "lookup", Type: "function"}}}
 	tools := map[string]ToolHandler{"lookup": ToolFunc(func(context.Context, map[string]any) (any, error) { return "found", nil })}
 	res, err := executeAndTrack(bg, execArgs{configKey: "cfg", config: cfg, userCtx: userCtx, handler: h, tools: tools})
