@@ -74,7 +74,7 @@ func TestSkillsHelperUsagePerFunction(t *testing.T) {
 			t.Errorf("%s: usage events %v", r.helper, got)
 		}
 		for _, tr := range fake.tracks {
-			if tr.event == "$ld:ai:sdk:usage" && tr.data["helperPackageVersion"] != aiserver.PackageVersion || tr.data["aiSdkVersion"] != aiserver.PackageVersion {
+			if tr.event == "$ld:ai:sdk:usage" && (tr.data["helperPackageVersion"] != aiserver.PackageVersion || tr.data["aiSdkVersion"] != aiserver.PackageVersion) {
 				t.Errorf("%s: package version in %v", r.helper, tr.data)
 			}
 		}

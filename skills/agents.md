@@ -2,7 +2,7 @@
 
 ## Role and tier
 
-Tier 0, core, in its own package. Not a handler: no `providesFor`. It imports `aiserver` the way
+Tier 1 by layout (it imports `aiserver`), core by stage, in its own package. Not a handler: no `providesFor`. It imports `aiserver` the way
 the provider packages do, and `aiserver` never imports it. `public_test.go` exercises the exported
 names from outside the package. The names are pinned in `surface_test.go`'s `skillsSurface`, and
 `aiserver/surface_test.go` asserts that none of them is on the `aiserver` root.

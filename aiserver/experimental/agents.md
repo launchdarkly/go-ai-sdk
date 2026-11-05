@@ -2,7 +2,7 @@
 
 Experimental entry point. The files here are thin: type aliases and
 one-line functions over `internal/<feature>`, each documented as Experimental. A feature promoted
-to core moves to `aiserver` and leaves this package.
+to core leaves this package: Agent Skills is now package `skills`.
 
 <!-- Each feature owns one section below. Append; do not rewrite another feature's section. -->
 
@@ -15,7 +15,7 @@ one-line constructors.
 
 | File | Responsibility |
 | --- | --- |
-| `evaluations.go` | Public aliases (`Evaluations`, `EvaluationRunArgs`, `GenerationConfig`, `InlineTool`, `Judge`, `Scorer`, …), `InitEvaluations`, `NewJudge`, `NewScorer`, `ErrEval*` sentinels. Sentinels carry an `Eval` prefix because `aiserver.ErrInvalidArgument` belongs to Agent Skills. |
+| `evaluations.go` | Public aliases (`Evaluations`, `EvaluationRunArgs`, `GenerationConfig`, `InlineTool`, `Judge`, `Scorer`, …), `InitEvaluations`, `NewJudge`, `NewScorer`, `ErrEval*` sentinels. Sentinels carry an `Eval` prefix, kept from when Agent Skills, with its `ErrInvalidArgument`, shared this package. |
 | `../../internal/evaluations/api.go` | Management API client: fixed host, headers, retry policy (429 always; 5xx/transport only for GET/HEAD and idempotent POSTs), `Retry-After`, injectable sleep/jitter. |
 | `.../types.go` | Public types, sentinel errors, criterion constructors and wire shapes. |
 | `.../validate.go` | Every pre-I/O check: pool, generation mode/coverage/prompt, tools, inline rows (strict JSON), criteria. Shared `selectHandler`. |

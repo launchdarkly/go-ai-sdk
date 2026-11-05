@@ -157,7 +157,6 @@ reuse an LD client you already built.
 | `github.com/launchdarkly/go-sdk-common/v3` | `ldcontext`, `ldvalue` |
 | `go.opentelemetry.io/otel` (+ `sdk`, `otlptracehttp`) | Spans, tracer provider, OTLP export |
 | `github.com/google/uuid` | Run ids |
-| `golang.org/x/sys` | `*at()` filesystem calls for skill materialization |
 
 ## Common pitfalls
 

@@ -13,10 +13,10 @@ Tier 0  aiserver                 core: no provider SDK imports
 Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         claudeagents   openaiagents   bedrockagents
         internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers shared by a pair
-        skills         Agent Skills (core; imports aiserver, no provider SDK)
+        skills         Agent Skills (core; imports aiserver and golang.org/x/sys, no provider SDK)
 ```
 
-Tier 1 packages import `aiserver` and their provider SDK only. `aiserver`
+Tier 1 packages import `aiserver` and their provider SDK only (`skills` has none). `aiserver`
 never imports a Tier 1 package, and core never names an experimental type:
 the two meet only through `internal/bridge`.
 

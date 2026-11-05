@@ -9,6 +9,6 @@
 //   - Shadow requests (shadow_requests.go): ShadowConfig runs a candidate
 //     variation on the served call's input and tracks it without serving it.
 //
-// When a feature is promoted to core, its names move to package aiserver and
-// leave this package. Agent Skills has been promoted: use package skills.
+// When a feature is promoted to core, its names leave this package. Agent
+// Skills has been promoted: use package skills.
 package experimental
