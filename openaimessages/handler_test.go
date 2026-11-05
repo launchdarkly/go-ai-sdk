@@ -774,8 +774,8 @@ func TestModelParameters(t *testing.T) {
 	}{
 		{"allowlisted forwarded, unknown and unsafe dropped",
 			map[string]any{"temperature": 0.2, "store": false, "frequency_penalty": 1.0, "background": true, "stream": true, "prompt": "p", "base_url": "http://evil"},
-			map[string]any{"temperature": 0.2, "store": false},
-			[]string{"frequency_penalty", "background", "prompt", "base_url"}},
+			map[string]any{"temperature": 0.2},
+			[]string{"store", "frequency_penalty", "background", "prompt", "base_url"}},
 		{"max_tokens renamed", map[string]any{"max_tokens": 100.0}, map[string]any{"max_output_tokens": 100.0}, []string{"max_tokens"}},
 		{"max_output_tokens wins", map[string]any{"max_tokens": 1.0, "max_completion_tokens": 2.0, "max_output_tokens": 3.0},
 			map[string]any{"max_output_tokens": 3.0}, []string{"max_tokens", "max_completion_tokens"}},

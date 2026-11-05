@@ -142,7 +142,14 @@ Behaviour summary:
   turn's text concatenated.
 - `config.outputFormat` is appended to the system prompt as a JSON-schema instruction on the
   blocking path only.
-- These `model.parameters` keys are forwarded verbatim: `cache_control`, `container`,
-  `inference_geo`, `metadata`, `output_config`, `service_tier`, `stop_sequences`, `temperature`,
-  `thinking`, `tool_choice`, `top_k`, `top_p`. A top-level `effort` moves into
-  `output_config.effort`. `max_tokens` / `maxTokens` sets `max_tokens` (default 1024).
+- These `model.parameters` keys are forwarded: `cache_control`, `output_config`, `service_tier`,
+  `stop_sequences`, `temperature`, `thinking`, `tool_choice`, `top_k`, `top_p`. Any other key is
+  dropped. `output_config` keeps only `effort`, and a top-level `effort` moves into
+  `output_config.effort` (an explicit `output_config.effort` wins). `thinking`, `tool_choice` and
+  `cache_control` keep only the sub-keys their `type` takes; a value with a missing or unknown
+  `type`, or without a required sub-key, is dropped. `max_tokens` / `maxTokens` sets `max_tokens`
+  (default 1024).
+- `inference_geo` is not forwarded, so a config that set it gets the workspace's default inference
+  region. An application that needs a fixed region can pass a `Client` built with
+  `option.WithJSONSet("inference_geo", "<region>")`. It is applied after the handler serializes the
+  request, so the handler cannot overwrite it, and it applies to every request the client sends.

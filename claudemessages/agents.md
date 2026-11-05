@@ -48,8 +48,9 @@ The handler receives `aiserver.HandlerRequest{Config, UserInput, ToolHandlers, V
 - **`Config`**: `aiserver.ComposePrompt(req, ModeMessages)` builds the system prompt and turns
   (`messages` win over `instructions`). On the blocking path `OutputFormat` is appended with
   `aiserver.WithOutputFormat`. `Model.Name` is the request model. `max_tokens` is read from
-  `Model.Parameters`; the allowlisted parameters in `forwardedParameters` are sent as extra
-  request fields, with a top-level `effort` moved into `output_config.effort`.
+  `Model.Parameters`; the allowlisted parameters in `forwardedParameters` and the rebuilt
+  `typedShapes` objects are sent as extra request fields, with `output_config` reduced to `effort`
+  and a top-level `effort` moved into it.
 - **`UserInput`**: appended by `ComposePrompt`; never absent, `""` when empty.
 - **`ToolHandlers`**: `anthropicwire.Tools` offers each `Config.Tools` entry whose key has a
   `ToolFunc`, named by its key, with the JSON Schema rebuilt field for field. A

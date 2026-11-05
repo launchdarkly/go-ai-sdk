@@ -33,14 +33,16 @@ const defaultMaxTurns = 10
 // handoffPrefix is the Agents SDK's default handoff tool-name prefix.
 const handoffPrefix = "transfer_to_"
 
-// forwardedParameters are the config.model.parameters keys sent verbatim:
-// the Responses API fields behind the JavaScript package's ModelSettings
+// forwardedParameters are the config.model.parameters keys forwarded: the
+// Responses API fields behind the JavaScript package's ModelSettings
 // allowlist. Handler-owned fields (model, input, instructions, tools, text,
 // previous_response_id) are deliberately absent; `verbosity` is mapped to
-// text.verbosity and `max_turns` caps the run instead.
+// text.verbosity and `max_turns` caps the run instead. store,
+// prompt_cache_retention, truncation and context_management (data retention
+// and server-side state) are never forwarded. tool_choice is forwarded only
+// as a string.
 var forwardedParameters = []string{
-	"context_management", "max_output_tokens", "parallel_tool_calls", "prompt_cache_retention",
-	"reasoning", "store", "temperature", "tool_choice", "top_p", "truncation",
+	"max_output_tokens", "parallel_tool_calls", "reasoning", "temperature", "tool_choice", "top_p",
 }
 
 // agent is one agent in a run.
@@ -149,7 +151,11 @@ func (a *agent) request(input responses.ResponseInputParam, previousResponseID s
 	if verbosity != "" {
 		p.Text.Verbosity = responses.ResponseTextConfigVerbosity(verbosity)
 	}
-	if extra := openaiwire.ModelParameters(a.parameters, forwardedParameters); len(extra) > 0 {
+	extra := openaiwire.ModelParameters(a.parameters, forwardedParameters)
+	if _, ok := extra["tool_choice"].(string); !ok {
+		delete(extra, "tool_choice")
+	}
+	if len(extra) > 0 {
 		p.SetExtraFields(extra)
 	}
 	return p

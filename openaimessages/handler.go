@@ -108,14 +108,17 @@ func toInput(p aiserver.Prompt) responses.ResponseInputParam {
 	return append(out, openaiwire.Turns(p.Turns)...)
 }
 
-// forwardedParameters are the config.model.parameters keys sent verbatim
-// (the JavaScript handler's allowlist). Handler-owned fields (model, input,
+// forwardedParameters are the config.model.parameters keys forwarded: settings
+// that shape what the model generates. Handler-owned fields (model, input,
 // tools, previous_response_id, text) and ones that would break the call
-// (stream, background, conversation, prompt) are deliberately absent.
+// (stream, background, conversation, prompt) are deliberately absent, as are
+// instructions (prompt content), store, prompt_cache_retention, truncation and
+// context_management (data retention and server-side state), include (it
+// changes what comes back), moderation (safety configuration), and metadata,
+// user and safety_identifier (identity and attribution).
 var forwardedParameters = []string{
-	"context_management", "include", "instructions", "max_output_tokens", "metadata", "moderation",
-	"parallel_tool_calls", "prompt_cache_key", "prompt_cache_retention", "reasoning", "safety_identifier",
-	"service_tier", "store", "temperature", "tool_choice", "top_logprobs", "top_p", "truncation", "user",
+	"max_output_tokens", "max_tool_calls", "parallel_tool_calls", "prompt_cache_key", "reasoning",
+	"service_tier", "temperature", "tool_choice", "top_logprobs", "top_p",
 }
 
 func newParams(cfg aiserver.AiConfig, input responses.ResponseInputParam) responses.ResponseNewParams {
@@ -123,10 +126,25 @@ func newParams(cfg aiserver.AiConfig, input responses.ResponseInputParam) respon
 		Model: cfg.Model.Name,
 		Input: responses.ResponseNewParamsInputUnion{OfInputItemList: input},
 	}
-	if extra := openaiwire.ModelParameters(cfg.Model.Parameters, forwardedParameters); len(extra) > 0 {
+	extra := openaiwire.ModelParameters(cfg.Model.Parameters, forwardedParameters)
+	if !isToolChoice(extra["tool_choice"]) {
+		delete(extra, "tool_choice")
+	}
+	if len(extra) > 0 {
 		p.SetExtraFields(extra)
 	}
 	return p
+}
+
+// isToolChoice reports whether v is a mode string or an object with a string
+// type; any other tool_choice is dropped.
+func isToolChoice(v any) bool {
+	if _, ok := v.(string); ok {
+		return true
+	}
+	m, _ := v.(map[string]any)
+	_, ok := m["type"].(string)
+	return ok
 }
 
 // runTools executes the function calls in r. A call for a tool that was not

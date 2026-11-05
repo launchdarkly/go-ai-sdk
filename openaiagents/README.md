@@ -160,9 +160,20 @@ Behavior:
   JSON value is returned. Unparseable output is returned as the raw string. Streaming ignores
   `outputFormat`.
 - Forwarded `model.parameters`: `temperature`, `top_p`, `max_output_tokens` (also from
-  `max_tokens` / `max_completion_tokens`), `parallel_tool_calls`, `tool_choice`, `reasoning`,
-  `store`, `truncation`, `prompt_cache_retention`, `context_management`, and `verbosity` (or
+  `max_tokens` / `max_completion_tokens`), `parallel_tool_calls`, `tool_choice` (a string only),
+  `reasoning` (`effort` and `summary` only), and `verbosity` (or
   `text.verbosity`, which wins) as `text.verbosity`. `max_turns` caps the run. camelCase spellings
   (`topP`, `maxTokens`) are accepted; the snake_case key wins when both are set.
+- Some keys a config may already set are not forwarded, so OpenAI's defaults apply:
+  - `store`: OpenAI stores responses when `store` is omitted, so a config's `store: false` no
+    longer stops that.
+  - `truncation` and `context_management`: truncation defaults to `disabled`, so a long agent run
+    that relied on `truncation: "auto"` or compaction can fail with a context-length error.
+
+  To send one of these anyway, pass a `Client` built with `option.WithJSONSet`, for example
+  `option.WithJSONSet("store", false)`. It is applied after the handler serializes the request, so
+  the handler cannot overwrite it. It applies to every request the client sends, including the
+  turns after a tool call or handoff, which chain with `previous_response_id`, so `store: false`
+  there breaks tool loops and handoffs.
 - Usage is `input_tokens` / `output_tokens` summed over every turn (OpenAI input already includes
   cached tokens).

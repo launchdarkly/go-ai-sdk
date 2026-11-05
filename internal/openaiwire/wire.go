@@ -89,6 +89,7 @@ func HostedTool(toolType string, extra map[string]any) responses.ToolUnionParam 
 // ModelParameters picks the allowed keys from config.model.parameters,
 // renaming the Chat Completions token limits the LaunchDarkly UI offers.
 // Precedence: max_output_tokens, then max_completion_tokens, then max_tokens.
+// An allowed reasoning keeps only effort and summary.
 // allow must not contain handler-owned fields.
 func ModelParameters(in map[string]any, allow []string) map[string]any {
 	out := map[string]any{}
@@ -101,6 +102,34 @@ func ModelParameters(in map[string]any, allow []string) map[string]any {
 		if v, ok := in[k]; ok && v != nil {
 			out["max_output_tokens"] = v
 		}
+	}
+	if r, ok := out["reasoning"]; ok {
+		if rebuilt := reasoning(r); rebuilt != nil {
+			out["reasoning"] = rebuilt
+		} else {
+			delete(out, "reasoning")
+		}
+	}
+	return out
+}
+
+// reasoningKeys are the ReasoningParam sub-keys forwarded, as in the
+// JavaScript handlers. context and mode are dropped (they are not in the
+// cross-SDK table), and so is the deprecated generate_summary.
+var reasoningKeys = []string{"effort", "summary"}
+
+// reasoning keeps only reasoningKeys, or returns nil when v is not an object
+// or sets neither.
+func reasoning(v any) map[string]any {
+	m, _ := v.(map[string]any)
+	out := map[string]any{}
+	for _, k := range reasoningKeys {
+		if m[k] != nil {
+			out[k] = m[k]
+		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

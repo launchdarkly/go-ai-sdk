@@ -86,8 +86,8 @@ OTLP endpoint, service name), call `aiserver.InitWithClient` to bring your own L
   or return it as `cache_read_input_tokens`; `aiserver.ParseUsage` would fold it in a second time.
 - **Follow-up turns rely on `previous_response_id`** for the conversation; `tools` and
   `text.format` are re-sent each turn because the Responses API does not carry them over.
-  A request with `store: false` in `model.parameters` breaks tool loops, because OpenAI cannot
-  chain from a response it did not store.
+  `store` in `model.parameters`, including `store: false`, is not forwarded; the handler never
+  sets `store`.
 - **Streaming ignores `outputFormat`.** A streamed structured-output config returns free text.
 - **Tool results are strings.** Non-string results are JSON-encoded (`aiserver.ToolResultString`);
   a tool returning a struct without JSON tags sends Go field names to the model.
