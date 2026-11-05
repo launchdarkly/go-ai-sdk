@@ -42,8 +42,8 @@ const (
 
 // runState is one Run: validated arguments, then what each step resolves.
 type runState struct {
-	m           *Module
-	args        RunArgs
+	m           *EvaluationsModule
+	args        RunOptions
 	pool        []*aiserver.ProviderHandler
 	gen         GenerationConfig
 	genHandler  *aiserver.ProviderHandler
@@ -137,7 +137,7 @@ func (r *runState) project() string { return segment(r.m.projectKey) }
 
 // --- validation before any I/O ------------------------------------
 
-func (m *Module) prepare(a RunArgs) (*runState, error) {
+func (m *EvaluationsModule) prepare(a RunOptions) (*runState, error) {
 	if strings.TrimSpace(a.Key) == "" {
 		return nil, invalid("Key must not be blank")
 	}
@@ -278,7 +278,7 @@ func (r *runState) execute(ctx context.Context) (*EvalRunResult, error) {
 		// A failed row is one LaunchDarkly ruled against its criteria, so it
 		// fails the gate as an error row does.
 		Passed: summary.ErrorRows == 0 && summary.FailedRows == 0,
-		URL: fmt.Sprintf("%s/projects/%s/ai/evaluations/%s/runs/%s", UIBaseURI, r.project(),
+		URL: fmt.Sprintf("%s/projects/%s/ai/evaluations/%s/runs/%s", uiBaseURI, r.project(),
 			segment(r.evaluationID), segment(r.runID)),
 		RunID:   r.runID,
 		Summary: summary,
@@ -294,7 +294,7 @@ func (r *runState) runPhases(ctx context.Context, em *emitter) error {
 		return err
 	}
 	for _, g := range gens {
-		em.track(GenerationEventName, g.row.index, func() (map[string]any, error) {
+		em.track(generationEventName, g.row.index, func() (map[string]any, error) {
 			return em.payload(g.row.index, nil, generationFields(g))
 		})
 	}
@@ -307,7 +307,7 @@ func (r *runState) runPhases(ctx context.Context, em *emitter) error {
 		return err
 	}
 	for _, c := range results {
-		em.track(CriterionEventName, c.rowIndex, func() (map[string]any, error) {
+		em.track(criterionEventName, c.rowIndex, func() (map[string]any, error) {
 			return em.payload(c.rowIndex, map[string]any{"criterionType": c.criterion.criterionType()}, criterionFields(c))
 		})
 	}

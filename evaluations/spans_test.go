@@ -114,7 +114,7 @@ func within(inner, outer sdktrace.ReadOnlySpan) bool {
 // spanRun routes one hosted row with variables and returns the env and
 // args for a plain-function generation that calls tool "lookup", plus a
 // judge whose user message expands {{message_history}}.
-func spanRun(t *testing.T, gen func(ctx context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error), judgeCalls *int) (*fakeEnv, RunArgs) {
+func spanRun(t *testing.T, gen func(ctx context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error), judgeCalls *int) (*fakeEnv, RunOptions) {
 	t.Helper()
 	e := newEnv(t, 1)
 	e.route("GET", "projects/proj/datasets/ds/rows", resp{body: map[string]any{"items": []any{
@@ -135,9 +135,9 @@ func spanRun(t *testing.T, gen func(ctx context.Context, req aiserver.HandlerReq
 	})
 	args := baseArgs(h)
 	args.Concurrency = 1
-	args.Generation = &GenerationConfig{Provider: "OpenAI", Model: "gpt-4o", Mode: ModeCompletion,
+	args.Generation = &GenerationConfig{Provider: "OpenAI", Model: "gpt-4o", Mode: GenerationModeCompletion,
 		Messages: []aiserver.Message{{Role: "system", Text: "Answer in a {{tone}} way."}}}
-	args.InlineTools = map[string]InlineTool{"lookup": {Schema: map[string]any{"type": "object"},
+	args.InlineTools = map[string]EvalTool{"lookup": {Schema: map[string]any{"type": "object"},
 		Implementation: aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) { return "4", nil })}}
 	args.Criteria = []Criterion{mustJudge(t, "acc", nil)}
 	return e, args
@@ -317,7 +317,7 @@ func TestEvaluationSpansForPlainFunctions(t *testing.T) {
 	}
 
 	// Tracked payloads are unchanged.
-	for _, name := range []string{GenerationEventName, CriterionEventName} {
+	for _, name := range []string{generationEventName, criterionEventName} {
 		for _, ev := range e.ld.events(name) {
 			for _, k := range []string{"tool_calls", "toolCalls", "trajectory", "arguments", "messages", "prompt", "input"} {
 				if _, has := ev.Data[k]; has {

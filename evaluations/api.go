@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	// APIBaseURI is the fixed LaunchDarkly management API host. It is
+	// apiBaseURI is the fixed LaunchDarkly management API host. It is
 	// deliberately not configurable and is unrelated to LD_BASE_URI.
-	APIBaseURI = "https://app.launchdarkly.com"
-	// UIBaseURI is the fixed host used only to build run links.
-	UIBaseURI = "https://app.launchdarkly.com"
+	apiBaseURI = "https://app.launchdarkly.com"
+	// uiBaseURI is the fixed host used only to build run links.
+	uiBaseURI = "https://app.launchdarkly.com"
 
 	// apiVersion is the LD-API-Version date sent on every request:
 	// YYYYMMDD or "beta"; the value matches the Python SDK.
@@ -102,7 +102,7 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 func segment(s string) string { return strings.ReplaceAll(url.QueryEscape(s), "+", "%20") }
 
 func (c *apiClient) urlFor(path string, params []param) string {
-	u := APIBaseURI + "/api/v2/" + strings.TrimPrefix(path, "/")
+	u := apiBaseURI + "/api/v2/" + strings.TrimPrefix(path, "/")
 	var q []string
 	for _, p := range params {
 		if p.value == nil {

@@ -3,9 +3,8 @@
 // judges and scorers, reports every result to LaunchDarkly as custom events,
 // and polls the run summary for a verdict.
 //
-// Experimental. The public surface is re-exported from
-// github.com/launchdarkly/go-ai-sdk/aiserver/experimental; names may change
-// in a minor release.
+// Import it as github.com/launchdarkly/go-ai-sdk/evaluations. Start with
+// InitEvaluations, then call EvaluationsModule.Run.
 package evaluations
 
 import (
@@ -23,7 +22,7 @@ import (
 var (
 	// ErrInvalidArgument: a run argument failed validation before any I/O.
 	ErrInvalidArgument = errors.New("invalid argument")
-	// ErrMissingCredential: Init could not resolve LD_PROJECT_KEY, LD_API_TOKEN or LD_SDK_KEY.
+	// ErrMissingCredential: InitEvaluations could not resolve LD_PROJECT_KEY, LD_API_TOKEN or LD_SDK_KEY.
 	ErrMissingCredential = errors.New("missing credential")
 	// ErrNoClient: no LaunchDarkly client is available to emit result events.
 	ErrNoClient = errors.New("no LaunchDarkly client")
@@ -51,11 +50,14 @@ func invalid(format string, args ...any) error {
 	return fmt.Errorf("evaluations: %w: "+format, append([]any{ErrInvalidArgument}, args...)...)
 }
 
-// Generation modes accepted by GenerationConfig.Mode, as the LaunchDarkly UI
-// shows them.
+// GenerationMode is the mode of a generation written in code, as the
+// LaunchDarkly UI shows it: GenerationModeCompletion or GenerationModeAgent.
+type GenerationMode string
+
+// Generation modes accepted by GenerationConfig.Mode.
 const (
-	ModeCompletion = "completion"
-	ModeAgent      = "agent"
+	GenerationModeCompletion GenerationMode = "completion"
+	GenerationModeAgent      GenerationMode = "agent"
 )
 
 // GenerationConfig holds the generation settings written in code.
@@ -72,7 +74,7 @@ type GenerationConfig struct {
 	// the mode of a handler in the pool; when unsure, use the AI Config's mode
 	// in LaunchDarkly. Mode selects the handler only and is never sent to
 	// LaunchDarkly.
-	Mode string
+	Mode GenerationMode
 	// Parameters are model parameters; nil when none.
 	Parameters map[string]any
 	// Instructions is the agent prompt. Mutually exclusive with Messages.
@@ -108,10 +110,10 @@ type AIConfigRef struct {
 	Variation string
 }
 
-// InlineTool defines a tool in code: the executable plus the schema and
+// EvalTool defines a tool in code: the executable plus the schema and
 // description the model is shown. The schema is copied when the run is
 // validated, so later changes to the caller's map do not reach the run.
-type InlineTool struct {
+type EvalTool struct {
 	// Implementation is the aiserver.ToolFunc the handler calls. A
 	// NativeTool is not allowed: a native tool has no schema to define.
 	Implementation aiserver.ToolHandler
@@ -158,9 +160,9 @@ const (
 
 // Default thresholds.
 const (
-	DefaultJudgeThreshold    = 0.5
-	DefaultScorerThreshold   = 1.0
-	DefaultPassRateThreshold = 0.95
+	defaultJudgeThreshold    = 0.5
+	defaultScorerThreshold   = 1.0
+	defaultPassRateThreshold = 0.95
 )
 
 // Criterion is a Judge or a Scorer.
@@ -192,8 +194,8 @@ func NewJudge(key string, opts *JudgeOptions) (*Judge, error) {
 	if opts == nil {
 		opts = &JudgeOptions{}
 	}
-	j := &Judge{key: key, threshold: orDefault(opts.Threshold, DefaultJudgeThreshold),
-		passRate: orDefault(opts.PassRateThreshold, DefaultPassRateThreshold), groundTruthContext: opts.GroundTruthContext}
+	j := &Judge{key: key, threshold: orDefault(opts.Threshold, defaultJudgeThreshold),
+		passRate: orDefault(opts.PassRateThreshold, defaultPassRateThreshold), groundTruthContext: opts.GroundTruthContext}
 	if err := j.validate(); err != nil {
 		return nil, err
 	}
@@ -250,8 +252,8 @@ func NewScorer(name string, fn ScorerFunc, opts *ScorerOptions) (*Scorer, error)
 	if dir == "" {
 		dir = HigherIsBetter
 	}
-	s := &Scorer{name: name, fn: fn, threshold: orDefault(opts.Threshold, DefaultScorerThreshold),
-		passRate: orDefault(opts.PassRateThreshold, DefaultPassRateThreshold), direction: dir}
+	s := &Scorer{name: name, fn: fn, threshold: orDefault(opts.Threshold, defaultScorerThreshold),
+		passRate: orDefault(opts.PassRateThreshold, defaultPassRateThreshold), direction: dir}
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
@@ -302,8 +304,8 @@ func validateThresholds(threshold, passRate float64) error {
 	return nil
 }
 
-// RunArgs are the arguments to Module.Run.
-type RunArgs struct {
+// RunOptions are the arguments to EvaluationsModule.Run.
+type RunOptions struct {
 	// Key names the evaluation Run creates. Every Run creates a new
 	// evaluation, so the key must be unique per run (e.g. timestamp-suffixed).
 	Key string
@@ -320,10 +322,12 @@ type RunArgs struct {
 	AIConfig   *AIConfigRef
 	Overrides  *GenerationOverrides
 	// Tools are library tools, resolved by key against LaunchDarkly.
-	// InlineTools are defined in code. Leaving both nil with AIConfig uses
-	// the variation's tools; a non-nil empty map means "no tools".
+	// InlineTools are defined in code. With AIConfig, leaving both nil
+	// while the variation lists tools is an ErrInvalidConfig, because
+	// the run has no implementation for them; a variation tool neither map
+	// supplies is logged as unused.
 	Tools       map[string]aiserver.ToolHandler
-	InlineTools map[string]InlineTool
+	InlineTools map[string]EvalTool
 	// Criteria are judges and scorers. nil with AIConfig uses the
 	// variation's judges; a non-nil empty slice runs generation only.
 	Criteria []Criterion

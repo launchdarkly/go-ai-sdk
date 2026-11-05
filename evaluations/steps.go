@@ -34,10 +34,10 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	modeName := ModeCompletion // the API default
+	modeName := string(GenerationModeCompletion) // the API default
 	if v, present := cfgObj["mode"]; present && v != nil {
 		s, ok := v.(string)
-		if !ok || (s != ModeAgent && s != ModeCompletion && s != "judge") {
+		if !ok || (s != string(GenerationModeAgent) && s != string(GenerationModeCompletion) && s != "judge") {
 			return fmt.Errorf("evaluations: %w: AI Config %q has unsupported mode %#v", ErrInvalidConfig, ref.Key, v)
 		}
 		modeName = s
@@ -122,7 +122,7 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 		params = nil
 	}
 
-	g := GenerationConfig{Provider: provider, Model: modelName, Mode: modeName, Parameters: params,
+	g := GenerationConfig{Provider: provider, Model: modelName, Mode: GenerationMode(modeName), Parameters: params,
 		Instructions: instructions, Messages: messages}
 	if of, ok := latest["outputFormat"].(map[string]any); ok {
 		g.OutputFormat = of

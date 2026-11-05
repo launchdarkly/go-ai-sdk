@@ -68,7 +68,7 @@ func TestGenerationEventEmission(t *testing.T) {
 	if e.ld.variations != 0 {
 		t.Fatal("emission must not be gated by a flag")
 	}
-	evs := e.ld.events(GenerationEventName)
+	evs := e.ld.events(generationEventName)
 	if len(evs) != 2 {
 		t.Fatalf("events %d", len(evs))
 	}
@@ -128,7 +128,7 @@ func TestInlineRunOmitsDatasetIdentity(t *testing.T) {
 			}
 		}
 	}
-	gen := e.ld.events(GenerationEventName)[0].Data
+	gen := e.ld.events(generationEventName)[0].Data
 	// Python: identity without datasetId, rowIndex 0... checked through the same function.
 	want, _ := eventID(map[string]any{"projectKey": "proj", "evaluationId": "eval-1", "evaluationRunId": "run-1", "runId": "run-1", "rowIndex": 0})
 	if gen["eventId"] != want {
@@ -214,7 +214,7 @@ func TestFlushBound(t *testing.T) {
 func TestCriterionEventFailureIsIsolated(t *testing.T) {
 	e := newEnv(t, 3)
 	e.ld.trackErr = func(event string, d map[string]any) error {
-		if event == CriterionEventName && d["rowIndex"] == 0.0 {
+		if event == criterionEventName && d["rowIndex"] == 0.0 {
 			return errors.New("track exploded")
 		}
 		return nil
@@ -222,8 +222,8 @@ func TestCriterionEventFailureIsIsolated(t *testing.T) {
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
 	args.Criteria = []Criterion{mustScorer(t, "s", constScorer(1), nil)}
 	mustRun(t, e.module(), args)
-	if len(e.ld.events(CriterionEventName)) != 2 || len(e.ld.events(GenerationEventName)) != 3 {
-		t.Fatalf("tracked %d criterion, %d generation", len(e.ld.events(CriterionEventName)), len(e.ld.events(GenerationEventName)))
+	if len(e.ld.events(criterionEventName)) != 2 || len(e.ld.events(generationEventName)) != 3 {
+		t.Fatalf("tracked %d criterion, %d generation", len(e.ld.events(criterionEventName)), len(e.ld.events(generationEventName)))
 	}
 	if e.ld.flushes != 2 || e.count("/summary") != 1 || !strings.Contains(e.logs.String(), "track exploded") {
 		t.Fatalf("flushes %d, polls %d, logs %s", e.ld.flushes, e.count("/summary"), e.logs)
@@ -239,7 +239,7 @@ func TestPanickingTrackIsIsolated(t *testing.T) {
 		return nil
 	}
 	mustRun(t, e.module(), baseArgs(handler("OpenAI", aiserver.ModeMessages, nil)))
-	if len(e.ld.events(GenerationEventName)) != 1 {
+	if len(e.ld.events(generationEventName)) != 1 {
 		t.Fatal("the other row's event must still be tracked")
 	}
 }
@@ -258,8 +258,8 @@ func TestEvaluationPhaseFailureStillFlushes(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v", err)
 	}
-	if len(e.ld.events(GenerationEventName)) != 2 || e.ld.flushes < 2 {
-		t.Fatalf("generation events %d, flushes %d", len(e.ld.events(GenerationEventName)), e.ld.flushes)
+	if len(e.ld.events(generationEventName)) != 2 || e.ld.flushes < 2 {
+		t.Fatalf("generation events %d, flushes %d", len(e.ld.events(generationEventName)), e.ld.flushes)
 	}
 	if log := e.logSnapshot(); log[len(log)-1] != "flush" {
 		t.Fatalf("final flush missing: %v", log)
@@ -301,7 +301,7 @@ func TestTypedNilOutputIsOmitted(t *testing.T) {
 	mustRun(t, e.module(), baseArgs(handler("OpenAI", aiserver.ModeMessages, func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
 		return aiserver.HandlerResult{Output: map[string]any(nil)}, nil
 	})))
-	d := e.ld.events(GenerationEventName)[0].Data
+	d := e.ld.events(generationEventName)[0].Data
 	if _, has := d["output"]; has || d["status"] != "COMPLETE" {
 		t.Fatalf("typed nil output serialized: %v", d)
 	}

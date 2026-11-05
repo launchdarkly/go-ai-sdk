@@ -13,7 +13,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
 
-// failingTransport fails the test if Init touches the network.
+// failingTransport fails the test if InitEvaluations touches the network.
 type failingTransport struct{ t *testing.T }
 
 func (f failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
@@ -51,7 +51,7 @@ func TestInitCredentials(t *testing.T) {
 			t.Setenv("LD_PROJECT_KEY", tc.envProject)
 			t.Setenv("LD_API_TOKEN", tc.envToken)
 			t.Setenv("LD_SDK_KEY", tc.envSDK)
-			m, err := Init(Options{ProjectKey: tc.optProject, APIToken: tc.optToken, SDKKey: tc.optSDK, HTTPClient: &http.Client{Transport: failingTransport{t}}})
+			m, err := InitEvaluations(InitEvaluationsOptions{ProjectKey: tc.optProject, APIToken: tc.optToken, SDKKey: tc.optSDK, HTTPClient: &http.Client{Transport: failingTransport{t}}})
 			if tc.wantErr != "" {
 				if !errors.Is(err, ErrMissingCredential) || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("err = %v, want one naming %s", err, tc.wantErr)
@@ -91,19 +91,19 @@ func TestInitReportsHelperUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = aiserver.Shutdown(context.Background()) })
-	// A failing Init still reports: usage comes before every check.
+	// A failing InitEvaluations still reports: usage comes before every check.
 	t.Setenv("LD_PROJECT_KEY", "")
 	t.Setenv("LD_API_TOKEN", "")
-	if _, err := Init(Options{}); !errors.Is(err, ErrMissingCredential) {
+	if _, err := InitEvaluations(InitEvaluationsOptions{}); !errors.Is(err, ErrMissingCredential) {
 		t.Fatalf("err = %v, want ErrMissingCredential", err)
 	}
-	if len(u.helpers) != 1 || u.helpers[0] != "experimental.initEvaluations" {
+	if len(u.helpers) != 1 || u.helpers[0] != "client.initEvaluations" {
 		t.Fatalf("usage helpers after a failing Init = %v", u.helpers)
 	}
 	// The helper is reported once per process.
 	t.Setenv("LD_PROJECT_KEY", "proj")
 	t.Setenv("LD_API_TOKEN", "tok")
-	if _, err := Init(Options{}); err != nil {
+	if _, err := InitEvaluations(InitEvaluationsOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if len(u.helpers) != 1 {

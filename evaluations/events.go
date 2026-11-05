@@ -20,8 +20,8 @@ import (
 
 // Event names.
 const (
-	GenerationEventName = "$ld:ai:offline-evals:generation"
-	CriterionEventName  = "$ld:ai:offline-evals:criterion"
+	generationEventName = "$ld:ai:offline-evals:generation"
+	criterionEventName  = "$ld:ai:offline-evals:criterion"
 )
 
 // defaultFlushBound is the most events queued between flushes. The

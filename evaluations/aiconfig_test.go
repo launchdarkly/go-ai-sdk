@@ -41,7 +41,7 @@ func linked(extra map[string]any) map[string]any {
 	return v
 }
 
-func aiArgs(h ...*aiserver.ProviderHandler) RunArgs {
+func aiArgs(h ...*aiserver.ProviderHandler) RunOptions {
 	a := baseArgs(nil)
 	a.Handler, a.Handlers, a.Generation = nil, h, nil
 	a.AIConfig = &AIConfigRef{Key: "cfg", Variation: "v1"}

@@ -5,10 +5,10 @@
 //
 // Current experimental features:
 //
-//   - Evaluations from Code (evaluations.go).
 //   - Shadow requests (shadow_requests.go): ShadowConfig runs a candidate
 //     variation on the served call's input and tracks it without serving it.
 //
 // When a feature is promoted to core, its names leave this package. Agent
-// Skills has been promoted: use package skills.
+// Skills and Evaluations from Code have been promoted: use packages skills
+// and evaluations.
 package experimental

@@ -70,14 +70,14 @@ func TestGenerationHandlerSelection(t *testing.T) {
 		name     string
 		pool     []*aiserver.ProviderHandler
 		provider string
-		mode     string
+		mode     GenerationMode
 		want     int
 	}{
-		{"provider decides", []*aiserver.ProviderHandler{handler("OpenAI", "messages", nil), handler("Anthropic", "messages", nil)}, "Anthropic", ModeCompletion, 1},
-		{"mode decides", []*aiserver.ProviderHandler{handler("OpenAI", "messages", nil), handler("OpenAI", "agent", nil)}, "OpenAI", ModeAgent, 1},
-		{"exact beats wildcard", []*aiserver.ProviderHandler{handler("*", "messages", nil), handler("OpenAI", "messages", nil)}, "OpenAI", ModeCompletion, 1},
-		{"wildcard alone", []*aiserver.ProviderHandler{handler("*", "messages", nil)}, "OpenAI", ModeCompletion, 0},
-		{"handler mode is normalized", []*aiserver.ProviderHandler{handler("OpenAI", "completion", nil)}, "OpenAI", ModeCompletion, 0},
+		{"provider decides", []*aiserver.ProviderHandler{handler("OpenAI", "messages", nil), handler("Anthropic", "messages", nil)}, "Anthropic", GenerationModeCompletion, 1},
+		{"mode decides", []*aiserver.ProviderHandler{handler("OpenAI", "messages", nil), handler("OpenAI", "agent", nil)}, "OpenAI", GenerationModeAgent, 1},
+		{"exact beats wildcard", []*aiserver.ProviderHandler{handler("*", "messages", nil), handler("OpenAI", "messages", nil)}, "OpenAI", GenerationModeCompletion, 1},
+		{"wildcard alone", []*aiserver.ProviderHandler{handler("*", "messages", nil)}, "OpenAI", GenerationModeCompletion, 0},
+		{"handler mode is normalized", []*aiserver.ProviderHandler{handler("OpenAI", "completion", nil)}, "OpenAI", GenerationModeCompletion, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -129,7 +129,7 @@ func TestHandlerConfigConstruction(t *testing.T) {
 		e := newEnv(t, 1)
 		var rec recorder
 		args := baseArgs(handler("OpenAI", aiserver.ModeAgent, rec.wrap(nil)))
-		args.Generation = &GenerationConfig{Provider: "OpenAI", Model: "m", Mode: ModeAgent, Instructions: "{{snippet.a}} {{input}}",
+		args.Generation = &GenerationConfig{Provider: "OpenAI", Model: "m", Mode: GenerationModeAgent, Instructions: "{{snippet.a}} {{input}}",
 			PromptSnippets: map[string]string{"a": "A"}, Parameters: map[string]any{"t": 1}}
 		mustRun(t, e.module(), args)
 		cfg := rec.all()[0].Config
@@ -150,7 +150,7 @@ func TestToolConfigIsSourceIndependent(t *testing.T) {
 		var rec recorder
 		args := baseArgs(handler("OpenAI", aiserver.ModeMessages, rec.wrap(nil)))
 		if inline {
-			args.InlineTools = map[string]InlineTool{"lookup": {Implementation: noopTool, Schema: schema, Description: "Find it"}}
+			args.InlineTools = map[string]EvalTool{"lookup": {Implementation: noopTool, Schema: schema, Description: "Find it"}}
 		} else {
 			args.Tools = map[string]aiserver.ToolHandler{"lookup": noopTool}
 		}
@@ -183,7 +183,7 @@ func TestInlineSchemaMutationsDoNotLeak(t *testing.T) {
 	})
 	args := baseArgs(h)
 	args.Concurrency = 1
-	args.InlineTools = map[string]InlineTool{"lookup": {Implementation: noopTool, Schema: schema}}
+	args.InlineTools = map[string]EvalTool{"lookup": {Implementation: noopTool, Schema: schema}}
 	mustRun(t, e.module(), args)
 	if len(seen) != 2 || seen[0] != want || seen[1] != want {
 		t.Fatalf("row configs %v, want %s for both", seen, want)
@@ -215,7 +215,7 @@ func TestToolHandlersKeepKeysAndPassThrough(t *testing.T) {
 	args.Tools = map[string]aiserver.ToolHandler{"lib": aiserver.ToolFunc(func(_ context.Context, a map[string]any) (any, error) {
 		return map[string]any{"from": a["k"]}, nil
 	}), "web": native}
-	args.InlineTools = map[string]InlineTool{"inl": {Schema: map[string]any{}, Implementation: aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) {
+	args.InlineTools = map[string]EvalTool{"inl": {Schema: map[string]any{}, Implementation: aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) {
 		return nil, wantErr
 	})}}
 	e.route("GET", "projects/proj/ai-tools/web", resp{body: map[string]any{"version": 1}})
@@ -244,8 +244,8 @@ func TestGenerationConcurrencyBounded(t *testing.T) {
 		args := baseArgs(h)
 		args.Concurrency = tc.concurrency
 		mustRun(t, e.module(), args)
-		if int(peak.Load()) != tc.want || len(e.ld.events(GenerationEventName)) != 25 {
-			t.Fatalf("concurrency %d: peak %d, events %d", tc.concurrency, peak.Load(), len(e.ld.events(GenerationEventName)))
+		if int(peak.Load()) != tc.want || len(e.ld.events(generationEventName)) != 25 {
+			t.Fatalf("concurrency %d: peak %d, events %d", tc.concurrency, peak.Load(), len(e.ld.events(generationEventName)))
 		}
 	}
 }
@@ -271,7 +271,7 @@ func TestHandlerErrorsAreRowErrors(t *testing.T) {
 		t.Fatal("run must proceed to polling")
 	}
 	byRow := map[float64]map[string]any{}
-	for _, ev := range e.ld.events(GenerationEventName) {
+	for _, ev := range e.ld.events(generationEventName) {
 		byRow[ev.Data["rowIndex"].(float64)] = ev.Data
 	}
 	checks := []struct {
@@ -323,7 +323,7 @@ func TestTrajectoryPerRow(t *testing.T) {
 	})
 	go func() { started.Wait(); close(gate) }()
 	args := baseArgs(h)
-	args.InlineTools = map[string]InlineTool{"lookup": {Implementation: tool, Schema: map[string]any{}}}
+	args.InlineTools = map[string]EvalTool{"lookup": {Implementation: tool, Schema: map[string]any{}}}
 	r, err := e.module().prepare(args)
 	if err != nil {
 		t.Fatal(err)

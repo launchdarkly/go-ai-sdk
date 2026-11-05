@@ -101,12 +101,12 @@ func promptProblem(mode aiserver.Mode, instructions string, messages []aiserver.
 
 // validateGenerationMode checks the caller's raw value before normalizing:
 // NormalizeMode maps every unknown string, typos included, to messages.
-func validateGenerationMode(mode string) (aiserver.Mode, error) {
+func validateGenerationMode(mode GenerationMode) (aiserver.Mode, error) {
 	switch mode {
 	case "":
 		return "", invalid("generation.mode is required. Set it to 'completion' or 'agent'.")
-	case ModeCompletion, ModeAgent:
-		return aiserver.NormalizeMode(mode), nil
+	case GenerationModeCompletion, GenerationModeAgent:
+		return aiserver.NormalizeMode(string(mode)), nil
 	}
 	return "", invalid("generation.mode must be 'completion' or 'agent', got %q", mode)
 }
@@ -161,7 +161,7 @@ func (t runTool) sourceName() string {
 // sources: non-blank, lowercase, and unique under Unicode case folding
 // (straße and strasse collide), so the collision check covers library vs
 // inline, library vs library and inline vs inline.
-func validateTools(library map[string]aiserver.ToolHandler, inline map[string]InlineTool) ([]runTool, error) {
+func validateTools(library map[string]aiserver.ToolHandler, inline map[string]EvalTool) ([]runTool, error) {
 	var out []runTool
 	fold := cases.Fold()
 	seen := map[string]runTool{}
