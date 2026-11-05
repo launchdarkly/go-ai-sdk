@@ -1,7 +1,6 @@
 # experimental — contributor and agent guide
 
-Experimental entry point. The files here are thin: type aliases and
-one-line functions over `internal/<feature>`, each documented as Experimental. A feature promoted
+Experimental entry point. Each feature's names are documented as Experimental. A feature promoted
 to core leaves this package: Agent Skills is now package `skills`, and Evaluations from Code is
 package `evaluations`.
 

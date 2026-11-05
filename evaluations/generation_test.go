@@ -194,6 +194,28 @@ func TestInlineSchemaMutationsDoNotLeak(t *testing.T) {
 	}
 }
 
+// TestLibrarySchemaEditsDuringRunDoNotLeak edits the caller's copy of a
+// library tool's schema while Run is in progress; later rows must still get
+// the pinned schema.
+func TestLibrarySchemaEditsDuringRunDoNotLeak(t *testing.T) {
+	e := newEnv(t, 2)
+	m := e.module()
+	tool := e.libTool(m, "lookup", noopTool, map[string]any{"version": 1, "schema": map[string]any{"type": "object"}})
+	var seen []string
+	h := handler("OpenAI", aiserver.ModeMessages, func(_ context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
+		seen = append(seen, toJSON(req.Config.Tools["lookup"].Parameters))
+		tool.Schema["type"] = "caller-edit"
+		return aiserver.HandlerResult{Output: "ok"}, nil
+	})
+	args := baseArgs(h)
+	args.Concurrency = 1
+	args.Tools = []EvalTool{tool}
+	mustRun(t, m, args)
+	if want := `{"type":"object"}`; len(seen) != 2 || seen[0] != want || seen[1] != want {
+		t.Fatalf("row configs %v, want %s for both", seen, want)
+	}
+}
+
 func TestToolHandlersKeepKeysAndPassThrough(t *testing.T) {
 	e := newEnv(t, 1)
 	m := e.module()
