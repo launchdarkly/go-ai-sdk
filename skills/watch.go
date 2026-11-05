@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
 
 // defaultDebounce is how long the watcher waits after the last change before
@@ -65,6 +67,7 @@ type SkillWatcher struct {
 //
 // The watcher runs on its own goroutine until Close or until ctx is done.
 func WatchSkills[I SkillInput](ctx context.Context, skills []I, root string, opts *WatchSkillsOptions) (ReconcileReport, *SkillWatcher, error) {
+	aiserver.ReportUsage("client.watchSkills", "", "")
 	items := make([]SkillInput, len(skills))
 	for i, s := range skills {
 		items[i] = s
@@ -75,6 +78,7 @@ func WatchSkills[I SkillInput](ctx context.Context, skills []I, root string, opt
 // WatchAllSkills is WatchSkills over every skill the store holds (the "*"
 // selection); with it, a skill revoked in LaunchDarkly is removed from disk.
 func WatchAllSkills(ctx context.Context, root string, opts *WatchSkillsOptions) (ReconcileReport, *SkillWatcher, error) {
+	aiserver.ReportUsage("client.watchSkills", "", "")
 	return watchSkills(ctx, selection{all: true}, root, opts)
 }
 

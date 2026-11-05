@@ -26,9 +26,9 @@ handler packages they use.
 | `capture.go` | `Configure`, `SDKOptions`, `ContentCapture`, `ErrConfigureLocked`; binds a handler's capture setting per call |
 
 Internal packages: `internal/trajectory`, `internal/judging`
-(judge message history and verdict parsing), `internal/bridge` (hooks to the
-experimental entry point), `internal/telemetry` (the content gate's state and
-per-call binding, GenAI chat/tool content writers, span-attribute and
+(judge message history and verdict parsing), `internal/bridge` (shutdown hooks and
+the shared logger, used by `skills`, the experimental entry point and handler
+packages), `internal/telemetry` (the content gate's state and per-call binding, GenAI chat/tool content writers, span-attribute and
 span-counter bindings, tracer flush), `internal/sdkapi` (handler-package entry
 points: `CreateHandler` without a usage report, `StartInvocation` for native
 graph runners).
@@ -78,9 +78,9 @@ ReportUsage, TracerPrefix, PackageName, PackageVersion
   `lifecycleMu`; a failed call stores nothing and closes any client it built,
   so the next call retries. `stateMu` guards the client only briefly, so
   `GetClient` and tracking never wait on a slow initialization.
-- `Shutdown` swaps state out under the lock, runs experimental hooks (panics
-  recovered), shuts the tracer provider down, then flushes and closes the
-  client. Calling it twice is a no-op.
+- `Shutdown` swaps state out under the lock, runs the bridge shutdown hooks
+  (Agent Skills state, experimental features; panics recovered), shuts the
+  tracer provider down, then flushes and closes the client. Calling it twice is a no-op.
 - `$ld:ai:sdk:info` is sent once per registered package per client;
   `$ld:ai:sdk:usage` once per helper per client, held until a client exists.
 

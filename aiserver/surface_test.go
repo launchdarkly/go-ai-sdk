@@ -84,11 +84,11 @@ func TestRootSurfaceIsPinned(t *testing.T) {
 	}
 }
 
-// No experimental name (skills, evaluations or shadow requests) leaks onto the root.
+// No experimental name (evaluations or shadow requests) leaks onto the root.
 func TestNoExperimentalNameOnRoot(t *testing.T) {
 	root := exportedNames(t, "*.go")
 	experimental := exportedNames(t, "experimental/*.go")
-	for _, must := range []string{"InitEvaluations", "NewJudge", "NewScorer", "Dataset", "GetSkill", "WriteSkills", "ShadowConfig", "RunShadow"} {
+	for _, must := range []string{"InitEvaluations", "NewJudge", "NewScorer", "Dataset", "ShadowConfig", "RunShadow"} {
 		if !slices.Contains(experimental, must) {
 			t.Fatalf("experimental surface lost %s; the leak check would be vacuous", must)
 		}
@@ -96,6 +96,22 @@ func TestNoExperimentalNameOnRoot(t *testing.T) {
 	for _, n := range experimental {
 		if slices.Contains(root, n) {
 			t.Errorf("experimental name %s is on the aiserver root", n)
+		}
+	}
+}
+
+// Agent Skills is its own package; none of its names is on the root.
+func TestNoSkillsNameOnRoot(t *testing.T) {
+	root := exportedNames(t, "*.go")
+	skills := exportedNames(t, "../skills/*.go")
+	for _, must := range []string{"GetSkill", "WriteSkills", "SkillStore"} {
+		if !slices.Contains(skills, must) {
+			t.Fatalf("skills surface lost %s; the leak check would be vacuous", must)
+		}
+	}
+	for _, n := range skills {
+		if slices.Contains(root, n) {
+			t.Errorf("skills name %s is on the aiserver root", n)
 		}
 	}
 }

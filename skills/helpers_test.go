@@ -102,14 +102,14 @@ func (c *logCapture) contains(level slog.Level, substr string) bool {
 // setup resets module state and installs a recorder and a log capture.
 func setup(t *testing.T) (*recorder, *logCapture) {
 	t.Helper()
-	ClearState()
+	clearState()
 	rec := &recorder{}
 	logs := &logCapture{}
-	SetEmitterForTesting(rec)
-	SetLogger(slog.New(logs))
+	setEmitterForTesting(rec)
+	setLogger(slog.New(logs))
 	t.Cleanup(func() {
-		ClearState()
-		SetLogger(nil)
+		clearState()
+		setLogger(nil)
 	})
 	return rec, logs
 }

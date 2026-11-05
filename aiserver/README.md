@@ -210,5 +210,5 @@ go test -race ./...
 go vet ./...
 ```
 
-Experimental features (Agent Skills, Evaluations from Code) live in
+Experimental features (Evaluations from Code, shadow requests) live in
 [`aiserver/experimental`](experimental).

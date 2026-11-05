@@ -106,7 +106,7 @@ type JudgeConfiguration struct {
 }
 
 // AiConfig is the AiConfigRep shape the JavaScript and Python SDKs share. Raw keeps the full variation so fields
-// this struct does not model (e.g. experimental `skills`) survive a round
+// this struct does not model (e.g. `skills`) survive a round
 // trip, matching TypeScript's `raw as AiConfigRep` passthrough.
 type AiConfig struct {
 	Instructions string    `json:"instructions,omitempty"`

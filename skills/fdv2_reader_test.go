@@ -329,7 +329,7 @@ func TestReaderNonSkillObjectsAreSkippedAndCounted(t *testing.T) {
 	}
 }
 
-// Experimental-stage rule, asserted both ways so changing it is deliberate.
+// Keyless-object rule, asserted both ways so changing it is deliberate.
 func TestReaderKeylessObjectsAreIgnoredAndTheTransferCommits(t *testing.T) {
 	_, logs := setup(t)
 	h := newHarness(t)

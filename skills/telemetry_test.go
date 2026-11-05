@@ -241,8 +241,11 @@ func TestMaterializedRevokedAndAllowlist(t *testing.T) {
 			}
 		}
 	}
-	if len(fake.tracks) != 0 {
-		t.Fatalf("skills operations called client.track: %v", fake.tracks)
+	// The only track a skills operation makes is its own usage event.
+	for _, tr := range fake.tracks {
+		if tr != "$ld:ai:sdk:usage" {
+			t.Fatalf("skills operations called client.track: %v", fake.tracks)
+		}
 	}
 	_ = logs
 }
@@ -276,7 +279,7 @@ func (panickingEmitter) Record(string, map[string]any) { panic("emitter exploded
 func TestThrowingAndDefaultEmitterNeverBreakOperations(t *testing.T) {
 	for name, e := range map[string]telemetryEmitter{"panicking": panickingEmitter{}, "default": nil} {
 		_, _ = setup(t)
-		SetEmitterForTesting(e)
+		setEmitterForTesting(e)
 		SetSkillStore(NewInMemorySkillStore(map[string]any{"t": tamperedRaw("t"), "a": rawSkill("a", 1, "a")}))
 		if got, _ := GetSkill("t", 0); got != nil {
 			t.Fatalf("%s: tampered skill returned", name)
@@ -291,7 +294,7 @@ func TestThrowingAndDefaultEmitterNeverBreakOperations(t *testing.T) {
 // the panic is caught and logged at WARN, never propagated or silent.
 func TestPanickingEmitterIsLoggedAtWarn(t *testing.T) {
 	_, logs := setup(t)
-	SetEmitterForTesting(panickingEmitter{})
+	setEmitterForTesting(panickingEmitter{})
 	SetSkillStore(NewInMemorySkillStore(map[string]any{"t": tamperedRaw("t")}))
 	if got, _ := GetSkill("t", 0); got != nil {
 		t.Fatal("tampered skill returned")

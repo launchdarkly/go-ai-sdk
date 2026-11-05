@@ -193,7 +193,7 @@ func TestNoStoreConfigured(t *testing.T) {
 func TestClearStateClearsStoreAndEmitter(t *testing.T) {
 	rec, _ := setup(t)
 	SetSkillStore(NewInMemorySkillStore(nil))
-	ClearState()
+	clearState()
 	if _, err := GetSkill("a", 0); !errors.Is(err, ErrNoSkillStore) {
 		t.Fatal("ClearState left the store")
 	}

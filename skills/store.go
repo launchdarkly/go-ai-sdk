@@ -97,8 +97,8 @@ var (
 )
 
 func init() {
-	// Experimental state is reached by core only through this hook.
-	bridge.OnShutdown(func(context.Context) { ClearState() })
+	// Shutdown clears skills state through this bridge hook.
+	bridge.OnShutdown(func(context.Context) { clearState() })
 }
 
 // SetSkillStore configures the store the accessors and WriteSkills read
@@ -129,17 +129,17 @@ func isNil(v any) bool {
 	return false
 }
 
-// ClearState drops the configured store and the telemetry emitter. Called by
+// clearState drops the configured store and the telemetry emitter. Called by
 // aiserver.Shutdown through the bridge hook, and by tests.
-func ClearState() {
+func clearState() {
 	stateMu.Lock()
 	defer stateMu.Unlock()
 	store = nil
 	emitter = noopEmitter{}
 }
 
-// SetEmitterForTesting installs a recording emitter. nil restores the no-op.
-func SetEmitterForTesting(e telemetryEmitter) {
+// setEmitterForTesting installs a recording emitter. nil restores the no-op.
+func setEmitterForTesting(e telemetryEmitter) {
 	stateMu.Lock()
 	defer stateMu.Unlock()
 	if e == nil {
@@ -148,8 +148,8 @@ func SetEmitterForTesting(e telemetryEmitter) {
 	emitter = e
 }
 
-// SetLogger replaces the logger. nil restores the SDK logger (aiserver.SetLogger).
-func SetLogger(l *slog.Logger) {
+// setLogger replaces the logger. nil restores the SDK logger (aiserver.SetLogger).
+func setLogger(l *slog.Logger) {
 	stateMu.Lock()
 	defer stateMu.Unlock()
 	logger = l
