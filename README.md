@@ -116,6 +116,8 @@ unset.
 | `LD_ENVIRONMENT_ID` | no | LaunchDarkly environment ID for AI Config Monitoring trace correlation (`environmentId` / `feature_flag.set.id`); omitted when unset |
 | `LD_PROJECT_KEY` | only for Evaluations from Code | LaunchDarkly project key ([evaluations](evaluations/README.md)) |
 | `LD_API_TOKEN` | only for Evaluations from Code | LaunchDarkly API access token ([evaluations](evaluations/README.md)) |
+| `LD_API_BASE_URI` | no | Evaluations management API host; default `https://app.launchdarkly.com`; never taken from `LD_BASE_URI` ([evaluations](evaluations/README.md)) |
+| `LD_UI_BASE_URI` | no | Host of evaluation run links; default `https://app.launchdarkly.com` ([evaluations](evaluations/README.md)) |
 
 - **Providers:** each handler reads its provider's usual environment
   (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, the AWS credential chain /

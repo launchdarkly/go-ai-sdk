@@ -34,6 +34,7 @@ func TestInitCredentials(t *testing.T) {
 		{name: "env only", envProject: "env-proj", envToken: "env-tok", envSDK: "env-sdk", wantProject: "env-proj", wantToken: "env-tok", wantKey: "env-sdk"},
 		{name: "explicit wins", envProject: "env-proj", envToken: "env-tok", envSDK: "env-sdk", optProject: "opt-proj", optToken: "opt-tok", optSDK: "opt-sdk",
 			wantProject: "opt-proj", wantToken: "opt-tok", wantKey: "opt-sdk"},
+		{name: "padded explicit project is trimmed", envProject: "env-proj", optProject: " opt-proj ", envToken: "tok", envSDK: "sdk", wantProject: "opt-proj", wantToken: "tok", wantKey: "sdk"},
 		{name: "blank explicit project falls back to env", envProject: "env-proj", optProject: "  ", envToken: "tok", envSDK: "sdk", wantProject: "env-proj", wantToken: "tok", wantKey: "sdk"},
 		{name: "missing all names the project first", wantErr: "LD_PROJECT_KEY"},
 		{name: "missing project", envToken: "tok", envSDK: "sdk", wantErr: "LD_PROJECT_KEY"},
@@ -111,15 +112,63 @@ func TestInitReportsHelperUsage(t *testing.T) {
 	}
 }
 
-func TestFixedHostsIgnoreLDBaseURI(t *testing.T) {
+func TestHosts(t *testing.T) {
+	const def = "https://app.launchdarkly.com"
+	cases := []struct {
+		name             string
+		env              map[string]string
+		opts             InitEvaluationsOptions
+		wantAPI, wantURL string
+	}{
+		{name: "default", wantAPI: def, wantURL: def},
+		{name: "LD_BASE_URI never moves either host", env: map[string]string{"LD_BASE_URI": "https://relay.example.com"}, wantAPI: def, wantURL: def},
+		{name: "env wins over the default", env: map[string]string{"LD_API_BASE_URI": "https://api.example.com", "LD_UI_BASE_URI": "https://ui.example.com"},
+			wantAPI: "https://api.example.com", wantURL: "https://ui.example.com"},
+		{name: "option wins over env", env: map[string]string{"LD_API_BASE_URI": "https://api.example.com", "LD_UI_BASE_URI": "https://ui.example.com"},
+			opts: InitEvaluationsOptions{APIBaseURI: "https://api.opt.com", UIBaseURI: "https://ui.opt.com"}, wantAPI: "https://api.opt.com", wantURL: "https://ui.opt.com"},
+		{name: "blank values fall through", env: map[string]string{"LD_API_BASE_URI": "  ", "LD_UI_BASE_URI": "https://ui.example.com"},
+			opts: InitEvaluationsOptions{APIBaseURI: " ", UIBaseURI: " "}, wantAPI: def, wantURL: "https://ui.example.com"},
+		{name: "trailing slash stripped", env: map[string]string{"LD_UI_BASE_URI": "https://ui.example.com/"},
+			opts: InitEvaluationsOptions{APIBaseURI: "https://api.opt.com/"}, wantAPI: "https://api.opt.com", wantURL: "https://ui.example.com"},
+		{name: "UI host is not derived from the API host", env: map[string]string{"LD_API_BASE_URI": "https://api.example.com"},
+			wantAPI: "https://api.example.com", wantURL: def},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, k := range []string{"LD_BASE_URI", "LD_API_BASE_URI", "LD_UI_BASE_URI"} {
+				t.Setenv(k, tc.env[k])
+			}
+			e := newEnv(t, 1)
+			tc.opts.ProjectKey = "proj"
+			res := mustRun(t, e.moduleWith(tc.opts), baseArgs(handler("OpenAI", aiserver.ModeMessages, nil)))
+			if len(e.requests()) == 0 {
+				t.Fatal("no requests recorded")
+			}
+			for _, r := range e.requests() {
+				if !strings.HasPrefix(r.URL, tc.wantAPI+"/api/v2/") {
+					t.Fatalf("request to %s, want host %s", r.URL, tc.wantAPI)
+				}
+			}
+			if want := tc.wantURL + "/projects/proj/ai/evaluations/eval-1/runs/run-1"; res.URL != want {
+				t.Fatalf("url = %s, want %s", res.URL, want)
+			}
+		})
+	}
+}
+
+// A padded project key is trimmed once at InitEvaluations and used trimmed
+// in every request path and in the run link.
+func TestPaddedProjectKeyIsTrimmedEverywhere(t *testing.T) {
 	e := newEnv(t, 1)
-	t.Setenv("LD_BASE_URI", "https://sdk.example.com")
-	t.Setenv("LD_UI_BASE_URI", "https://ui.example.com")
-	t.Setenv("LD_API_BASE_URI", "https://api.example.com")
-	res := mustRun(t, e.module(), baseArgs(handler("OpenAI", aiserver.ModeMessages, nil)))
-	for _, r := range e.requests() {
-		if !strings.HasPrefix(r.URL, "https://app.launchdarkly.com/api/v2/") {
-			t.Fatalf("request to %s", r.URL)
+	t.Setenv("LD_PROJECT_KEY", "")
+	res := mustRun(t, e.moduleWith(InitEvaluationsOptions{ProjectKey: " proj "}), baseArgs(handler("OpenAI", aiserver.ModeMessages, nil)))
+	reqs := e.requests()
+	if len(reqs) == 0 {
+		t.Fatal("no requests recorded")
+	}
+	for _, r := range reqs {
+		if !strings.Contains(r.URL, "/api/v2/projects/proj/") || strings.Contains(r.URL, "%20") {
+			t.Fatalf("request to %s, want the trimmed project key", r.URL)
 		}
 	}
 	if res.URL != "https://app.launchdarkly.com/projects/proj/ai/evaluations/eval-1/runs/run-1" {

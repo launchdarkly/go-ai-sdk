@@ -19,6 +19,8 @@ go get github.com/launchdarkly/go-ai-sdk/openaimessages   # or any handler packa
 | `LD_PROJECT_KEY` | yes, unless `InitEvaluationsOptions.ProjectKey` | The project holding the evaluations, runs, tools, datasets and judges. Checked first. |
 | `LD_API_TOKEN` | yes, unless `InitEvaluationsOptions.APIToken` | LaunchDarkly API access token; authorizes every management API request. Checked second. |
 | `LD_SDK_KEY` | yes, unless `InitEvaluationsOptions.SDKKey` or a client is already initialized (`aiserver.InitClient` / `InitWithClient`) | Server-side SDK key for the client that sends result events. When a client is already installed it is used and this key is ignored (with a warning). |
+| `LD_API_BASE_URI` | no | Management API host; `InitEvaluationsOptions.APIBaseURI` wins over it. Default `https://app.launchdarkly.com`. `LD_BASE_URI` is never used: it configures flag delivery and may point at a relay proxy. |
+| `LD_UI_BASE_URI` | no | Host of the run link in the result; `InitEvaluationsOptions.UIBaseURI` wins over it. It carries no API traffic and is not derived from the API host. Default `https://app.launchdarkly.com`. |
 
 Handlers read their provider's own variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, AWS chain).
 A blank value counts as unset. A missing project key or credential fails `InitEvaluations` with `ErrMissingCredential`, before any network I/O.
@@ -74,7 +76,10 @@ if !res.Passed { os.Exit(1) }
 
 The SDK never computes a verdict: it reports scores, and LaunchDarkly rules on them against the
 thresholds pinned on the evaluation. `Passed` is true only when no row errored or failed.
-The management API host is fixed at `https://app.launchdarkly.com`.
+Management API requests go to `APIBaseURI`, then `LD_API_BASE_URI`, then `https://app.launchdarkly.com`.
+The run link uses `UIBaseURI`, then `LD_UI_BASE_URI`, then the same default. At either level a
+blank value counts as unset, and a trailing `/` is stripped. Both hosts are fixed at
+`InitEvaluations`.
 
 ## API reference
 

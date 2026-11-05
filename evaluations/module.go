@@ -38,7 +38,7 @@ const defaultConcurrency = 10
 
 // InitEvaluationsOptions configure InitEvaluations. Each string option falls
 // back to its environment variable; a blank value at either level counts as
-// unset. The management API and UI hosts are fixed and have no option.
+// unset.
 type InitEvaluationsOptions struct {
 	// ProjectKey is the project holding the evaluations, runs, tools,
 	// datasets and judges. Default: LD_PROJECT_KEY.
@@ -58,18 +58,37 @@ type InitEvaluationsOptions struct {
 	MaxAttempts int
 	// Logger receives warnings. Default: the SDK logger (aiserver.SetLogger).
 	Logger *slog.Logger
+	// APIBaseURI is the management API host. Default: LD_API_BASE_URI, then
+	// https://app.launchdarkly.com. LD_BASE_URI is never used: it configures
+	// flag delivery and may point at a relay proxy.
+	APIBaseURI string
+	// UIBaseURI is the host of the run link in the result; it carries no API
+	// traffic. Default: LD_UI_BASE_URI, then https://app.launchdarkly.com.
+	// It is not derived from APIBaseURI.
+	UIBaseURI string
 }
 
 // EvaluationsModule runs evaluations from code. Create it with InitEvaluations.
 type EvaluationsModule struct {
 	api        *apiClient
 	projectKey string
+	uiBase     string
 	sdkKey     string
 	logger     *slog.Logger
 	flushBound int
 }
 
 func env(name string) string { return strings.TrimSpace(os.Getenv(name)) }
+
+// host resolves a host option: explicit, then env, then the default, with
+// any trailing "/" stripped. A blank value at either level counts as unset.
+func host(explicit, name string) string {
+	v := option(explicit, name)
+	if v == "" {
+		v = defaultBaseURI
+	}
+	return strings.TrimRight(v, "/")
+}
 
 // option is the trimmed explicit value, else the trimmed environment value.
 func option(explicit, name string) string {
@@ -103,8 +122,8 @@ func InitEvaluations(opts InitEvaluationsOptions) (*EvaluationsModule, error) {
 	if logger == nil {
 		logger = bridge.Logger()
 	}
-	return &EvaluationsModule{api: newAPIClient(token, opts.HTTPClient, opts.RequestTimeout, opts.MaxAttempts),
-		projectKey: project, sdkKey: sdkKey, logger: logger, flushBound: defaultFlushBound}, nil
+	return &EvaluationsModule{api: newAPIClient(host(opts.APIBaseURI, "LD_API_BASE_URI"), token, opts.HTTPClient, opts.RequestTimeout, opts.MaxAttempts),
+		projectKey: project, uiBase: host(opts.UIBaseURI, "LD_UI_BASE_URI"), sdkKey: sdkKey, logger: logger, flushBound: defaultFlushBound}, nil
 }
 
 // SDKKey is the key the module initializes a client with; "" when it relies

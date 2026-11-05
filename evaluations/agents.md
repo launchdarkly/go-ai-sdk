@@ -7,7 +7,7 @@ by provider and mode. Its exported names are pinned in `surface_test.go`.
 | File | Responsibility |
 | --- | --- |
 | `module.go` | `InitEvaluationsOptions`, `EvaluationsModule`, `InitEvaluations` (project key, token, SDK key, in that order; reports `client.initEvaluations` before any check), client resolution, `Run`. |
-| `api.go` | Management API client: fixed host, headers, retry policy (429 always; 5xx/transport only for GET/HEAD and idempotent POSTs), `Retry-After`, injectable sleep/jitter. `APIError`. |
+| `api.go` | Management API client: host resolved at init (never `LD_BASE_URI`), headers, retry policy (429 always; 5xx/transport only for GET/HEAD and idempotent POSTs), `Retry-After`, injectable sleep/jitter. `APIError`. |
 | `types.go` | Public types, sentinel errors, criterion constructors (`NewJudge`, `NewScorer`) and wire shapes. |
 | `validate.go` | Every pre-I/O check: pool, generation mode/coverage/prompt, tools, inline rows (strict JSON), criteria. Shared `selectHandler`. |
 | `steps.go` | Management API steps, in order: AI Config reads, tool and dataset resolution, record creation, inline upload/cancel, summary polling. |
@@ -27,7 +27,7 @@ Check: `gofmt -l evaluations && go vet ./evaluations/ && go test -race ./evaluat
 
 ```go
 // evaluations exports (matches `go doc -short ./evaluations`)
-type EvaluationsModule           // method: Run(ctx, RunOptions) (*EvalRunResult, error)
+type EvaluationsModule           // methods: Run(ctx, RunOptions) (*EvalRunResult, error), SDKKey() string
 type InitEvaluationsOptions RunOptions GenerationConfig GenerationMode GenerationOverrides AIConfigRef EvalTool
 type DatasetRow Dataset DatasetKey InlineRows Criterion Judge JudgeOptions Scorer ScorerOptions
 type ScorerFunc SuccessDirection EvalRunResult RunSummary APIError

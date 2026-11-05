@@ -111,7 +111,12 @@ func TestDoesNotImportExperimentalCode(t *testing.T) {
 func TestPublicNamesAreCallable(t *testing.T) {
 	t.Setenv("LD_PROJECT_KEY", "")
 	t.Setenv("LD_API_TOKEN", "")
-	if _, err := evaluations.InitEvaluations(evaluations.InitEvaluationsOptions{ProjectKey: "proj"}); !errors.Is(err, evaluations.ErrMissingCredential) {
+	if _, err := evaluations.InitEvaluations(evaluations.InitEvaluationsOptions{ProjectKey: " "}); !errors.Is(err, evaluations.ErrMissingCredential) ||
+		!strings.Contains(err.Error(), "LD_PROJECT_KEY") {
+		t.Fatalf("no project key: %v", err)
+	}
+	if _, err := evaluations.InitEvaluations(evaluations.InitEvaluationsOptions{ProjectKey: "proj"}); !errors.Is(err, evaluations.ErrMissingCredential) ||
+		!strings.Contains(err.Error(), "LD_API_TOKEN") {
 		t.Fatalf("no API token: %v", err)
 	}
 	evals, err := evaluations.InitEvaluations(evaluations.InitEvaluationsOptions{ProjectKey: "proj", APIToken: "api-test", SDKKey: "sdk-test"})
