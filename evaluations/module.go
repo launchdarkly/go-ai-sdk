@@ -86,17 +86,17 @@ func InitEvaluations(opts InitEvaluationsOptions) (*EvaluationsModule, error) {
 	aiserver.ReportUsage(helperName, "", "")
 	project := option(opts.ProjectKey, "LD_PROJECT_KEY")
 	if project == "" {
-		return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly project key; set LD_PROJECT_KEY or pass Options.ProjectKey", ErrMissingCredential)
+		return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly project key; set LD_PROJECT_KEY or pass InitEvaluationsOptions.ProjectKey", ErrMissingCredential)
 	}
 	token := option(opts.APIToken, "LD_API_TOKEN")
 	if token == "" {
-		return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly API access token; set LD_API_TOKEN or pass Options.APIToken", ErrMissingCredential)
+		return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly API access token; set LD_API_TOKEN or pass InitEvaluationsOptions.APIToken", ErrMissingCredential)
 	}
 	sdkKey := option(opts.SDKKey, "LD_SDK_KEY")
 	if sdkKey == "" {
 		if _, err := getClient(); err != nil {
 			return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly SDK key and no initialized client to emit result events with; "+
-				"results reach LaunchDarkly only as SDK events, so set LD_SDK_KEY, pass Options.SDKKey, or call aiserver.InitWithClient first", ErrMissingCredential)
+				"results reach LaunchDarkly only as SDK events, so set LD_SDK_KEY, pass InitEvaluationsOptions.SDKKey, or call aiserver.InitWithClient first", ErrMissingCredential)
 		}
 	}
 	logger := opts.Logger

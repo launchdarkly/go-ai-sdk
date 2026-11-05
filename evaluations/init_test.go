@@ -17,7 +17,7 @@ import (
 type failingTransport struct{ t *testing.T }
 
 func (f failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	f.t.Fatal("Init must not perform network I/O")
+	f.t.Fatal("InitEvaluations must not perform network I/O")
 	return nil, errors.New("unreachable")
 }
 
@@ -98,7 +98,7 @@ func TestInitReportsHelperUsage(t *testing.T) {
 		t.Fatalf("err = %v, want ErrMissingCredential", err)
 	}
 	if len(u.helpers) != 1 || u.helpers[0] != "client.initEvaluations" {
-		t.Fatalf("usage helpers after a failing Init = %v", u.helpers)
+		t.Fatalf("usage helpers after a failing InitEvaluations = %v", u.helpers)
 	}
 	// The helper is reported once per process.
 	t.Setenv("LD_PROJECT_KEY", "proj")

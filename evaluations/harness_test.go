@@ -257,7 +257,7 @@ func (e *fakeEnv) moduleWith(opts InitEvaluationsOptions) *EvaluationsModule {
 	opts.HTTPClient, opts.Logger = &http.Client{Transport: e}, slog.New(slog.NewTextHandler(e.logs, nil))
 	m, err := InitEvaluations(opts)
 	if err != nil {
-		e.t.Fatalf("Init: %v", err)
+		e.t.Fatalf("InitEvaluations: %v", err)
 	}
 	m.api.sleep = func(ctx context.Context, d time.Duration) error { return ctx.Err() }
 	return m
