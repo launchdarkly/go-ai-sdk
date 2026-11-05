@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -34,42 +33,56 @@ func freshClient(t *testing.T) (*usageFakeLD, *skills.InMemorySkillStore) {
 	return fake, store
 }
 
-// Each public helper reports its client.* ID once, from the core package.
+// usageRows calls each public entry point once and returns its error.
 // WriteAllSkills and WatchAllSkills are the "*" forms and report the same ID.
-func TestSkillsHelperUsagePerFunction(t *testing.T) {
-	ctx := context.Background()
-	rows := []struct {
+func usageRows(ctx context.Context) []struct {
+	helper string
+	call   func(t *testing.T) error
+} {
+	closeW := func(w *skills.SkillWatcher, err error) error {
+		if w != nil {
+			w.Close()
+		}
+		return err
+	}
+	return []struct {
 		helper string
-		call   func(t *testing.T)
+		call   func(t *testing.T) error
 	}{
-		{"client.allSkills", func(*testing.T) { _, _ = skills.AllSkills() }},
-		{"client.getSkill", func(*testing.T) { _, _ = skills.GetSkill("a", 0) }},
-		{"client.getSkillResult", func(*testing.T) { _, _ = skills.GetSkillResult("a", 0) }},
-		{"client.getSkills", func(*testing.T) { _, _ = skills.GetSkills([]skills.SkillKey{"a"}) }},
-		{"client.skillRefs", func(*testing.T) {
-			_, _ = skills.SkillRefs(&aiserver.AiConfig{Raw: map[string]any{"skills": []any{}}})
+		{"client.allSkills", func(*testing.T) error { _, err := skills.AllSkills(); return err }},
+		{"client.getSkill", func(*testing.T) error { _, err := skills.GetSkill("a", 0); return err }},
+		{"client.getSkillResult", func(*testing.T) error { _, err := skills.GetSkillResult("a", 0); return err }},
+		{"client.getSkills", func(*testing.T) error { _, err := skills.GetSkills([]skills.SkillKey{"a"}); return err }},
+		{"client.skillRefs", func(*testing.T) error {
+			_, err := skills.SkillRefs(&aiserver.AiConfig{Raw: map[string]any{"skills": []any{}}})
+			return err
 		}},
-		{"client.writeSkills", func(t *testing.T) { _, _ = skills.WriteSkills([]skills.SkillKey{"a"}, t.TempDir(), nil) }},
-		{"client.writeSkills", func(t *testing.T) { _, _ = skills.WriteAllSkills(t.TempDir(), nil) }},
-		{"client.watchSkills", func(t *testing.T) {
+		{"client.writeSkills", func(t *testing.T) error {
+			_, err := skills.WriteSkills([]skills.SkillKey{"a"}, t.TempDir(), nil)
+			return err
+		}},
+		{"client.writeSkills", func(t *testing.T) error { _, err := skills.WriteAllSkills(t.TempDir(), nil); return err }},
+		{"client.watchSkills", func(t *testing.T) error {
 			_, w, err := skills.WatchSkills(ctx, []skills.SkillKey{"a"}, t.TempDir(), nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			w.Close()
+			return closeW(w, err)
 		}},
-		{"client.watchSkills", func(t *testing.T) {
+		{"client.watchSkills", func(t *testing.T) error {
 			_, w, err := skills.WatchAllSkills(ctx, t.TempDir(), nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			w.Close()
+			return closeW(w, err)
 		}},
 	}
+}
+
+// Each public helper reports its client.* ID once, from the core package.
+func TestSkillsHelperUsagePerFunction(t *testing.T) {
+	rows := usageRows(context.Background())
 	for _, r := range rows {
 		fake, _ := freshClient(t)
-		r.call(t)
-		r.call(t)
+		for range 2 {
+			if err := r.call(t); err != nil {
+				t.Fatalf("%s: %v", r.helper, err)
+			}
+		}
 		if got := fake.usage(); !slices.Equal(got, []string{r.helper}) {
 			t.Errorf("%s: usage events %v", r.helper, got)
 		}
@@ -109,20 +122,22 @@ func TestSkillRefsUsageHeldUntilAClientExists(t *testing.T) {
 	}
 }
 
+// The report is each helper's first statement, so it is sent even when the
+// call fails before doing anything (here: no skill store).
 func TestSkillsUsageReportedWhenTheCallFails(t *testing.T) {
-	_, _ = freshClient(t)
-	_ = aiserver.Shutdown(context.Background())
-	fake := &usageFakeLD{}
-	if _, err := aiserver.InitWithClient(context.Background(), fake, aiserver.InitOptions{}); err != nil {
-		t.Fatal(err)
+	ctx := context.Background()
+	for _, r := range usageRows(ctx) {
+		_ = aiserver.Shutdown(ctx) // clears the store
+		fake := &usageFakeLD{}
+		if _, err := aiserver.InitWithClient(ctx, fake, aiserver.InitOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		_ = r.call(t) // fails or reports the missing store; SkillRefs needs none
+		if got := fake.usage(); !slices.Equal(got, []string{r.helper}) {
+			t.Errorf("%s: usage events %v", r.helper, got)
+		}
 	}
-	// Shutdown cleared the store, so GetSkill fails.
-	if _, err := skills.GetSkill("a", 0); !errors.Is(err, skills.ErrNoSkillStore) {
-		t.Fatalf("GetSkill with no store: %v", err)
-	}
-	if got := fake.usage(); !slices.Equal(got, []string{"client.getSkill"}) {
-		t.Fatalf("usage events %v", got)
-	}
+	_ = aiserver.Shutdown(ctx)
 }
 
 func TestSkillsInternalCallsDoNotReport(t *testing.T) {

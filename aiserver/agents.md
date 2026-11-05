@@ -27,7 +27,7 @@ handler packages they use.
 
 Internal packages: `internal/trajectory`, `internal/judging`
 (judge message history and verdict parsing), `internal/bridge` (shutdown hooks and
-the shared logger, used by the `skills` package and the experimental entry point), `internal/telemetry` (the content gate's state and
+the shared logger, used by `skills`, the experimental entry point and handler packages), `internal/telemetry` (the content gate's state and
 per-call binding, GenAI chat/tool content writers, span-attribute and
 span-counter bindings, tracer flush), `internal/sdkapi` (handler-package entry
 points: `CreateHandler` without a usage report, `StartInvocation` for native

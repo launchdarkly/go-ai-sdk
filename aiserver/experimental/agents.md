@@ -11,7 +11,7 @@ to core leaves this package: Agent Skills is now package `skills`.
 Tier 0 (core client, experimental entry point). Not a handler: no `providesFor`. It consumes
 handlers (`EvaluationRunArgs.Handler` / `Handlers`) and selects one per config by provider and mode.
 All logic and tests live in `internal/evaluations`; `evaluations.go` here is aliases plus three
-one-line constructors.
+one-line constructors. `InitEvaluations` reports `experimental.initEvaluations`.
 
 | File | Responsibility |
 | --- | --- |

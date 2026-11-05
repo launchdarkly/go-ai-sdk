@@ -1,5 +1,5 @@
 // Package bridge holds the internal hooks between the core client and the
-// experimental entry point. It imports nothing from the SDK,
+// packages built on it (the experimental entry point, skills, handlers). It imports nothing from the SDK,
 // so both sides can depend on it without an import cycle.
 package bridge
 
@@ -59,7 +59,7 @@ var (
 	hooks []func(context.Context)
 )
 
-// OnShutdown registers experimental state cleanup to run inside
+// OnShutdown registers package state cleanup to run inside
 // aiserver.Shutdown. A panicking hook is recovered and logged by core so it
 // never fails the core call.
 func OnShutdown(fn func(context.Context)) {
@@ -75,7 +75,7 @@ func ShutdownHooks() []func(context.Context) {
 	return slices.Clone(hooks)
 }
 
-// Logger returns the SDK logger set by aiserver.SetLogger, so experimental
+// Logger returns the SDK logger set by aiserver.SetLogger, so package
 // code logs where the application pointed the core. The core assigns it once
 // in init, before any goroutine can read it.
 var Logger = slog.Default
