@@ -127,7 +127,9 @@ func spanRun(t *testing.T, gen func(ctx context.Context, req aiserver.HandlerReq
 	h := handler("OpenAI", aiserver.ModeMessages, func(ctx context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
 		if _, isJudge := req.Variables["message_history"]; isJudge {
 			*judgeCalls++
-			return verdict(0.9, "correct")(ctx, req)
+			res, err := verdict(0.9, "correct")(ctx, req)
+			res.Usage = map[string]any{"inputTokens": 11.0, "outputTokens": 2.0}
+			return res, err
 		}
 		return gen(ctx, req)
 	})
@@ -277,6 +279,10 @@ func TestEvaluationSpansForPlainFunctions(t *testing.T) {
 	jout := jsonAttr(t, judgeChat, "gen_ai.output.messages")
 	if raw := jout[0]["parts"].([]any)[0].(map[string]any)["content"]; raw != `{"reasoning":"correct","score":0.9}` {
 		t.Errorf("judge completion %v", raw)
+	}
+	// Usage reaches the runner-written judge chat, as on the generation chat.
+	if j := spanAttrs(judgeChat); j["gen_ai.usage.input_tokens"].AsInt64() != 11 || j["gen_ai.usage.output_tokens"].AsInt64() != 2 {
+		t.Errorf("judge chat usage %v", j)
 	}
 
 	// evaluate: the result event with no verdict, mirrored on the span.

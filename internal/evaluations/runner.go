@@ -612,7 +612,7 @@ func (r *runState) runJudge(ctx context.Context, g *genResult, j *Judge) *critRe
 	})
 	if call.shouldDescribe() {
 		call.writeChat(chatCall{config: rj.config, variables: vars, finalUser: &output,
-			output: hr.Output, err: err, start: started, end: time.Now()}, g.spanAttrs())
+			output: hr.Output, usage: hr.Usage, err: err, start: started, end: time.Now()}, g.spanAttrs())
 	}
 	if err != nil {
 		return res.fail(causeHandlerRaised, err.Error()) // errorMessage equals the error message
