@@ -375,7 +375,7 @@ func (r *runState) createEvaluation(ctx context.Context) error {
 		tools := make([]any, len(r.tools))
 		for i, t := range r.tools {
 			if t.inline {
-				tools[i] = map[string]any{"key": t.key, "schema": t.schema, "description": t.description, "source": "inline"}
+				tools[i] = map[string]any{"key": t.key, "schema": cloneJSON(t.schema), "description": t.description, "source": "inline"}
 			} else {
 				tools[i] = map[string]any{"key": t.key, "version": t.version, "source": "library"}
 			}

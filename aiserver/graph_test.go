@@ -386,6 +386,86 @@ func TestGraphModelSelectedHandoff(t *testing.T) {
 	}
 }
 
+// The routing text is pinned byte-for-byte by TESTING.md §3.15a and must match
+// the TypeScript and Python SDKs (AIC-3601). The literals are spelled out here
+// on purpose: building them from the production constants would not catch drift.
+const (
+	wantRoutingSuffix  = "\n\nComplete your task using your available tools first. Only once your own part is done, call exactly one transfer tool to route to the next agent. Do not answer the parts of the request that belong to the agent you route to."
+	wantBillingHandoff = "Handoff to billing-team recorded. billing-team takes over when your turn ends. Finish your own part, then end your turn. Do not answer for billing-team."
+	wantSupportHandoff = "Handoff to support recorded. support takes over when your turn ends. Finish your own part, then end your turn. Do not answer for support."
+)
+
+func TestGraphRoutingText(t *testing.T) {
+	lookupTool := map[string]any{"lookup": map[string]any{"name": "lookup", "type": "function", "parameters": map[string]any{}}}
+	for _, tc := range []struct {
+		name  string
+		tools map[string]any // the router's own tools; nil means none
+	}{
+		{"router with its own tool", lookupTool},
+		{"router with no tools", nil},
+	} {
+		for _, mode := range []string{"invoke", "stream"} {
+			t.Run(tc.name+"/"+mode, func(t *testing.T) {
+				router := enabledConfig("P", "agent", map[string]any{"instructions": "route it"})
+				if tc.tools != nil {
+					router["tools"] = tc.tools
+				}
+				withFake(t, map[string]any{
+					"route": map[string]any{"root": "router", "edges": map[string]any{"router": []any{
+						map[string]any{"key": "billing-team"}, map[string]any{"key": "support"}}}},
+					"router":       router,
+					"billing-team": nodeCfg("billing work"),
+					"support":      nodeCfg("support work"),
+				})
+				rh := &recordingHandler{pick: map[string]string{"router": "billing_team"}, stream: mode == "stream"}
+				opts := GraphOptions{Handlers: []*ProviderHandler{rh.handler()},
+					ToolHandlers: map[string]ToolHandler{"lookup": ToolFunc(func(context.Context, map[string]any) (any, error) { return "found", nil })}}
+				g := Graph("route", opts)
+				if mode == "stream" {
+					for _, err := range g.Stream(bg, "q", userCtx) {
+						if err != nil {
+							t.Fatal(err)
+						}
+					}
+				} else if _, err := g.Invoke(bg, "q", userCtx); err != nil {
+					t.Fatal(err)
+				}
+
+				// The config and tool handlers the handler actually received.
+				got := rh.calls[0].Req
+				if got.Config.Instructions != "route it"+wantRoutingSuffix {
+					t.Errorf("router instructions = %q", got.Config.Instructions)
+				}
+				for _, h := range []struct{ tool, want string }{
+					{"__handoff_billing_team", wantBillingHandoff},
+					{"__handoff_support", wantSupportHandoff},
+				} {
+					fn, ok := got.ToolHandlers[h.tool].(ToolFunc)
+					if !ok {
+						t.Fatalf("handler got no %s tool handler: %v", h.tool, got.ToolHandlers)
+					}
+					if res, err := fn(bg, nil); err != nil || res != h.want {
+						t.Errorf("%s result = %q, %v; want %q", h.tool, res, err, h.want)
+					}
+				}
+				// Real tools are left alone: present exactly when the node has them.
+				_, hasLookup := got.Config.Tools["lookup"]
+				_, hasLookupHandler := got.ToolHandlers["lookup"].(ToolFunc)
+				if hasLookup != (tc.tools != nil) || (tc.tools != nil && !hasLookupHandler) {
+					t.Errorf("lookup tool = %v, handler = %v, node tools = %v", hasLookup, hasLookupHandler, tc.tools != nil)
+				}
+				// Only the router routes; its target ran with its own instructions untouched.
+				if keys := rh.keys(); !reflect.DeepEqual(keys, []string{"router", "billing-team"}) {
+					t.Fatalf("nodes run = %v", keys)
+				}
+				if got := rh.calls[1].Req.Config.Instructions; got != "billing work" {
+					t.Errorf("leaf instructions = %q", got)
+				}
+			})
+		}
+	}
+}
+
 func TestGraphHandoffFailure(t *testing.T) {
 	f := withFake(t, multiEdge())
 	h := createHandler(ProvidesFor{"P", ModeAgent}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
@@ -508,6 +588,83 @@ func TestGraphJudge(t *testing.T) {
 	}
 	if mh := reqs[0].Variables["message_history"].(string); strings.Contains(mh, "Tool calls") || !strings.HasPrefix(mh, "q\n\nfinal") {
 		t.Errorf("graph judge history = %q", mh)
+	}
+}
+
+// verdictHandler answers a judge call with verdict and passes any other call to
+// inner, streaming when inner does.
+func verdictHandler(inner *ProviderHandler, verdict string) *ProviderHandler {
+	invoke := func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+		if req.Variables["response_to_evaluate"] != nil {
+			return HandlerResult{Output: verdict}, nil
+		}
+		return inner.Invoke(ctx, req)
+	}
+	return createHandler(inner.ProvidesFor, invoke, inner.Stream, false)
+}
+
+func nodeDones(events []GraphStreamEvent) (dones []GraphStreamEvent) {
+	for _, e := range events {
+		if e.Type == EventNodeDone {
+			dones = append(dones, e)
+		}
+	}
+	return dones
+}
+
+// A node's own judge results are on its node_done; done keeps only the graph judge.
+func TestGraphStreamNodeJudgeResults(t *testing.T) {
+	leaf := enabledConfig("P", "agent", judgedConfig(map[string]any{"instructions": "leaf work"}))
+	withFake(t, twoNode(map[string]any{"leaf-node": leaf, "judge": enabledConfig("P", "judge", nil), "gj": enabledConfig("P", "judge", nil)}))
+	h := verdictHandler((&recordingHandler{stream: true}).handler(), `{"score":0.9,"reasoning":"good"}`)
+	events, err := drainGraph(Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}}).Stream(bg, "q", userCtx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dones := nodeDones(events)
+	if len(dones) != 2 || dones[0].NodeKey != "root-node" || dones[1].NodeKey != "leaf-node" {
+		t.Fatalf("node_done events = %+v", dones)
+	}
+	if dones[0].JudgeResults != nil {
+		t.Errorf("root node_done judgeResults = %+v, want none", dones[0].JudgeResults)
+	}
+	if jr := dones[1].JudgeResults["judge"]; jr.Score != 0.9 || jr.Response != "good" {
+		t.Errorf("leaf node_done judgeResults = %+v", dones[1].JudgeResults)
+	}
+	if done := events[len(events)-1]; done.Type != EventDone || done.JudgeResults != nil {
+		t.Errorf("done = %+v, want no judgeResults", done)
+	}
+
+	// With a graph judge as well, done holds only the graph judge's key and the
+	// leaf's node_done still holds the leaf's.
+	events, err = drainGraph(Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}, GraphJudge: "gj"}).Stream(bg, "q", userCtx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done := events[len(events)-1]; len(done.JudgeResults) != 1 || done.JudgeResults["gj"].Score != 0.9 {
+		t.Errorf("done judgeResults = %+v, want only gj", done.JudgeResults)
+	}
+	if dones = nodeDones(events); len(dones) != 2 || len(dones[1].JudgeResults) != 1 || dones[1].JudgeResults["judge"].Score != 0.9 {
+		t.Errorf("leaf node_done judgeResults = %+v, want only judge", dones)
+	}
+
+	// A routing node's judges are on its own node_done too, here through the
+	// blocking-handler fallback.
+	withFake(t, multiEdge())
+	h = verdictHandler((&recordingHandler{pick: map[string]string{"router": "billing"}}).handler(), `{"score":1,"reasoning":"routed"}`)
+	events, err = drainGraph(Graph("route", GraphOptions{Handlers: []*ProviderHandler{h}}).Stream(bg, "q", userCtx))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dones = nodeDones(events)
+	if len(dones) != 2 || dones[0].NodeKey != "router" || dones[1].NodeKey != "billing" {
+		t.Fatalf("node_done events = %+v", dones)
+	}
+	if jr := dones[0].JudgeResults["judge"]; jr.Score != 1 || jr.Response != "routed" {
+		t.Errorf("router node_done judgeResults = %+v", dones[0].JudgeResults)
+	}
+	if dones[1].JudgeResults != nil {
+		t.Errorf("billing node_done judgeResults = %+v, want none", dones[1].JudgeResults)
 	}
 }
 

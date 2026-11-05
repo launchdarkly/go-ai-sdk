@@ -32,10 +32,10 @@ func TestEvaluationsSurfaceIsExactlyTheDocumentedSet(t *testing.T) {
 			t.Errorf("%s leaked onto the aiserver package root", name)
 		}
 	}
-	// The whole experimental entry point is skills plus evaluations; a new
-	// file's names must be pinned too.
+	// The whole experimental entry point is skills, evaluations and shadow
+	// requests; a new file's names must be pinned too.
 	all := exportedDecls(t, experimentalFiles(t)...)
-	pinned := slices.Sorted(slices.Values(append(slices.Clone(skillsSurface), evaluationsSurface...)))
+	pinned := slices.Sorted(slices.Values(slices.Concat(skillsSurface, evaluationsSurface, shadowSurface)))
 	if !slices.Equal(all, pinned) {
 		t.Errorf("experimental entry point has unpinned names:\n got %v\nwant %v", all, pinned)
 	}

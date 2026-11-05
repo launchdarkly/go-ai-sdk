@@ -99,20 +99,20 @@ live in `internal/skills`; `skills.go` here is aliases plus one-line wrappers. S
 // skills exports (see skills.go)
 SkillReference SkillKey SkillRequest SkillInput Skill SkillFields SkillOutcome SkillOutcomeReason
 ReconcileAction ReconcileActionKind ReconcileReport OnUnavailable SkillStore ListenerStore
-ListenerRemover InitializationProber Listener InMemorySkillStore FDv2SkillStore FDv2SkillStoreOptions
-FDv2Mode StoreDiagnostics WriteSkillsOptions WatchSkillsOptions SkillWatcher
-SkillFilename ManifestFilename ManifestVersion Reason* Action* OnUnavailableKeep OnUnavailableRaise
-FDv2ModeStream FDv2ModePoll ErrNoSkillStore ErrInvalidArgument ErrSkillsUnavailable
-ErrStoreNotWatchable ErrUnsupportedKind ErrStoreClosed ErrUnsupportedPlatform
-NewSkillReference NewSkill NewSkillOutcome NewListener NewInMemorySkillStore NewFDv2SkillStore
-SetSkillStore SkillRefs GetSkill GetSkillResult GetSkills AllSkills WriteSkills WriteAllSkills
-WatchSkills WatchAllSkills
+ListenerRemover InitializationProber Listener InMemorySkillStore LaunchDarklySkillStore
+LaunchDarklySkillStoreOptions LaunchDarklySkillStoreMode StoreDiagnostics WriteSkillsOptions
+WatchSkillsOptions SkillWatcher SkillFilename ManifestFilename ManifestVersion Reason* Action*
+OnUnavailableKeep OnUnavailableRaise LaunchDarklySkillStoreModeStream LaunchDarklySkillStoreModePoll
+ErrNoSkillStore ErrInvalidArgument ErrSkillsUnavailable ErrStoreNotWatchable ErrUnsupportedKind
+ErrStoreClosed ErrUnsupportedPlatform NewSkillReference NewSkill NewSkillOutcome NewListener
+NewInMemorySkillStore NewLaunchDarklySkillStore SetSkillStore SkillRefs GetSkill GetSkillResult
+GetSkills AllSkills WriteSkills WriteAllSkills WatchSkills WatchAllSkills
 ```
 
 **Lifecycle.** `InitClient` is not required for skills; a store is configured with `SetSkillStore`
 only (never an `InitOptions` field).
-`aiserver.Shutdown` clears the store and emitter through the bridge hook; it does not close an
-`FDv2SkillStore`.
+`aiserver.Shutdown` clears the store and emitter through the bridge hook; it does not close a
+`LaunchDarklySkillStore`.
 
 **OTel.** Skills emit no spans and never call `client.track`, not even `$ld:ai:sdk:usage`. The
 tracer provider is set up by `aiserver.InitClient` (see `../agents.md`).
@@ -145,3 +145,26 @@ keys and hashes are shape-checked and redacted before reaching any signal or rec
 - Tests that touch `fsOps`, the umask or module state must not run in parallel.
 
 Check: `gofmt -l internal/skills && go vet ./internal/skills/ ./aiserver/experimental/ && go test -race ./internal/skills/ ./aiserver/experimental/`.
+
+## Shadow requests
+
+All code is in `shadow_requests.go`; tests are `shadow_requests_test.go` (package `experimental`,
+for `inSample` and the `running` wait group) and `shadow_requests_surface_test.go`.
+
+The core seam is `bridge.ConfigWithOptions(args, bridge.RunOptions{...})`, which returns an
+`*aiserver.AIConfig` whose flag evaluation calls `RunOptions.Variation` instead of
+`JSONVariation`, and whose tracked runs use `RunID`, merge `TrackData` into every event and add
+`SpanAttributes` to the handler's root span. The served call (A) uses it with a `Variation` that
+calls `JSONVariationDetail` and strips `shadowConfiguration`; each shadow (B) uses it with a fixed
+value, a deadline wrapped handler and the shadow track data. Both pass `sdkcall.Mark()`, so only
+`experimental.shadowConfig` and `experimental.runShadow` are reported.
+
+Rules that are easy to break: shadows start only after A succeeds (after `Invoke` returns, or at
+the stream's `done` event); preparing them never fails A (panics are recovered and logged); B
+never gets tools, judges or `shadowConfiguration`; the deadline wraps the handler, so a timeout is
+tracked once; nothing is added to A's events; `aiserver.Shutdown` cancels background shadows through
+`bridge.OnShutdown`. Sampling is
+`sha1("<id>.<canonical key>")[:15] / 0xFFFFFFFFFFFFFFF`, with the canonical key from
+`aiserver.ContextIdentity`.
+
+Check: `go vet ./aiserver/... && go test -race ./aiserver/experimental/ -run 'Shadow|Sampling'`.

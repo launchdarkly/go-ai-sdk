@@ -66,6 +66,35 @@ func TestInitFailureNotCachedAndClosesClient(t *testing.T) {
 	}
 }
 
+// The LaunchDarkly client returns without waiting, and without an error, when
+// its timeout is not positive, so a negative WaitFor must not reach it as-is.
+func TestInitNegativeWaitForDoesNotAdoptUninitializedClient(t *testing.T) {
+	_ = Shutdown(bg)
+	orig := newLDClient
+	t.Cleanup(func() { newLDClient = orig; _ = Shutdown(bg) })
+	var waits []time.Duration
+	c := &fakeLD{}
+	newLDClient = func(_ string, _ ld.Config, wait time.Duration) (LDClient, error) {
+		waits = append(waits, wait)
+		if wait <= 0 {
+			return c, nil // what ld.MakeCustomClient does: no wait, so no init error
+		}
+		return c, ld.ErrInitializationTimeout
+	}
+	if _, err := InitClient(bg, InitOptions{SDKKey: "k", WaitFor: -time.Second, OTLPEndpoint: unreachableOTLP}); err == nil {
+		t.Fatal("negative WaitFor adopted a client that never initialized")
+	}
+	if len(waits) != 1 || waits[0] != 10*time.Second {
+		t.Errorf("negative WaitFor should use the 10s default, got %v", waits)
+	}
+	if c.closed != 1 {
+		t.Errorf("client from the failed init was not closed (closed=%d)", c.closed)
+	}
+	if _, err := GetClient(); err == nil {
+		t.Error("failed init left a client behind")
+	}
+}
+
 func TestInitConcurrentCallersShareOneClient(t *testing.T) {
 	built := 0
 	var mu sync.Mutex

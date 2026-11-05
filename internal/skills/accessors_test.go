@@ -582,7 +582,7 @@ func TestLocallyComputedHashReachesSkill(t *testing.T) {
 // the delivery transport answers pins exactly as the in-memory store.
 func TestPinFallthroughFDv2(t *testing.T) {
 	pinFallthroughCases(t, func(objs ...map[string]any) SkillStore {
-		s, _ := NewFDv2SkillStore("sdk-test", nil)
+		s, _ := NewLaunchDarklySkillStore("sdk-test", nil)
 		r := s.reader
 		r.handle("server-intent", []byte(`{"payloads":[{"id":"p","intentCode":"xfer-full"}]}`))
 		for _, o := range objs {

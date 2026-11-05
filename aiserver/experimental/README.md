@@ -55,7 +55,7 @@ if !res.Passed { os.Exit(1) }
 | `Dataset` | `DatasetKey("...")` for a hosted dataset, or `InlineRows{...}` (`DatasetRow` values or `map[string]any` with `input`, `expectedOutput`, `variables`, `metadata`, optional `rowIdx`). |
 | `Handler` / `Handlers` | Exactly one. Each config (generation and every judge) picks its handler by provider and mode; an exact provider beats `*`; there is no mode fallback. |
 | `Generation` / `AIConfig` | Exactly one. `AIConfig: &AIConfigRef{Key, Variation}` reads the latest variation version; `Overrides` replace single fields. |
-| `Tools` / `InlineTools` | Library tools (resolved and version-pinned by key) and tools defined in code (`InlineTool{Implementation, Schema, Description}`). Inline keys are lowercase. |
+| `Tools` / `InlineTools` | Library tools (resolved and version-pinned by key) and tools defined in code (`InlineTool{Implementation, Schema, Description}`). Every key, library or inline, is non-blank and lowercase, and keys must differ under Unicode case folding (`straße` and `strasse` collide). |
 | `Criteria` | `*Judge` (`NewJudge`) and `*Scorer` (`NewScorer`). With `AIConfig`, nil uses the variation's judges and `[]Criterion{}` runs none. |
 | `Concurrency` | In-flight handler, judge and scorer calls (default 10). |
 | `PollInterval` / `PollTimeout` | Summary polling (default 2s / 3m). Large datasets need a longer timeout. |
@@ -93,7 +93,7 @@ content to disk as `<root>/<key>/SKILL.md`. Install with
 ### Keep a directory in sync with LaunchDarkly
 
 ```go
-store, err := experimental.NewFDv2SkillStore(os.Getenv("LD_SDK_KEY"), nil) // server-side sdk- key only
+store, err := experimental.NewLaunchDarklySkillStore(os.Getenv("LD_SDK_KEY"), nil) // server-side sdk- key only
 if err != nil { log.Fatal(err) }
 if _, err := store.Start(); err != nil { log.Fatal(err) }
 defer store.Close()
@@ -152,13 +152,13 @@ wire objects (`key`, `version`, `content`, `contentHash`, optional `name`, `desc
 | `WriteSkills(skills, root, *WriteSkillsOptions)` | `ReconcileReport, error` | Any slice of `Skill`, `*Skill`, `SkillReference`, `SkillKey` (or mixed `[]SkillInput`). |
 | `WriteAllSkills(root, *WriteSkillsOptions)` | `ReconcileReport, error` | Every skill the store holds (the `"*"` key). |
 | `WatchSkills` / `WatchAllSkills(ctx, …, *WatchSkillsOptions)` | `ReconcileReport, *SkillWatcher, error` | Needs a store with `AddListener`; stops on `Close` or when `ctx` is done. |
-| `NewFDv2SkillStore(sdkKey, *FDv2SkillStoreOptions)` | `*FDv2SkillStore, error` | `Start`, `WaitForSkills`, `IsInitialized`, `Failed`, `Diagnostics`, `Close` (final). |
+| `NewLaunchDarklySkillStore(sdkKey, *LaunchDarklySkillStoreOptions)` | `*LaunchDarklySkillStore, error` | `Start`, `WaitForSkills`, `IsInitialized`, `Failed`, `Diagnostics`, `Close` (final). |
 
 - `WriteSkillsOptions`: `NoPrune` (pruning is on by default), `Timeout *time.Duration` (nil = 10s,
   0 = already exhausted, negative is an error), `OnUnavailable` (`keep` default; `raise` returns
   `ErrSkillsUnavailable`). `WatchSkillsOptions` embeds it and adds `Debounce` (0 = 500ms) and
   `OnReconcile`.
-- `FDv2SkillStoreOptions`: `BaseURI` (default `https://sdk.launchdarkly.com`; given alone it serves
+- `LaunchDarklySkillStoreOptions`: `BaseURI` (default `https://sdk.launchdarkly.com`; given alone it serves
   both endpoints), `StreamURI` (default `https://stream.launchdarkly.com`), `Mode` (`stream`
   default, or `poll`), `PollInterval` (30s), `ReadTimeout` (10s poll, 300s stream),
   `InitialBackoff` (1s), `MaxBackoff` (30s). URIs must be `https`; zero means default, negative is
@@ -176,3 +176,50 @@ An integrity failure is logged at ERROR through the SDK logger (`aiserver.SetLog
 `ld.skills.integrity_failure {sorted-key JSON}`, with the same mapping on the `ld_skills` attribute.
 SIEM rules can match the event name and `reason_code`. While Agent Skills is experimental, the event
 name, fields and codes may change only in a minor release with a changelog entry under Experimental.
+
+## Shadow requests
+
+A shadow request runs a candidate variation on real traffic without serving it. Use
+`ShadowConfig` in place of `aiserver.Config` at the call sites you want to shadow. It takes the
+same `aiserver.ConfigArgs` plus `ShadowOptions`, and its `Invoke` and `Stream` return exactly what
+`Config`'s return. When the context matches a targeting rule or the fallthrough that has shadows
+attached, each sampled shadow runs the same input on its own variation once the served call
+succeeds. Its response is discarded. Its events are the normal `$ld:ai:*` events for that
+variation, with the served call's `runId` and `isShadow: true`, so you can compare the two on the
+usual AI metrics. A shadow never delays or changes the served response, and its failures are only
+tracked.
+
+```go
+shadowed, err := experimental.ShadowConfig(
+	aiserver.ConfigArgs{Key: "my-ai-config", Handlers: []*aiserver.ProviderHandler{openai, anthropic}},
+	experimental.ShadowOptions{},
+)
+if err != nil { log.Fatal(err) }
+resp, err := shadowed.Invoke(ctx, "Summarize this document", userCtx)
+
+// Or hand each shadow to your own queue, and run it from a worker.
+// OnTask runs before Invoke returns, so it must never block.
+queue := make(chan experimental.ShadowTask, 100)
+shadowed, err = experimental.ShadowConfig(args, experimental.ShadowOptions{
+	OnTask: func(task experimental.ShadowTask) {
+		select {
+		case queue <- task:
+		default: // queue full: drop this shadow
+		}
+	},
+})
+result := experimental.RunShadow(ctx, <-queue, handlers) // never fails; see result.Error
+```
+
+| Option | Meaning |
+| --- | --- |
+| `Timeout` | How long each shadow may run before it is tracked as an error with `Error: "timeout"`. Zero means 30 seconds; a negative value makes `ShadowConfig` return an error. |
+| `OnTask` | Run shadows yourself. It receives a `ShadowTask` per sampled shadow before `Invoke` returns, so it must not block: only enqueue it. A `ShadowTask` survives `encoding/json`, including unmodeled variation fields, and carries the caller's conversation id. `RunShadow` uses the client already set up and never starts one. |
+
+Shadows run in a background goroutine by default, detached from the caller's cancellation, and
+each one ends at its timeout. `aiserver.Shutdown` cancels any that are still running, and a
+cancelled shadow records nothing. A shadow always runs as
+a plain invoke, even when the served call streamed, with no tools and no judges. Pass handlers for
+every provider your shadow variations use, since a shadow with no matching handler is skipped.
+Shadows need a client with `JSONVariationDetail`, which `*ld.LDClient` has; with any other client
+the served call still runs and no shadow does. Plain `aiserver.Config` never runs shadows.

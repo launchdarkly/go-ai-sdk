@@ -365,8 +365,8 @@ func renderRow(index int, input, expected, variables, metadata any) row {
 	return out
 }
 
-// handlerConfig is the one config every row receives; tools come from one
-// resolved shape whatever their source.
+// handlerConfig is the config every row receives (each through rowConfig);
+// tools come from one resolved shape whatever their source.
 func (r *runState) handlerConfig() aiserver.AiConfig {
 	g := r.gen
 	var cfg aiserver.AiConfig
@@ -398,6 +398,22 @@ func (r *runState) handlerConfig() aiserver.AiConfig {
 	return cfg
 }
 
+// rowConfig gives a row its own copy of every tool schema, so a handler
+// that edits its config cannot change what another row is given.
+func rowConfig(base aiserver.AiConfig) aiserver.AiConfig {
+	cfg := base
+	if base.Tools != nil {
+		cfg.Tools = make(map[string]aiserver.Tool, len(base.Tools))
+		for k, t := range base.Tools {
+			if t.Parameters != nil {
+				t.Parameters = cloneJSON(t.Parameters).(map[string]any)
+			}
+			cfg.Tools[k] = t
+		}
+	}
+	return cfg
+}
+
 // rowTools wraps each local tool with the row's own recorder, under its
 // original key; native tools pass through unrecorded.
 func (r *runState) rowTools(rec *trajectory.Recorder) map[string]aiserver.ToolHandler {
@@ -420,7 +436,7 @@ func (r *runState) generate(ctx context.Context) ([]*genResult, error) {
 		rec := trajectory.NewRecorder()
 		started := time.Now()
 		res, err := invoke(ctx, r.genHandler, aiserver.HandlerRequest{
-			Config: cfg, UserInput: deref(row.input), ToolHandlers: r.rowTools(rec), Variables: maps.Clone(row.variables),
+			Config: rowConfig(cfg), UserInput: deref(row.input), ToolHandlers: r.rowTools(rec), Variables: maps.Clone(row.variables),
 		})
 		g := &genResult{row: row, started: started, elapsed: time.Since(started),
 			trajectory: rec.Render(), invocations: rec.Invocations()}

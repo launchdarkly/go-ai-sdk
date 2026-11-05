@@ -117,7 +117,7 @@ func availableStore(cfg writeConfig, subject string) (SkillStore, string) {
 	if !storeIsInitialized(s) {
 		return nil, fmt.Sprintf("the skill store has not received its initial data, so %s could not be "+
 			"retrieved and nothing on disk was changed. Wait for delivery before reconciling: "+
-			"FDv2SkillStore.WaitForSkills(timeout) returns true once the first payload has arrived", subject)
+			"LaunchDarklySkillStore.WaitForSkills(timeout) returns true once the first payload has arrived", subject)
 	}
 	return s, ""
 }

@@ -139,15 +139,15 @@ func pollBody(events ...[2]string) string {
 	return `{"events":[` + strings.Join(parts, ",") + `]}`
 }
 
-func newTestStore(t *testing.T, mode FDv2Mode, ft *fakeTransport, mutate func(*FDv2SkillStoreOptions)) *FDv2SkillStore {
+func newTestStore(t *testing.T, mode LaunchDarklySkillStoreMode, ft *fakeTransport, mutate func(*LaunchDarklySkillStoreOptions)) *LaunchDarklySkillStore {
 	t.Helper()
-	opts := &FDv2SkillStoreOptions{Mode: mode, InitialBackoff: time.Millisecond, MaxBackoff: 5 * time.Millisecond,
+	opts := &LaunchDarklySkillStoreOptions{Mode: mode, InitialBackoff: time.Millisecond, MaxBackoff: 5 * time.Millisecond,
 		PollInterval: time.Hour, ReadTimeout: time.Minute}
 	if mutate != nil {
 		mutate(opts)
 	}
 	opts.transport = ft
-	s, err := NewFDv2SkillStore("sdk-test-key", opts)
+	s, err := NewLaunchDarklySkillStore("sdk-test-key", opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", what)
 }
 
-func start(t *testing.T, s *FDv2SkillStore) {
+func start(t *testing.T, s *LaunchDarklySkillStore) {
 	t.Helper()
 	if _, err := s.Start(); err != nil {
 		t.Fatal(err)
@@ -180,7 +180,7 @@ func TestFDv2KindsOnEveryRequest(t *testing.T) {
 	for i := range 3 {
 		ft.push(fakeResp{body: sse(commitEvents("p", fmt.Sprintf("(p:p:%d)", i+1), put("a:1", "a"))...)})
 	}
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "four requests", func() bool { return len(ft.requests()) >= 4 })
 	for i, req := range ft.requests() {
@@ -201,7 +201,7 @@ func TestFDv2KindsOnEveryRequest(t *testing.T) {
 		}
 	}
 	ft2 := &fakeTransport{}
-	p := newTestStore(t, FDv2ModePoll, ft2, nil)
+	p := newTestStore(t, LaunchDarklySkillStoreModePoll, ft2, nil)
 	start(t, p)
 	eventually(t, "a poll", func() bool { return len(ft2.requests()) == 1 })
 	if r := ft2.requests()[0]; r.URL.Query().Get("kinds") != "agent-skill" || r.URL.Host != "sdk.launchdarkly.com" || r.URL.Path != "/sdk/poll" {
@@ -211,20 +211,20 @@ func TestFDv2KindsOnEveryRequest(t *testing.T) {
 
 func TestFDv2Endpoints(t *testing.T) {
 	_, _ = setup(t)
-	s, _ := NewFDv2SkillStore("sdk-x", nil)
+	s, _ := NewLaunchDarklySkillStore("sdk-x", nil)
 	if s.baseURI != "https://sdk.launchdarkly.com" || s.streamURI != "https://stream.launchdarkly.com" {
 		t.Fatalf("defaults %s %s", s.baseURI, s.streamURI)
 	}
-	s, _ = NewFDv2SkillStore("sdk-x", &FDv2SkillStoreOptions{BaseURI: "https://relay.example/"})
+	s, _ = NewLaunchDarklySkillStore("sdk-x", &LaunchDarklySkillStoreOptions{BaseURI: "https://relay.example/"})
 	if s.baseURI != "https://relay.example" || s.streamURI != "https://relay.example" {
 		t.Fatalf("base alone must move both: %s %s", s.baseURI, s.streamURI)
 	}
-	s, _ = NewFDv2SkillStore("sdk-x", &FDv2SkillStoreOptions{BaseURI: "https://a.example", StreamURI: "https://b.example"})
+	s, _ = NewLaunchDarklySkillStore("sdk-x", &LaunchDarklySkillStoreOptions{BaseURI: "https://a.example", StreamURI: "https://b.example"})
 	if s.baseURI != "https://a.example" || s.streamURI != "https://b.example" {
 		t.Fatal("separate overrides")
 	}
-	for _, bad := range []FDv2SkillStoreOptions{{BaseURI: "http://sdk.example"}, {StreamURI: "http://localhost"}, {BaseURI: "https://"}, {BaseURI: "ftp://x"}} {
-		if _, err := NewFDv2SkillStore("sdk-x", &bad); !errors.Is(err, ErrInvalidArgument) {
+	for _, bad := range []LaunchDarklySkillStoreOptions{{BaseURI: "http://sdk.example"}, {StreamURI: "http://localhost"}, {BaseURI: "https://"}, {BaseURI: "ftp://x"}} {
+		if _, err := NewLaunchDarklySkillStore("sdk-x", &bad); !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("%+v accepted", bad)
 		}
 	}
@@ -233,15 +233,15 @@ func TestFDv2Endpoints(t *testing.T) {
 func TestFDv2Credentials(t *testing.T) {
 	_, logs := setup(t)
 	for _, key := range []string{"mob-123", "0123456789abcdef01234567"} {
-		_, err := NewFDv2SkillStore(key, nil)
+		_, err := NewLaunchDarklySkillStore(key, nil)
 		if !errors.Is(err, ErrInvalidArgument) || !strings.Contains(err.Error(), "server-side") {
 			t.Fatalf("%s: %v", key, err)
 		}
 	}
-	if _, err := NewFDv2SkillStore("  ", nil); !errors.Is(err, ErrInvalidArgument) {
+	if _, err := NewLaunchDarklySkillStore("  ", nil); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("empty: %v", err)
 	}
-	if _, err := NewFDv2SkillStore("relay-key", nil); err != nil {
+	if _, err := NewLaunchDarklySkillStore("relay-key", nil); err != nil {
 		t.Fatalf("unprefixed: %v", err)
 	}
 	if !logs.contains(slog.LevelWarn, "does not look like") {
@@ -251,21 +251,21 @@ func TestFDv2Credentials(t *testing.T) {
 
 func TestFDv2OptionValidation(t *testing.T) {
 	_, _ = setup(t)
-	bad := []FDv2SkillStoreOptions{
+	bad := []LaunchDarklySkillStoreOptions{
 		{Mode: "push"}, {PollInterval: -1}, {ReadTimeout: -1}, {InitialBackoff: -1}, {MaxBackoff: -1},
 		{InitialBackoff: 2 * time.Second, MaxBackoff: time.Second},
 	}
 	for _, o := range bad {
-		if _, err := NewFDv2SkillStore("sdk-x", &o); !errors.Is(err, ErrInvalidArgument) {
+		if _, err := NewLaunchDarklySkillStore("sdk-x", &o); !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("%+v accepted", o)
 		}
 	}
-	if _, err := NewFDv2SkillStore("sdk-x", &FDv2SkillStoreOptions{InitialBackoff: time.Second, MaxBackoff: time.Second}); err != nil {
+	if _, err := NewLaunchDarklySkillStore("sdk-x", &LaunchDarklySkillStoreOptions{InitialBackoff: time.Second, MaxBackoff: time.Second}); err != nil {
 		t.Fatalf("initial == max: %v", err)
 	}
-	stream, _ := NewFDv2SkillStore("sdk-x", nil)
-	poll, _ := NewFDv2SkillStore("sdk-x", &FDv2SkillStoreOptions{Mode: FDv2ModePoll})
-	if stream.mode != FDv2ModeStream || stream.readTimeout != 300*time.Second || poll.readTimeout != 10*time.Second || poll.pollInterval != 30*time.Second {
+	stream, _ := NewLaunchDarklySkillStore("sdk-x", nil)
+	poll, _ := NewLaunchDarklySkillStore("sdk-x", &LaunchDarklySkillStoreOptions{Mode: LaunchDarklySkillStoreModePoll})
+	if stream.mode != LaunchDarklySkillStoreModeStream || stream.readTimeout != 300*time.Second || poll.readTimeout != 10*time.Second || poll.pollInterval != 30*time.Second {
 		t.Fatalf("defaults stream=%v/%v poll=%v/%v", stream.mode, stream.readTimeout, poll.readTimeout, poll.pollInterval)
 	}
 	if stream.initialBackoff != time.Second || stream.maxBackoff != 30*time.Second {
@@ -276,7 +276,7 @@ func TestFDv2OptionValidation(t *testing.T) {
 func TestFDv2WaitAndInitialized(t *testing.T) {
 	_, _ = setup(t)
 	ft := &fakeTransport{}
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	if ok, _ := s.IsInitialized(); ok {
 		t.Fatal("initialized before any payload")
 	}
@@ -305,7 +305,7 @@ func TestFDv2WaitAndInitialized(t *testing.T) {
 
 func TestFDv2WaitReturnsEarlyWhenDeliveryEnds(t *testing.T) {
 	_, _ = setup(t)
-	s := newTestStore(t, FDv2ModeStream, &fakeTransport{}, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, &fakeTransport{}, nil)
 	go func() { time.Sleep(20 * time.Millisecond); s.Close() }()
 	began := time.Now()
 	if s.WaitForSkills(10*time.Second) || time.Since(began) > 2*time.Second {
@@ -317,7 +317,7 @@ func Test422IsFatalAndRecoverableByStart(t *testing.T) {
 	rec, _ := setup(t)
 	ft := &fakeTransport{}
 	ft.push(fakeResp{status: 503}, fakeResp{status: 503}, fakeResp{status: 422})
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	began := time.Now()
 	if s.WaitForSkills(10 * time.Second) {
@@ -384,7 +384,7 @@ func TestFDv2WaitAfterRestartWaitsForTheNewRun(t *testing.T) {
 	_, _ = setup(t)
 	ft := &fakeTransport{}
 	ft.push(fakeResp{status: 401})
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "give up", func() bool { return s.Failed() != "" })
 	start(t, s) // the script is exhausted: the new run holds
@@ -399,7 +399,7 @@ func TestFDv2FatalStatuses(t *testing.T) {
 		_, _ = setup(t)
 		ft := &fakeTransport{}
 		ft.push(fakeResp{status: status})
-		s := newTestStore(t, FDv2ModeStream, ft, nil)
+		s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 		start(t, s)
 		eventually(t, fmt.Sprintf("give up on %d", status), func() bool { return s.Failed() != "" })
 		time.Sleep(10 * time.Millisecond)
@@ -413,7 +413,7 @@ func TestFDv2FatalStatuses(t *testing.T) {
 	_, _ = setup(t)
 	ft := &fakeTransport{}
 	ft.push(fakeResp{status: 503}, fakeResp{status: 503})
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "retries", func() bool { return len(ft.requests()) >= 3 })
 	if s.Failed() != "" {
@@ -442,7 +442,7 @@ func Test400RetriesOnceStatelessThenGivesUp(t *testing.T) {
 	_, _ = setup(t)
 	ft := &fakeTransport{}
 	ft.push(fakeResp{body: sse(commitEvents("p", "(p:p:1)", put("a:1", "a"))...)}, fakeResp{status: 400}, fakeResp{status: 400})
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "give up", func() bool { return s.Failed() != "" })
 	reqs := ft.requests()
@@ -452,7 +452,7 @@ func Test400RetriesOnceStatelessThenGivesUp(t *testing.T) {
 	_, _ = setup(t)
 	ft = &fakeTransport{}
 	ft.push(fakeResp{status: 400})
-	s = newTestStore(t, FDv2ModeStream, ft, nil)
+	s = newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "give up", func() bool { return s.Failed() != "" })
 	if len(ft.requests()) != 1 {
@@ -467,7 +467,7 @@ func TestFDv2ResponseTooLargeIsFatal(t *testing.T) {
 	t.Cleanup(func() { maxResponseBytes = old })
 	ft := &fakeTransport{}
 	ft.push(fakeResp{body: pollBody(ev("server-intent", intent("xfer-full", "p"))) + strings.Repeat(" ", 300)})
-	s := newTestStore(t, FDv2ModePoll, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModePoll, ft, nil)
 	start(t, s)
 	eventually(t, "give up", func() bool { return s.Failed() != "" })
 	if len(ft.requests()) != 1 || s.Diagnostics().ConnectionFailures != 0 || s.Diagnostics().LastError == "" {
@@ -478,7 +478,7 @@ func TestFDv2ResponseTooLargeIsFatal(t *testing.T) {
 	ft = &fakeTransport{}
 	ft.push(fakeResp{body: sse(commitEvents("p", "(p:p:1)", put("a:1", "a"))...)})
 	ft.push(fakeResp{body: sse(ev("put-object", put("b:1", strings.Repeat("x", 300))))})
-	s = newTestStore(t, FDv2ModeStream, ft, nil)
+	s = newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "give up", func() bool { return s.Failed() != "" })
 	if got, _ := s.GetObject("skill", "a", 0); got == nil {
@@ -496,7 +496,7 @@ func TestFDv2Absences(t *testing.T) {
 	if !slices.Equal(fields, want) {
 		t.Fatalf("StoreDiagnostics fields %v", fields)
 	}
-	if _, has := reflect.TypeOf(FDv2SkillStoreOptions{}).FieldByName("MaxConsecutiveFailures"); has {
+	if _, has := reflect.TypeOf(LaunchDarklySkillStoreOptions{}).FieldByName("MaxConsecutiveFailures"); has {
 		t.Fatal("MaxConsecutiveFailures must not exist")
 	}
 	fset := token.NewFileSet()
@@ -525,7 +525,7 @@ func TestBackoff(t *testing.T) {
 	if d := backoffDelay(10000, time.Second, 30*time.Second); d <= 0 || d > 30*time.Second {
 		t.Fatalf("attempt 10000: %v", d)
 	}
-	s, _ := NewFDv2SkillStore("sdk-x", &FDv2SkillStoreOptions{InitialBackoff: 2 * time.Second, MaxBackoff: 10 * time.Second})
+	s, _ := NewLaunchDarklySkillStore("sdk-x", &LaunchDarklySkillStoreOptions{InitialBackoff: 2 * time.Second, MaxBackoff: 10 * time.Second})
 	for header, want := range map[string]time.Duration{"1000": 10 * time.Second, "0": 2 * time.Second, "5": 5 * time.Second} {
 		re := classifyStatus(503, http.Header{"Retry-After": {header}}).(*recoverableError)
 		if got := s.retryDelay(re, 1); got != want {
@@ -544,7 +544,7 @@ func TestConnectionFailuresCountOnlyConsecutive(t *testing.T) {
 	ft.push(fakeResp{status: 503},
 		fakeResp{body: pollBody(commitEvents("p", "(p:p:1)", put("a:1", "a"))...)},
 		fakeResp{status: 503})
-	s := newTestStore(t, FDv2ModePoll, ft, func(o *FDv2SkillStoreOptions) { o.PollInterval = time.Millisecond; o.ReadTimeout = time.Hour })
+	s := newTestStore(t, LaunchDarklySkillStoreModePoll, ft, func(o *LaunchDarklySkillStoreOptions) { o.PollInterval = time.Millisecond; o.ReadTimeout = time.Hour })
 	start(t, s)
 	eventually(t, "the 4th poll to park", func() bool { return len(ft.requests()) >= 4 })
 	if n := s.Diagnostics().ConnectionFailures; n != 1 {
@@ -563,7 +563,7 @@ func TestConnectionFailuresCountOnlyConsecutive(t *testing.T) {
 	for range 3 {
 		ft.push(fakeResp{body: sse(ev("server-intent", intent("xfer-full", "p")))})
 	}
-	s = newTestStore(t, FDv2ModeStream, ft, nil)
+	s = newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "three drops", func() bool { return s.Diagnostics().ConnectionFailures == 3 })
 }
@@ -574,7 +574,7 @@ func TestGoodbyeRecycleAndCatastrophe(t *testing.T) {
 	for range 3 {
 		ft.push(fakeResp{body: sse(ev("server-intent", intent("none", "p")), ev("goodbye", []byte(`{"reason":"recycle"}`)))})
 	}
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "4 requests", func() bool { return len(ft.requests()) >= 4 })
 	if d := s.Diagnostics(); d.ConnectionFailures != 0 || d.LastError != "" {
@@ -595,7 +595,7 @@ func TestGoodbyeRecycleAndCatastrophe(t *testing.T) {
 	_, _ = setup(t)
 	ft = &fakeTransport{}
 	ft.push(fakeResp{body: sse(ev("goodbye", []byte(`{"reason":"early"}`)))})
-	s = newTestStore(t, FDv2ModeStream, ft, nil)
+	s = newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "a counted goodbye", func() bool { return s.Diagnostics().ConnectionFailures == 1 })
 
@@ -604,7 +604,7 @@ func TestGoodbyeRecycleAndCatastrophe(t *testing.T) {
 	events := commitEvents("p", "(p:p:1)", put("a:1", "a"))
 	events = append(events, ev("goodbye", []byte(`{"reason":"meltdown","catastrophe":true,"silent":true}`)))
 	ft.push(fakeResp{body: sse(events...)})
-	s = newTestStore(t, FDv2ModeStream, ft, nil)
+	s = newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "reconnect", func() bool { return len(ft.requests()) >= 2 })
 	d := s.Diagnostics()
@@ -624,7 +624,7 @@ func TestBackoffResetsOnlyAfterALongConnection(t *testing.T) {
 	drop := fakeResp{body: sse(ev("server-intent", intent("none", "p")))}
 	ft := &fakeTransport{}
 	ft.push(drop, drop, drop)
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "4 requests", func() bool { return len(ft.requests()) >= 4 })
 	s.mu.Lock()
@@ -639,7 +639,7 @@ func TestBackoffResetsOnlyAfterALongConnection(t *testing.T) {
 	_, _ = setup(t)
 	ft = &fakeTransport{}
 	ft.push(drop, drop, drop)
-	s = newTestStore(t, FDv2ModeStream, ft, nil)
+	s = newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "4 requests", func() bool { return len(ft.requests()) >= 4 })
 	s.mu.Lock()
@@ -657,7 +657,7 @@ func TestRecoverableFailuresRetryIndefinitely(t *testing.T) {
 	for range 15 {
 		ft.push(fakeResp{status: 503})
 	}
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "16 failures", func() bool { return s.Diagnostics().ConnectionFailures >= 16 })
 	if s.Failed() != "" {
@@ -673,7 +673,7 @@ func TestStreamDyingMidReadIsRetried(t *testing.T) {
 	ft := &fakeTransport{}
 	ft.push(fakeResp{body: sse(ev("server-intent", intent("xfer-full", "p"))), readErr: errors.New("connection reset")})
 	ft.push(fakeResp{body: sse(commitEvents("p", "(p:p:1)", put("a:1", "a"))...), hold: true})
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	if !s.WaitForSkills(5 * time.Second) {
 		t.Fatal("delivery did not resume")
@@ -683,7 +683,7 @@ func TestStreamDyingMidReadIsRetried(t *testing.T) {
 func TestCloseInterruptsAParkedRead(t *testing.T) {
 	_, _ = setup(t)
 	ft := &fakeTransport{}
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "a parked read", func() bool { return len(ft.requests()) == 1 })
 	time.Sleep(20 * time.Millisecond)
@@ -704,7 +704,7 @@ func TestCloseInterruptsAParkedRead(t *testing.T) {
 func TestStreamReadTimeoutReconnects(t *testing.T) {
 	_, _ = setup(t)
 	ft := &fakeTransport{}
-	s := newTestStore(t, FDv2ModeStream, ft, func(o *FDv2SkillStoreOptions) { o.ReadTimeout = 30 * time.Millisecond })
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, func(o *LaunchDarklySkillStoreOptions) { o.ReadTimeout = 30 * time.Millisecond })
 	start(t, s)
 	eventually(t, "a reconnect after the read timeout", func() bool { return len(ft.requests()) >= 2 })
 }
@@ -712,7 +712,7 @@ func TestStreamReadTimeoutReconnects(t *testing.T) {
 func TestStartChainsAndIsIdempotent(t *testing.T) {
 	_, _ = setup(t)
 	ft := &fakeTransport{}
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	got, err := s.Start()
 	if err != nil || got != s {
 		t.Fatal("Start must return the store")
@@ -730,7 +730,7 @@ func TestKnownEventWithBadDataFailsTheConnection(t *testing.T) {
 			_, logs := setup(t)
 			ft := &fakeTransport{}
 			ft.push(fakeResp{body: sse(commitEvents("p", "(p:p:1)", put("a:1", "a"))...) + body})
-			s := newTestStore(t, FDv2ModeStream, ft, nil)
+			s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 			start(t, s)
 			eventually(t, "a failed connection", func() bool { return s.Diagnostics().ConnectionFailures == 1 })
 			if !logs.contains(slog.LevelWarn, name) {
@@ -749,7 +749,7 @@ func TestKnownPollEventWithoutDataFailsThePoll(t *testing.T) {
 		ft := &fakeTransport{}
 		ft.push(fakeResp{body: pollBody(commitEvents("p", "(p:p:1)", put("a:1", "a"))...)},
 			fakeResp{body: `{"events":[{"event":"` + name + `"}]}`})
-		s := newTestStore(t, FDv2ModePoll, ft, func(o *FDv2SkillStoreOptions) { o.PollInterval = time.Millisecond })
+		s := newTestStore(t, LaunchDarklySkillStoreModePoll, ft, func(o *LaunchDarklySkillStoreOptions) { o.PollInterval = time.Millisecond })
 		start(t, s)
 		eventually(t, "a failed poll", func() bool { return s.Diagnostics().ConnectionFailures == 1 })
 		if d := s.Diagnostics(); !strings.Contains(d.LastError, name) {
@@ -777,7 +777,7 @@ func TestTruncatedEventIsRetransmittedNotSkipped(t *testing.T) {
 		ev("delete-object", del("revoked:1")),
 		ev("payload-transferred", transferred("(p:p:2)")),
 	), hold: true})
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "the retransmission", func() bool { got, _ := s.GetObject("skill", "c", 0); return got != nil })
 	reqs := ft.requests()
@@ -798,7 +798,7 @@ func TestTruncatedEventIsRetransmittedNotSkipped(t *testing.T) {
 		[2]string{"put-object", `{"kind":"skill","key":"a:1","object":{"content":"a`},
 		ev("payload-transferred", transferred("(p:p:2)")),
 	)})
-	s = newTestStore(t, FDv2ModeStream, ft, nil)
+	s = newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	start(t, s)
 	eventually(t, "third request", func() bool { return len(ft.requests()) >= 3 })
 	if got, _ := s.GetObject("skill", "a", 0); got == nil {
@@ -819,7 +819,7 @@ func TestConditionalPollingCannotManufactureAPayload(t *testing.T) {
 	ft.push(fakeResp{header: http.Header{"Etag": {`"e1"`}}, body: pollBody(
 		ev("server-intent", intent("xfer-sideways", "p")), ev("put-object", put("a:1", "a")), ev("payload-transferred", transferred("(p:p:1)")))},
 		fakeResp{status: 304})
-	s := newTestStore(t, FDv2ModePoll, ft, func(o *FDv2SkillStoreOptions) { o.PollInterval = time.Millisecond })
+	s := newTestStore(t, LaunchDarklySkillStoreModePoll, ft, func(o *LaunchDarklySkillStoreOptions) { o.PollInterval = time.Millisecond })
 	start(t, s)
 	eventually(t, "two polls", func() bool { return len(ft.requests()) >= 2 })
 	if ft.requests()[1].Header.Get("If-None-Match") != "" {
@@ -836,7 +836,7 @@ func TestConditionalPollingCannotManufactureAPayload(t *testing.T) {
 	_, _ = setup(t)
 	ft = &fakeTransport{}
 	ft.push(fakeResp{status: 304})
-	s = newTestStore(t, FDv2ModePoll, ft, nil)
+	s = newTestStore(t, LaunchDarklySkillStoreModePoll, ft, nil)
 	start(t, s)
 	eventually(t, "one poll", func() bool { return len(ft.requests()) >= 1 })
 	if ft.requests()[0].Header.Get("If-None-Match") != "" {
@@ -852,7 +852,7 @@ func TestConditionalPollingCannotManufactureAPayload(t *testing.T) {
 	ft.push(fakeResp{body: pollBody(commitEvents("p", "(p:p:1)", put("a:1", "a"))...)},
 		fakeResp{header: http.Header{"Etag": {`"e2"`}}, body: pollBody(ev("server-intent", intent("none", "p")))},
 		fakeResp{status: 304})
-	s = newTestStore(t, FDv2ModePoll, ft, func(o *FDv2SkillStoreOptions) { o.PollInterval = time.Millisecond })
+	s = newTestStore(t, LaunchDarklySkillStoreModePoll, ft, func(o *LaunchDarklySkillStoreOptions) { o.PollInterval = time.Millisecond })
 	start(t, s)
 	eventually(t, "four polls", func() bool { return len(ft.requests()) >= 4 })
 	if ft.requests()[2].Header.Get("If-None-Match") != `"e2"` {
@@ -870,7 +870,7 @@ func TestFDv2ListenersFireAtCommitPerObject(t *testing.T) {
 	_, _ = setup(t)
 	ft := &fakeTransport{}
 	ft.push(fakeResp{body: sse(commitEvents("p", "(p:p:1)", put("a:1", "a"), put("b:1", "b"), put("c:1", "c"))...), hold: true})
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	var mu sync.Mutex
 	var seen []string
 	l := NewListener(func(raw any) {
@@ -906,7 +906,7 @@ func TestFDv2ListenersFireOnlyAtTheCommit(t *testing.T) {
 		fakeResp{gate: revoke, hold: true, then: sse(ev("server-intent", intent("xfer-changes", "p")),
 			ev("delete-object", del("a:1")), ev("payload-transferred", transferred("(p:p:2)")))},
 	)
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	var mu sync.Mutex
 	var seen []map[string]any
 	_ = s.AddListener("skill", NewListener(func(raw any) {
@@ -945,7 +945,7 @@ func Test422KeepsServingTheHeldPayloadAndStartResetsBackoff(t *testing.T) {
 	// The commit's stream then ends, two 503s grow the backoff, and a 422 ends the run.
 	ft.push(fakeResp{body: sse(commitEvents("p", "(p:p:1)", put("a:1", "held"))...)},
 		fakeResp{status: 503}, fakeResp{status: 503}, fakeResp{status: 422})
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	SetSkillStore(s)
 	start(t, s)
 	eventually(t, "give up", func() bool { return s.Failed() != "" })
@@ -982,7 +982,7 @@ func TestFDv2BeforeFirstPayloadWriteAllDeletesNothing(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, []Skill{skillOf("old", 1, "o")}, root, nil)
 	ft := &fakeTransport{}
-	s := newTestStore(t, FDv2ModeStream, ft, nil)
+	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
 	SetSkillStore(s)
 	r, _ := WriteAllSkills(root, nil)
 	if r.OK() || !strings.Contains(r.Errors()[0].ErrorMessage(), "WaitForSkills") || slices.Contains(actionKinds(r), "old=removed") {

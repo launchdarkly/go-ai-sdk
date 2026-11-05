@@ -8,7 +8,7 @@ where it leaves a detail open, the JavaScript SDK decides, then the Python SDK.
 
 ```
 Tier 0  aiserver                 core: no provider SDK imports
-        aiserver/experimental    experimental entry point (skills, evaluations)
+        aiserver/experimental    experimental entry point (skills, evaluations, shadow requests)
         internal/{bridge,trajectory,judging}   shared internals
 Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         claudeagents   openaiagents   bedrockagents
@@ -109,11 +109,11 @@ One module (`go.mod`); each package imports only what it needs.
 | `github.com/launchdarkly/go-sdk-common/v3` | all | `ldcontext`, `ldvalue` |
 | `go.opentelemetry.io/otel` (+ `sdk`, `trace`, `otlptracehttp`) | `aiserver`, handlers | Tracer provider, spans, OTLP export |
 | `github.com/google/uuid` | `aiserver` | Run ids |
-| `github.com/anthropics/anthropic-sdk-go` | `claudemessages`, `claudeagents` | Anthropic Messages API |
-| `github.com/openai/openai-go/v3` | `openaimessages`, `openaiagents` | OpenAI Responses API |
-| `github.com/aws/aws-sdk-go-v2` (+ `config`, `credentials`, `service/bedrockruntime`, `eventstream`), `github.com/aws/smithy-go` | `bedrockmessages`, `bedrockagents` | Bedrock Converse / ConverseStream |
-| `github.com/tmc/langchaingo` | `langchainmessages` | Community LangChain port |
+| `github.com/anthropics/anthropic-sdk-go` | `claudemessages`, `claudeagents`, `llms` | Anthropic Messages API |
+| `github.com/openai/openai-go/v3` | `openaimessages`, `openaiagents`, `llms` | OpenAI Responses API; Chat Completions in `llms` |
+| `github.com/aws/aws-sdk-go-v2` (+ `config`, `credentials`, `service/bedrockruntime`, `eventstream`), `github.com/aws/smithy-go` | `bedrockmessages`, `bedrockagents`, `llms` | Bedrock Converse / ConverseStream |
 | `golang.org/x/sys` | `internal/skills` | `*at()` filesystem calls for skill materialization |
+| `golang.org/x/text` | `internal/evaluations` | Unicode case folding for the tool key collision check |
 
 ## Common pitfalls
 

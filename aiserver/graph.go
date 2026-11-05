@@ -113,7 +113,8 @@ type GraphResponse struct {
 }
 
 // GraphStreamEvent is one item from Graph(...).Stream. Type is
-// node_start, chunk, node_done, handoff or done.
+// node_start, chunk, node_done, handoff or done. JudgeResults on node_done
+// holds that node's own judges; on done it holds only the graph-level judge.
 type GraphStreamEvent struct {
 	Type         EventType
 	NodeKey      string
@@ -322,7 +323,20 @@ func selectNodeHandler(n *GraphNode, handlers []*ProviderHandler) (*ProviderHand
 
 var unsafeToolChars = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
-const routingSuffix = "\n\nComplete your task using your available tools first. Only once you have your final answer, call exactly one transfer tool to route to the next agent."
+// routingSuffix and handoffResult are the model-visible routing text for a
+// multi-edge node. The wording is pinned by §3.15a of TESTING.md in
+// launchdarkly/ai-sdks-monorepo (AIC-3601); keep it byte-identical to the other
+// SDKs. Do not reintroduce "final answer" or
+// "final response": a pure router has no answer of its own and wrote the
+// target's. Keep "recorded" and "using your available tools first": nodes with
+// a real tool skipped it when the result read "Transferring to <key>".
+const routingSuffix = "\n\nComplete your task using your available tools first. Only once your own part is done, call exactly one transfer tool to route to the next agent. Do not answer the parts of the request that belong to the agent you route to."
+
+// handoffResult is the handoff tool's result. target is the edge's raw
+// TargetKey, not the sanitized tool name.
+func handoffResult(target string) string {
+	return "Handoff to " + target + " recorded. " + target + " takes over when your turn ends. Finish your own part, then end your turn. Do not answer for " + target + "."
+}
 
 // handoffRouting is the synthetic routing surface for a multi-edge node,
 // shared by Invoke and Stream so they route identically.
@@ -360,7 +374,7 @@ func (d *GraphDefinition) buildRouting(n *GraphNode, outgoing []GraphEdge) *hand
 				r.chosen = target
 			}
 			r.mu.Unlock()
-			return "Handoff to " + target + " recorded. Finish your own work and provide your final response.", nil
+			return handoffResult(target), nil
 		})
 	}
 	r.config = n.Config
@@ -480,7 +494,11 @@ func (d *GraphDefinition) streamRoute(ctx context.Context, n *GraphNode, input s
 	if route && routing == nil && len(outgoing) == 1 {
 		res.Next = d.nodes[outgoing[0].TargetKey]
 	}
-	if !emit(GraphStreamEvent{Type: EventNodeDone, NodeKey: n.Key, Response: done.response, Usage: done.usage}) {
+	nodeDone := GraphStreamEvent{Type: EventNodeDone, NodeKey: n.Key, Response: done.response, Usage: done.usage}
+	if len(judgeResults) > 0 { // nil when none produced a result
+		nodeDone.JudgeResults = judgeResults
+	}
+	if !emit(nodeDone) {
 		return res, true, nil
 	}
 	return res, false, nil
@@ -548,7 +566,7 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 		}
 	}
 	for _, k := range keys {
-		cfg, nmeta, err := extractVariation(ctx, k, userCtx)
+		cfg, nmeta, err := extractVariation(ctx, k, userCtx, nil, false)
 		if err != nil {
 			sdkLogger().Error("graph node failed to resolve; graph disabled", "graph", key, "node", k, "error", err)
 			def.nodes, def.edges = map[string]*GraphNode{}, nil

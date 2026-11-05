@@ -27,18 +27,19 @@ import (
 // entry point. A new exported name in skills.go fails this test, which is
 // what keeps a reader over Skill content from being added.
 var skillsSurface = []string{
-	"ActionError", "ActionRemoved", "ActionSkippedCurrent", "ActionUpdated", "ActionWritten",
-	"AllSkills", "ErrInvalidArgument", "ErrNoSkillStore", "ErrSkillsUnavailable", "ErrStoreClosed",
-	"ErrStoreNotWatchable", "ErrUnsupportedKind", "ErrUnsupportedPlatform", "FDv2Mode", "FDv2ModePoll",
-	"FDv2ModeStream", "FDv2SkillStore", "FDv2SkillStoreOptions", "GetSkill", "GetSkillResult", "GetSkills",
-	"InMemorySkillStore", "InitializationProber", "Listener", "ListenerRemover", "ListenerStore",
-	"ManifestFilename", "ManifestVersion", "NewFDv2SkillStore", "NewInMemorySkillStore", "NewListener",
-	"NewSkill", "NewSkillOutcome", "NewSkillReference", "OnUnavailable", "OnUnavailableKeep",
-	"OnUnavailableRaise", "ReasonAbsent", "ReasonIntegrityFailure", "ReasonOK", "ReasonStoreUnavailable",
-	"ReasonWrongVersion", "ReconcileAction", "ReconcileActionKind", "ReconcileReport", "SetSkillStore",
-	"Skill", "SkillFields", "SkillFilename", "SkillInput", "SkillKey", "SkillOutcome", "SkillOutcomeReason",
-	"SkillReference", "SkillRefs", "SkillRequest", "SkillStore", "SkillWatcher", "StoreDiagnostics",
-	"WatchAllSkills", "WatchSkills", "WatchSkillsOptions", "WriteAllSkills", "WriteSkills", "WriteSkillsOptions",
+	"ActionError", "ActionRemoved", "ActionSkippedCurrent", "ActionUpdated", "ActionWritten", "AllSkills",
+	"ErrInvalidArgument", "ErrNoSkillStore", "ErrSkillsUnavailable", "ErrStoreClosed", "ErrStoreNotWatchable",
+	"ErrUnsupportedKind", "ErrUnsupportedPlatform", "GetSkill", "GetSkillResult", "GetSkills",
+	"InMemorySkillStore", "InitializationProber", "LaunchDarklySkillStore", "LaunchDarklySkillStoreMode",
+	"LaunchDarklySkillStoreModePoll", "LaunchDarklySkillStoreModeStream", "LaunchDarklySkillStoreOptions",
+	"Listener", "ListenerRemover", "ListenerStore", "ManifestFilename", "ManifestVersion",
+	"NewInMemorySkillStore", "NewLaunchDarklySkillStore", "NewListener", "NewSkill", "NewSkillOutcome",
+	"NewSkillReference", "OnUnavailable", "OnUnavailableKeep", "OnUnavailableRaise", "ReasonAbsent",
+	"ReasonIntegrityFailure", "ReasonOK", "ReasonStoreUnavailable", "ReasonWrongVersion", "ReconcileAction",
+	"ReconcileActionKind", "ReconcileReport", "SetSkillStore", "Skill", "SkillFields", "SkillFilename",
+	"SkillInput", "SkillKey", "SkillOutcome", "SkillOutcomeReason", "SkillReference", "SkillRefs",
+	"SkillRequest", "SkillStore", "SkillWatcher", "StoreDiagnostics", "WatchAllSkills", "WatchSkills",
+	"WatchSkillsOptions", "WriteAllSkills", "WriteSkills", "WriteSkillsOptions",
 }
 
 func exportedDecls(t *testing.T, files ...string) []string {

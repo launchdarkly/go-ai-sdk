@@ -165,6 +165,35 @@ func TestToolConfigIsSourceIndependent(t *testing.T) {
 	}
 }
 
+// TestInlineSchemaMutationsDoNotLeak edits the caller's schema and the
+// handler's own config from inside each row; neither may reach the create
+// body or the next row's config.
+func TestInlineSchemaMutationsDoNotLeak(t *testing.T) {
+	e := newEnv(t, 2)
+	schema := map[string]any{"type": "object", "required": []any{"id"}}
+	want := toJSON(schema)
+	var seen []string
+	h := handler("OpenAI", aiserver.ModeMessages, func(_ context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
+		params := req.Config.Tools["lookup"].Parameters
+		seen = append(seen, toJSON(params))
+		schema["type"] = "caller-edit"
+		params["type"] = "handler-edit"
+		params["required"].([]any)[0] = "handler-edit"
+		return aiserver.HandlerResult{Output: "ok"}, nil
+	})
+	args := baseArgs(h)
+	args.Concurrency = 1
+	args.InlineTools = map[string]InlineTool{"lookup": {Implementation: noopTool, Schema: schema}}
+	mustRun(t, e.module(), args)
+	if len(seen) != 2 || seen[0] != want || seen[1] != want {
+		t.Fatalf("row configs %v, want %s for both", seen, want)
+	}
+	tools := e.body("POST", "projects/proj/evaluations").(map[string]any)["tools"].([]any)
+	if got := toJSON(tools[0].(map[string]any)["schema"]); got != want {
+		t.Fatalf("create body schema %s, want %s", got, want)
+	}
+}
+
 func TestToolHandlersKeepKeysAndPassThrough(t *testing.T) {
 	e := newEnv(t, 1)
 	e.route("GET", "projects/proj/ai-tools/lib", resp{body: map[string]any{"version": 1}})
