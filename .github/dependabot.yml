@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: 'gomod'
+    directory: '/'
+    schedule:
+      interval: 'daily'
+    cooldown:
+      default-days: 7
+  - package-ecosystem: 'github-actions'
+    # '/' covers .github/workflows only; the composite CI action pins its own actions.
+    directories:
+      - '/'
+      - '/.github/actions/ci'
+    schedule:
+      interval: 'weekly'
+    cooldown:
+      default-days: 7

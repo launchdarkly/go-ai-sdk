@@ -1,4 +1,4 @@
-.PHONY: test lint vet format format-check build examples
+.PHONY: test lint vet format format-check build examples vulncheck
 
 # Run all tests with the race detector
 test:
@@ -17,6 +17,10 @@ format:
 # Fail if any file is not gofmt-formatted
 format-check:
 	@out="$$(gofmt -l .)"; if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
+
+# Report known vulnerabilities in code this module actually calls
+vulncheck:
+	go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
 
 # Build every package, including the examples
 build:
