@@ -36,7 +36,7 @@ Shared Anthropic wire mapping (turns, tools, max_tokens, finish reasons, usage) 
 const PackageName, PackageVersion, SpanName, DefaultMaxSteps, SubAgentToolPrefix
 var ProvidesFor aiserver.ProvidesFor
 var ErrToolNotFound, ErrUnsupportedNativeTool, ErrMaxSteps error
-type Options struct{ Client *anthropic.Client; APIKey string; CaptureContent bool; MaxSteps int; WorkDir string }
+type Options struct{ Client *anthropic.Client; APIKey string; CaptureContent aiserver.ContentCapture; MaxSteps int; WorkDir string }
 func NewHandler(Options) *aiserver.ProviderHandler
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func ClaudeAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, *InvokeOptions) (aiserver.ProviderResponse, error)
@@ -48,6 +48,11 @@ func ToClaudeAgents(*aiserver.GraphDefinition, *AdapterOptions) *GraphRunner
 func (*GraphRunner) Invoke(ctx, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 var ClaudeBash, ClaudeRead, ClaudeEdit, ClaudeWrite, ClaudeGlob, ClaudeGrep, ClaudeWebFetch, ClaudeWebSearch, ClaudeTodoWrite, ClaudeNotebookEdit *aiserver.NativeTool
 ```
+
+`Options.CaptureContent` gates prompt, completion, tool and judge-explanation content on spans:
+`aiserver.CaptureDefault` (the zero value) follows `aiserver.Configure`, else on;
+`aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
+`gen_ai.tool.name` are written either way.
 
 `init()` calls `aiserver.RegisterAiSdkPackage(PackageName, PackageVersion)`.
 

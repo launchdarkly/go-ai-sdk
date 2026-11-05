@@ -23,10 +23,15 @@ handler packages they use.
 | `graph.go` | `ResolveGraph`, `GraphDefinition`, `Graph().Invoke/Stream`, handoff routing |
 | `telemetry.go` | Conversation-id processor, context identity, `SetLDSpanAttributes` |
 | `handlerkit.go` | Shared handler building blocks: `ComposePrompt`, span tree (`HandlerRun`), usage attributes |
+| `capture.go` | `Configure`, `SDKOptions`, `ContentCapture`, `ErrConfigureLocked`; binds a handler's capture setting per call |
 
 Internal packages: `internal/trajectory`, `internal/judging`
 (judge message history and verdict parsing), `internal/bridge` (hooks to the
-experimental entry point).
+experimental entry point), `internal/telemetry` (the content gate's state and
+per-call binding, GenAI chat/tool content writers, span-attribute and
+span-counter bindings, tracer flush), `internal/sdkapi` (handler-package entry
+points: `CreateHandler` without a usage report, `StartInvocation` for native
+graph runners).
 
 ## Public exports
 
@@ -39,8 +44,11 @@ Config, ConfigArgs, AIConfig, InspectConfig, InspectResult
 Graph, ResolveGraph, AgentGraph, GraphDefinition, GraphNode, GraphEdge,
 GraphOptions, GraphResponse, GraphStreamEvent, GraphTopology, RouteResult, RunNodeOptions,
 TraverseVisitor, TrackGraphEvent
+// content capture
+Configure, SDKOptions, ContentCapture, CaptureDefault, CaptureOn, CaptureOff
 // errors
-ErrNotInitialized, ErrConfigNotFound, ErrConfigDisabled, ErrNoHandler, ErrGraphDisabled
+ErrNotInitialized, ErrConfigNotFound, ErrConfigDisabled, ErrNoHandler, ErrGraphDisabled,
+ErrConfigureLocked
 // call options and events
 CallOption, CallOptions, NewCallOptions, WithVariables, WithHistory, EventType,
 EventChunk, EventDone, EventNodeStart, EventNodeDone, EventHandoff
@@ -93,6 +101,34 @@ ReportUsage, TracerPrefix, PackageName, PackageVersion
 5. Parse JSON output when `outputFormat` is set (best effort).
 6. Run judges inline, or build `JudgeTasks` when `SkipJudges`.
 
+### Content capture
+
+Prompt, completion, tool argument/result and judge-explanation content is
+written on spans only when capture is enabled for the call's `ctx`
+(`telemetry.Enabled`). Precedence: the handler's `CaptureContent`
+(`CaptureOn` / `CaptureOff`), else the process default from
+`Configure(SDKOptions{CaptureContent: ...})`, else on.
+
+- **Binding.** Each handler call binds its resolved setting on `ctx`. The core
+  path (`executeAndTrack`, `executeAndStream`, evaluations) binds the value of
+  the handler it routed to, marked pending; the `CreateHandler` wrapper
+  consumes that mark and keeps the core's binding, so a copied handler with a
+  different `CaptureContent` is honoured. A direct `Invoke`/`Stream` call (no
+  mark) binds the handler's own setting. The `$ld:ai:tool_call` tool wrapper
+  clears an unconsumed mark, so a handler called from a tool binds its own.
+  A nested `CaptureDefault` handler follows the process default, not the
+  enclosing handler's explicit value.
+- **Native graph runners** (`openaiagents.ToOpenAIAgents`,
+  `claudeagents.ToClaudeAgents`, `langchainagents.ToLangGraph`) run agent loops
+  without a handler call, so they bind with `sdkapi.StartInvocation` before
+  the graph span: `Handler.CaptureContent` for the OpenAI and Claude runners,
+  `CaptureDefault` for LangGraph.
+- **Configure lock.** The first binding latches `Configure`. After that,
+  `Configure` compares resolved values (`CaptureDefault` == `CaptureOn`) and
+  returns `ErrConfigureLocked` on a change; values above `CaptureOff` are
+  rejected. `Shutdown` restores the built-in default and clears the lock.
+- Model, provider, usage, status and tool names are written either way.
+
 ### `Graph().Invoke` / `Stream` flow
 
 Both drain one walk: track `$ld:ai:graph:node` on entry, run the node (handoff
@@ -132,7 +168,10 @@ reuse an LD client you already built.
 - **Context is explicit.** Spans and conversation ids follow the `ctx` you
   pass. Starting a stream with `context.Background()` detaches it from your
   request span.
-- **Content is on spans by default**. Do not export traces to a
-  collector that must not hold prompt text.
+- **Content is on spans by default**. Set the handler's
+  `CaptureContent: CaptureOff`, or call `Configure` before the first handler
+  call, before exporting to a collector that must not hold prompt text.
+- **Configure after the first call cannot change the effective value.** It
+  returns `ErrConfigureLocked` until `Shutdown`.
 - **Judges need a handler for their own provider.** A judge whose provider no
   handler covers is skipped, not run against the wrong API.

@@ -115,6 +115,9 @@ func (g *NativeGraph) Invoke(ctx context.Context, input string, opts ...aiserver
 	graphTD := def.TrackData()
 	graphTD.RunID = runID
 
+	// Nodes run the agent loop directly, not through a handler, so the run
+	// binds Handler.CaptureContent itself.
+	ctx = sdkapi.StartInvocation(ctx, g.opts.Handler.CaptureContent)
 	spanCtx, span := otel.Tracer(PackageName).Start(ctx, aiserver.GraphSpanName)
 	defer span.End()
 	span.SetAttributes(attribute.String("ld.ai.graph.key", def.Key))

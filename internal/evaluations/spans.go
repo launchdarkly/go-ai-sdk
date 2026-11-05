@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
-	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 	"github.com/launchdarkly/go-ai-sdk/internal/trajectory"
 )
 
@@ -57,7 +57,7 @@ func rowAttributes(runID string, rowIndex int) []attribute.KeyValue {
 // conversation id (shadowing any outer one) and both run attributes.
 func bindRow(ctx context.Context, runID string, rowIndex int) context.Context {
 	ctx = aiserver.WithConversationID(ctx, rowConversationID(runID, rowIndex))
-	return aiserver.WithSpanAttributes(ctx, rowAttributes(runID, rowIndex)[1:]...)
+	return telemetry.WithSpanAttributes(ctx, rowAttributes(runID, rowIndex)[1:]...)
 }
 
 func tracer() trace.Tracer { return otel.Tracer(spanTracer) }
@@ -81,7 +81,7 @@ type rowTrace struct {
 // whatever span the caller has open.
 func startRow(ctx context.Context, runID string, rowIndex int) *rowTrace {
 	attrs := rowAttributes(runID, rowIndex)
-	probe, counter := aiserver.WithSpanCounter(bindRow(ctx, runID, rowIndex))
+	probe, counter := telemetry.WithSpanCounter(bindRow(ctx, runID, rowIndex))
 	ctx, root := tracer().Start(probe, rowSpanName, trace.WithNewRoot(), trace.WithAttributes(attrs...))
 	return &rowTrace{ctx: ctx, root: root, attrs: attrs, processorActive: counter.Count() > 0}
 }
@@ -133,12 +133,12 @@ func errorType(err error) string {
 // handler opened any SDK span.
 type handlerCall struct {
 	ctx     context.Context
-	counter *aiserver.SpanCounter
+	counter *telemetry.SpanCounter
 	row     *rowTrace
 }
 
 func beginCall(parent context.Context, h *aiserver.ProviderHandler, row *rowTrace) handlerCall {
-	ctx, counter := aiserver.WithSpanCounter(bridge.StartInvocation(parent, uint8(h.CaptureContent)))
+	ctx, counter := telemetry.WithSpanCounter(telemetry.BindCall(parent, uint8(h.CaptureContent)))
 	return handlerCall{ctx: ctx, counter: counter, row: row}
 }
 
@@ -177,20 +177,20 @@ func (c handlerCall) writeChat(call chatCall, attrs []attribute.KeyValue) {
 			}
 			aiserver.SetUsageSpanAttributes(span, u)
 		}
-		var parts []aiserver.MessagePart
+		var parts []telemetry.MessagePart
 		for i, inv := range call.toolCalls {
-			parts = append(parts, aiserver.ToolCallPart(toolCallID(i), inv.Name, inv.Arguments))
+			parts = append(parts, telemetry.ToolCallPart(toolCallID(i), inv.Name, inv.Arguments))
 		}
 		if call.output != nil {
-			parts = append(parts, aiserver.TextPart(aiserver.ToolResultString(call.output)))
+			parts = append(parts, telemetry.TextPart(aiserver.ToolResultString(call.output)))
 		}
 		if len(parts) > 0 {
-			content.OutputMessages = []aiserver.ChatMessage{{Role: "assistant", Parts: parts}}
+			content.OutputMessages = []telemetry.ChatMessage{{Role: "assistant", Parts: parts}}
 		}
 	} else {
 		span.RecordError(call.err)
 	}
-	aiserver.SetChatContent(c.ctx, span, content)
+	telemetry.SetChatContent(c.ctx, span, content)
 	endSpan(span, call.err, errorType(call.err), call.end)
 
 	for i, inv := range call.toolCalls {
@@ -202,12 +202,12 @@ func (c handlerCall) writeChat(call chatCall, attrs []attribute.KeyValue) {
 			attribute.String("gen_ai.tool.name", inv.Name),
 			attribute.String("gen_ai.tool.call.id", toolCallID(i)),
 			attribute.String("gen_ai.tool.type", "function")))
-		aiserver.SetToolCallArguments(c.ctx, tool, inv.Arguments)
+		telemetry.SetToolCallArguments(c.ctx, tool, inv.Arguments)
 		var terr error
 		if inv.Failed {
 			terr = fmt.Errorf("%s", inv.Error)
 		} else {
-			aiserver.SetToolCallResult(c.ctx, tool, inv.Result)
+			telemetry.SetToolCallResult(c.ctx, tool, inv.Result)
 		}
 		endSpan(tool, terr, "tool_error", inv.Ended)
 	}
@@ -247,28 +247,29 @@ func modelIdentity(cfg aiserver.AiConfig) []attribute.KeyValue {
 // promptContent is the config's instructions and system messages as the
 // system instructions, and its other messages then finalUser as the input,
 // all rendered with variables.
-func promptContent(cfg aiserver.AiConfig, variables map[string]any, finalUser *string) aiserver.ChatContent {
+func promptContent(cfg aiserver.AiConfig, variables map[string]any, finalUser *string) telemetry.ChatContent {
 	var system []string
 	if cfg.Instructions != "" {
 		system = append(system, aiserver.ParseTemplate(cfg.Instructions, variables))
 	}
-	var input []aiserver.ChatMessage
+	var input []telemetry.ChatMessage
 	for _, m := range cfg.Messages {
 		text := aiserver.ParseTemplate(aiserver.ContentText(m), variables)
 		if m.Role == "system" {
 			system = append(system, text)
 			continue
 		}
-		input = append(input, aiserver.ChatMessage{Role: m.Role, Parts: []aiserver.MessagePart{aiserver.TextPart(text)}})
+		input = append(input, telemetry.ChatMessage{Role: m.Role, Parts: []telemetry.MessagePart{telemetry.TextPart(text)}})
 	}
 	if finalUser != nil {
-		input = append(input, aiserver.ChatMessage{Role: "user", Parts: []aiserver.MessagePart{aiserver.TextPart(*finalUser)}})
+		input = append(input, telemetry.ChatMessage{Role: "user", Parts: []telemetry.MessagePart{telemetry.TextPart(*finalUser)}})
 	}
-	var tools []aiserver.Tool
+	var tools []telemetry.ToolDefinition
 	for _, k := range slices.Sorted(maps.Keys(cfg.Tools)) {
-		tools = append(tools, cfg.Tools[k])
+		t := cfg.Tools[k]
+		tools = append(tools, telemetry.ToolDefinition{Name: t.Name, Description: t.Description, Parameters: t.Parameters})
 	}
-	return aiserver.ChatContent{SystemInstructions: strings.Join(system, "\n\n"), InputMessages: input, ToolDefinitions: tools}
+	return telemetry.ChatContent{SystemInstructions: strings.Join(system, "\n\n"), InputMessages: input, ToolDefinitions: tools}
 }
 
 // startEvaluate opens `evaluate {criterionType}` under the row root, before
@@ -324,7 +325,7 @@ func (r *runState) flushTelemetry(ctx context.Context, em *emitter) {
 	em.flush()
 	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), flushWait)
 	defer cancel()
-	if err := aiserver.FlushTelemetry(fctx); err != nil {
+	if err := telemetry.Flush(fctx); err != nil {
 		r.m.logger.Warn("tracer provider flush failed; evaluation spans may not have been exported", "error", err)
 	}
 }

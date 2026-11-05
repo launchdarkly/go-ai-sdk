@@ -1,4 +1,4 @@
-package aiserver
+package telemetry
 
 import (
 	"context"
@@ -81,16 +81,41 @@ func (m ChatMessage) text() string {
 	return strings.Join(lines, "\n")
 }
 
+// ToolDefinition is one gen_ai.tool.definitions entry, written as a
+// function tool.
+type ToolDefinition struct {
+	Name        string
+	Description string
+	Parameters  map[string]any
+}
+
+// ValueString renders a tool argument, result or output for a span: a string
+// as is, nil as "", anything else as JSON (fmt.Sprint if it cannot be
+// marshalled).
+func ValueString(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	if v == nil {
+		return ""
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprint(v)
+	}
+	return string(b)
+}
+
 // ChatContent is the content of one chat call. Empty fields are not written.
 type ChatContent struct {
 	SystemInstructions string
 	InputMessages      []ChatMessage
-	ToolDefinitions    []Tool
+	ToolDefinitions    []ToolDefinition
 	OutputMessages     []ChatMessage
 }
 
 // SetChatContent writes a chat call's content on span, only when
-// CaptureContentEnabled(ctx), in three carriers that cannot disagree: the
+// Enabled(ctx), in three carriers that cannot disagree: the
 // GenAI JSON attributes (gen_ai.system_instructions, gen_ai.input.messages,
 // gen_ai.tool.definitions, gen_ai.output.messages); the OpenLLMetry numbered
 // attributes (gen_ai.prompt.N.*, with the system instructions as message 0,
@@ -99,7 +124,7 @@ type ChatContent struct {
 // is written whenever capture is on; the output side writes nothing without
 // output messages.
 func SetChatContent(ctx context.Context, span trace.Span, c ChatContent) {
-	if !CaptureContentEnabled(ctx) {
+	if !Enabled(ctx) {
 		return
 	}
 	var attrs []attribute.KeyValue
@@ -164,17 +189,17 @@ func openLLMetry(prefix string, msgs []ChatMessage) []attribute.KeyValue {
 }
 
 // SetToolCallArguments writes gen_ai.tool.call.arguments (a string as is,
-// anything else as JSON), only when CaptureContentEnabled(ctx).
+// anything else as JSON), only when Enabled(ctx).
 func SetToolCallArguments(ctx context.Context, span trace.Span, arguments any) {
-	if CaptureContentEnabled(ctx) {
-		span.SetAttributes(attribute.String("gen_ai.tool.call.arguments", ToolResultString(arguments)))
+	if Enabled(ctx) {
+		span.SetAttributes(attribute.String("gen_ai.tool.call.arguments", ValueString(arguments)))
 	}
 }
 
 // SetToolCallResult writes gen_ai.tool.call.result (a string as is,
-// anything else as JSON), only when CaptureContentEnabled(ctx).
+// anything else as JSON), only when Enabled(ctx).
 func SetToolCallResult(ctx context.Context, span trace.Span, result any) {
-	if CaptureContentEnabled(ctx) {
-		span.SetAttributes(attribute.String("gen_ai.tool.call.result", ToolResultString(result)))
+	if Enabled(ctx) {
+		span.SetAttributes(attribute.String("gen_ai.tool.call.result", ValueString(result)))
 	}
 }

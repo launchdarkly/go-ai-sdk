@@ -152,17 +152,10 @@ started under that context get `gen_ai.conversation.id`.
 > `CaptureOff`), else the process default set with
 > `aiserver.Configure(aiserver.SDKOptions{CaptureContent: ...})`, else on.
 > Model, provider, usage, status and tool names are written either way.
-> `Configure` can change the default only until the first handler call;
-> `Shutdown` resets it. It is not an `InitOptions` field.
-
-Two context bindings let other code add to SDK spans without the core knowing
-what they are for. `aiserver.WithSpanAttributes(ctx, attrs...)` writes string
-or integer attributes, write-if-absent, on every SDK span started under ctx.
-`aiserver.WithSpanCounter(ctx)` counts the SDK spans started under ctx. Spans
-from other tracers get neither. Code that writes its own spans uses
-`SetChatContent`, `SetToolCallArguments` and `SetToolCallResult`, which apply
-the same gate. `aiserver.FlushTelemetry(ctx)` force-flushes the registered
-tracer provider.
+> After the first handler call, `Configure` accepts only options with the same
+> effect (`CaptureDefault` and `CaptureOn` both mean on) and returns
+> `ErrConfigureLocked` otherwise; a value other than the three constants is an
+> error. `Shutdown` resets it. It is not an `InitOptions` field.
 
 ## Errors
 

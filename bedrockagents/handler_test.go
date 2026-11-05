@@ -462,6 +462,40 @@ func TestTelemetry(t *testing.T) {
 	}
 }
 
+// tool call arguments and results reach the execute_tool span only when
+// content capture is on; the tool's identity is written either way.
+func TestToolContentCapture(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		capture aiserver.ContentCapture
+		want    bool
+	}{{"on", aiserver.CaptureOn, true}, {"off", aiserver.CaptureOff, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _, exp := setup(t, Options{CaptureContent: tc.capture}, toolReply("a", `{"city":"Paris"}`), textReply("done", 1, 1))
+			c := cfg(func(c *aiserver.AiConfig) {
+				c.Instructions = "x"
+				c.Tools = map[string]aiserver.Tool{"a": {Name: "a", Type: "function", Parameters: map[string]any{"type": "object"}}}
+			})
+			tools := map[string]aiserver.ToolHandler{"a": aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) { return "r", nil })}
+			if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "q", ToolHandlers: tools}); err != nil {
+				t.Fatal(err)
+			}
+			got := attrs(spanNamed(t, exp, "execute_tool a"))
+			if got["gen_ai.tool.name"] != "a" {
+				t.Errorf("gen_ai.tool.name = %q", got["gen_ai.tool.name"])
+			}
+			args, hasArgs := got["gen_ai.tool.call.arguments"]
+			result, hasResult := got["gen_ai.tool.call.result"]
+			if tc.want && (args != `{"city":"Paris"}` || result != "r") {
+				t.Errorf("arguments = %q result = %q", args, result)
+			}
+			if !tc.want && (hasArgs || hasResult) {
+				t.Errorf("content captured with CaptureOff: arguments = %q result = %q", args, result)
+			}
+		})
+	}
+}
+
 // provider and tool errors propagate and mark every span ERROR.
 func TestErrors(t *testing.T) {
 	h, _, exp := setup(t, Options{}, errorReply())

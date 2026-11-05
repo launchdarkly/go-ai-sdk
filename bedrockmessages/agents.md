@@ -28,11 +28,16 @@ var ProvidesFor aiserver.ProvidesFor
 var ErrUnsupportedContent error
 var ErrToolNotFound error
 var ErrMaxSteps error
-type Options struct{ Client *bedrockruntime.Client; APIKey, Region string; ConverseOptions func(aiserver.AiConfig) *bedrockruntime.ConverseInput; CaptureContent bool }
+type Options struct{ Client *bedrockruntime.Client; APIKey, Region string; ConverseOptions func(aiserver.AiConfig) *bedrockruntime.ConverseInput; CaptureContent aiserver.ContentCapture }
 func NewHandler(Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers map[string]aiserver.ToolHandler; Registry *aiserver.Registry; SkipJudges bool; Variables map[string]any; Handler Options }
 func BedrockMessages(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 ```
+
+`Options.CaptureContent` gates prompt, completion, tool and judge-explanation content on spans:
+`aiserver.CaptureDefault` (the zero value) follows `aiserver.Configure`, else on;
+`aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
+`gen_ai.tool.name` are written either way.
 
 `init()` registers `PackageName`/`PackageVersion` for `$ld:ai:sdk:info`. `NewHandler` reports
 `bedrock-messages.createBedrockMessagesHandler` and `BedrockMessages` reports `bedrock-messages.bedrockMessages`;

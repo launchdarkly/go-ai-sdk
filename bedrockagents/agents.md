@@ -33,12 +33,17 @@ const (
 var ProvidesFor aiserver.ProvidesFor
 var ErrUnsupportedContent error
 var ErrToolNotFound error
-type Options struct{ Client *bedrockruntime.Client; APIKey, Region string; ModelOptions func(aiserver.AiConfig) *bedrockruntime.ConverseInput; CaptureContent bool; MaxSteps int }
+type Options struct{ Client *bedrockruntime.Client; APIKey, Region string; ModelOptions func(aiserver.AiConfig) *bedrockruntime.ConverseInput; CaptureContent aiserver.ContentCapture; MaxSteps int }
 func NewHandler(Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers map[string]aiserver.ToolHandler; Registry *aiserver.Registry; SkipJudges bool; Variables map[string]any; Handler Options }
 func BedrockAgents(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 func BedrockGraph(key string, opts aiserver.GraphOptions, handlerOpts Options) (*aiserver.AgentGraph, error)
 ```
+
+`Options.CaptureContent` gates prompt, completion, tool and judge-explanation content on spans:
+`aiserver.CaptureDefault` (the zero value) follows `aiserver.Configure`, else on;
+`aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
+`gen_ai.tool.name` are written either way.
 
 `init()` registers `PackageName`/`PackageVersion` for `$ld:ai:sdk:info`. Usage helpers:
 `bedrock-agents.createBedrockAgentsHandler` (`NewHandler`), `bedrock-agents.bedrockAgents` (`BedrockAgents`),

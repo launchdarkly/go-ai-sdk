@@ -16,6 +16,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/judging"
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 	"github.com/launchdarkly/go-ai-sdk/internal/trajectory"
 )
 
@@ -447,7 +448,7 @@ func (r *runState) generate(ctx context.Context) ([]*genResult, error) {
 		rec := trajectory.NewRecorder()
 		call := beginCall(rt.ctx, r.genHandler, rt)
 		started := time.Now()
-		res, err := invoke(ctx, r.genHandler, aiserver.HandlerRequest{
+		res, err := invoke(call.ctx, r.genHandler, aiserver.HandlerRequest{
 			Config: rowConfig(cfg), UserInput: deref(row.input), ToolHandlers: r.rowTools(rec), Variables: maps.Clone(row.variables),
 		})
 		ended := time.Now()
@@ -604,7 +605,7 @@ func (r *runState) runJudge(ctx context.Context, g *genResult, j *Judge) *critRe
 	vars["message_history"] = judging.BuildMessageHistory(input, g.trajectory, output)
 	vars["formatting_instructions"] = judging.FormattingInstructions
 	call := beginCall(ctx, rj.handler, g.trace)
-	res.captureOn = aiserver.CaptureContentEnabled(call.ctx)
+	res.captureOn = telemetry.Enabled(call.ctx)
 	started := time.Now()
 	hr, err := invoke(call.ctx, rj.handler, aiserver.HandlerRequest{
 		Config: rj.config, UserInput: output, ToolHandlers: map[string]aiserver.ToolHandler{}, Variables: vars,

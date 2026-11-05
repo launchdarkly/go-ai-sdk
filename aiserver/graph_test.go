@@ -600,7 +600,7 @@ func verdictHandler(inner *ProviderHandler, verdict string) *ProviderHandler {
 		}
 		return inner.Invoke(ctx, req)
 	}
-	return createHandler(inner.ProvidesFor, invoke, inner.Stream, false)
+	return createHandler(inner.ProvidesFor, invoke, inner.Stream, CaptureDefault)
 }
 
 func nodeDones(events []GraphStreamEvent) (dones []GraphStreamEvent) {

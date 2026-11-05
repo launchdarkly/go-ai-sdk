@@ -10,6 +10,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 func withTracerProvider(t *testing.T, tp trace.TracerProvider) {
@@ -49,10 +51,10 @@ func spanAttrMap(t *testing.T, exp *tracetest.InMemoryExporter, name string) map
 
 func TestWithSpanAttributesStampsSDKSpansWriteIfAbsent(t *testing.T) {
 	exp := processorSpans(t)
-	ctx := WithSpanAttributes(bg,
+	ctx := telemetry.WithSpanAttributes(bg,
 		attribute.String("example.label", "outer"), attribute.Int("example.count", 3),
 		attribute.Bool("example.flag", true), attribute.Float64("example.ratio", 0.5)) // dropped: not string/int
-	ctx = WithSpanAttributes(ctx, attribute.String("example.label", "inner"), attribute.String("example.extra", "x"))
+	ctx = telemetry.WithSpanAttributes(ctx, attribute.String("example.label", "inner"), attribute.String("example.extra", "x"))
 
 	_, sdk := tracerFor(TracerPrefix+"/test").Start(ctx, "sdk")
 	sdk.End()
@@ -81,7 +83,7 @@ func TestWithSpanAttributesStampsSDKSpansWriteIfAbsent(t *testing.T) {
 func TestWithSpanAttributesAndConversationIDCompose(t *testing.T) {
 	exp := processorSpans(t)
 	ctx := WithConversationID(bg, "outer-conv")
-	ctx = WithSpanAttributes(WithConversationID(ctx, "inner-conv"), attribute.String("example.label", "v"))
+	ctx = telemetry.WithSpanAttributes(WithConversationID(ctx, "inner-conv"), attribute.String("example.label", "v"))
 	_, s := tracerFor(TracerPrefix+"/test").Start(ctx, "sdk")
 	s.End()
 	a := spanAttrMap(t, exp, "sdk")
@@ -101,21 +103,21 @@ func TestNoBindingLeavesSpansUnchanged(t *testing.T) {
 
 func TestWithSpanCounterCountsSDKSpans(t *testing.T) {
 	processorSpans(t)
-	ctx, outer := WithSpanCounter(bg)
+	ctx, outer := telemetry.WithSpanCounter(bg)
 	start := func(ctx context.Context, tracer string) {
 		_, s := tracerFor(tracer).Start(ctx, "s")
 		s.End()
 	}
 	start(ctx, TracerPrefix+"/test")
 	start(ctx, "example.com/other") // not counted
-	inner, nested := WithSpanCounter(ctx)
+	inner, nested := telemetry.WithSpanCounter(ctx)
 	start(inner, TracerPrefix+"/test")
 	start(inner, TracerPrefix+"/test")
 	start(bg, TracerPrefix+"/test") // outside both
 	if outer.Count() != 3 || nested.Count() != 2 {
 		t.Fatalf("outer %d nested %d, want 3 and 2", outer.Count(), nested.Count())
 	}
-	if _, fresh := WithSpanCounter(bg); fresh.Count() != 0 {
+	if _, fresh := telemetry.WithSpanCounter(bg); fresh.Count() != 0 {
 		t.Fatal("a new counter starts at zero")
 	}
 }
@@ -130,11 +132,11 @@ func (f *flushRecorder) ForceFlush(context.Context) error { f.flushed++; return 
 func TestFlushTelemetry(t *testing.T) {
 	rec := &flushRecorder{TracerProvider: noop.NewTracerProvider()}
 	withTracerProvider(t, rec)
-	if err := FlushTelemetry(bg); err != nil || rec.flushed != 1 {
+	if err := telemetry.Flush(bg); err != nil || rec.flushed != 1 {
 		t.Fatalf("flush err %v count %d", err, rec.flushed)
 	}
 	withTracerProvider(t, noop.NewTracerProvider())
-	if err := FlushTelemetry(bg); err != nil {
+	if err := telemetry.Flush(bg); err != nil {
 		t.Fatalf("a provider without ForceFlush must be a no-op: %v", err)
 	}
 }

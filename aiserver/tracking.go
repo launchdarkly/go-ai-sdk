@@ -15,6 +15,7 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 	"github.com/launchdarkly/go-ai-sdk/internal/trajectory"
 )
 
@@ -63,6 +64,7 @@ func WrapToolHandlers(tools map[string]ToolHandler, userCtx ldcontext.Context, t
 			}
 			out[name] = ToolFunc(func(ctx context.Context, args map[string]any) (any, error) {
 				track("$ld:ai:tool_call", userCtx, toolTD, 1)
+				telemetry.Settle(ctx) // a handler called from the tool binds its own setting
 				return t(ctx, args)
 			})
 		}
@@ -206,7 +208,7 @@ func trackTokens(userCtx ldcontext.Context, td TrackData, u TokenUsage) {
 
 func executeAndTrack(ctx context.Context, a execArgs) (execResult, error) {
 	td, req, rec := a.prepare()
-	ctx = startInvocation(ctx, a.handler.CaptureContent)
+	ctx = bindCall(ctx, a.handler.CaptureContent)
 	start := time.Now()
 	res, err := func() (HandlerResult, error) {
 		defer trackPanic(a.userCtx, td, start)
@@ -249,7 +251,7 @@ type streamDone struct {
 func executeAndStream(ctx context.Context, a execArgs, done *streamDone) iter.Seq2[HandlerStreamEvent, error] {
 	return func(yield func(HandlerStreamEvent, error) bool) {
 		td, req, rec := a.prepare()
-		ctx := startInvocation(ctx, a.handler.CaptureContent)
+		ctx := bindCall(ctx, a.handler.CaptureContent)
 		start := time.Now()
 		var full strings.Builder
 		var rawUsage map[string]any

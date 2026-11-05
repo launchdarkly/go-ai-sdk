@@ -25,11 +25,16 @@ const PackageName, PackageVersion, SpanName, StreamSpanName
 var ProvidesFor
 var ErrMaxSteps, ErrNoToolHandler, ErrEmptyResponse
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
-type Options struct{ Model llms.Model; ModelFactory ModelFactory; CaptureContent bool }
+type Options struct{ Model llms.Model; ModelFactory ModelFactory; CaptureContent aiserver.ContentCapture }
 func NewHandler(opts Options) *aiserver.ProviderHandler
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func LangChainMessages(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 ```
+
+`Options.CaptureContent` gates prompt, completion, tool and judge-explanation content on spans:
+`aiserver.CaptureDefault` (the zero value) follows `aiserver.Configure`, else on;
+`aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
+`gen_ai.tool.name` are written either way.
 
 `init()` calls `aiserver.RegisterAiSdkPackage(PackageName, PackageVersion)`. `NewHandler` reports
 `langchain-messages.createLangChainMessagesHandler`, `LangChainMessages` reports

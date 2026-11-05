@@ -320,6 +320,41 @@ func TestToolLoop(t *testing.T) {
 	})
 }
 
+// tool call arguments and results reach the execute_tool span only when
+// content capture is on; the tool's identity is written either way.
+func TestToolContentCapture(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		capture aiserver.ContentCapture
+		want    bool
+	}{{"on", aiserver.CaptureOn, true}, {"off", aiserver.CaptureOff, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, c := fakeClient(t, toolResp("r1", "a", `{"city":"Paris"}`), textResp("done", 1, 1))
+			exp := tracer(t)
+			h := newHandler(Options{Client: c, CaptureContent: tc.capture})
+			invoke(t, h, aiserver.HandlerRequest{Config: cfg(func(c *aiserver.AiConfig) {
+				c.Tools = map[string]aiserver.Tool{"a": funcTool("", map[string]any{"type": "object"})}
+			}), ToolHandlers: map[string]aiserver.ToolHandler{"a": tool(func(map[string]any) (any, error) { return "sunny", nil })}})
+			s := spansByName(exp)["execute_tool a"]
+			if len(s) != 1 {
+				t.Fatalf("tool spans = %d", len(s))
+			}
+			got := attrs(s[0])
+			if got["gen_ai.tool.name"] != "a" {
+				t.Errorf("gen_ai.tool.name = %q", got["gen_ai.tool.name"])
+			}
+			args, hasArgs := got["gen_ai.tool.call.arguments"]
+			result, hasResult := got["gen_ai.tool.call.result"]
+			if tc.want && (args != `{"city":"Paris"}` || result != "sunny") {
+				t.Errorf("arguments = %q result = %q", args, result)
+			}
+			if !tc.want && (hasArgs || hasResult) {
+				t.Errorf("content captured with CaptureOff: arguments = %q result = %q", args, result)
+			}
+		})
+	}
+}
+
 // A hosted tool call is tracked as `$ld:ai:tool_call` with the LD tool key
 // through the core's wrapped NativeTool.
 func TestNativeToolTracked(t *testing.T) {

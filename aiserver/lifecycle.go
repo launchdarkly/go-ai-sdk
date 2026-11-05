@@ -197,17 +197,6 @@ func Shutdown(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// FlushTelemetry force-flushes the process tracer provider (the one InitClient
-// registered, or one the application installed), so a batch exporter sends
-// its queued spans now. A provider without ForceFlush, such as the no-op
-// default, makes it a no-op.
-func FlushTelemetry(ctx context.Context) error {
-	if f, ok := otel.GetTracerProvider().(interface{ ForceFlush(context.Context) error }); ok {
-		return f.ForceFlush(ctx)
-	}
-	return nil
-}
-
 func safeFlush(c LDClient) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -229,9 +218,6 @@ func runShutdownHook(ctx context.Context, hook func(context.Context)) {
 
 func init() {
 	bridge.Logger = sdkLogger
-	bridge.StartInvocation = func(ctx context.Context, capture uint8) context.Context {
-		return startInvocation(ctx, ContentCapture(capture))
-	}
 	bridge.ExtractVariationRaw = func(ctx context.Context, key string, c ldcontext.Context) (map[string]any, error) {
 		raw, meta, err := readVariation(ctx, key, c)
 		if err != nil {

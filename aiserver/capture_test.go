@@ -8,6 +8,8 @@ import (
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 // freshOptions gives a test the built-in defaults and an unlatched Configure.
@@ -21,7 +23,7 @@ func freshOptions(t *testing.T) {
 // inside its own call.
 func captureProbe(c ContentCapture, got *bool) *ProviderHandler {
 	return createHandler(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, _ HandlerRequest) (HandlerResult, error) {
-		*got = CaptureContentEnabled(ctx)
+		*got = telemetry.Enabled(ctx)
 		return HandlerResult{Output: "ok"}, nil
 	}, nil, c)
 }
@@ -59,11 +61,11 @@ func TestCapturePrecedence(t *testing.T) {
 
 func TestCaptureOutsideAnyHandlerIsTheProcessDefault(t *testing.T) {
 	freshOptions(t)
-	if !CaptureContentEnabled(bg) {
+	if !telemetry.Enabled(bg) {
 		t.Fatal("built-in default must be on")
 	}
 	_ = Configure(SDKOptions{CaptureContent: CaptureOff})
-	if CaptureContentEnabled(bg) {
+	if telemetry.Enabled(bg) {
 		t.Fatal("configured off must apply outside a handler")
 	}
 }
@@ -109,7 +111,7 @@ func TestConfigureLock(t *testing.T) {
 	if err := Shutdown(bg); err != nil {
 		t.Fatal(err)
 	}
-	if !CaptureContentEnabled(bg) {
+	if !telemetry.Enabled(bg) {
 		t.Fatal("Shutdown must restore the built-in default")
 	}
 	if err := Configure(SDKOptions{CaptureContent: CaptureOn}); err != nil {
@@ -136,7 +138,7 @@ func TestCoreCallPathBindsLiteralHandler(t *testing.T) {
 	var got = true
 	h := &ProviderHandler{ProvidesFor: ProvidesFor{"P", ModeMessages}, CaptureContent: CaptureOff,
 		Invoke: func(ctx context.Context, _ HandlerRequest) (HandlerResult, error) {
-			got = CaptureContentEnabled(ctx)
+			got = telemetry.Enabled(ctx)
 			return HandlerResult{Output: "ok"}, nil
 		}}
 	if _, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, "q", userCtx); err != nil {
@@ -154,7 +156,7 @@ func TestInitOptionsDoNotSetTheCaptureDefault(t *testing.T) {
 	if _, err := InitWithClient(bg, &fakeLD{}, InitOptions{OTLPEndpoint: unreachableOTLP}); err != nil {
 		t.Fatal(err)
 	}
-	if !CaptureContentEnabled(bg) {
+	if !telemetry.Enabled(bg) {
 		t.Fatal("init must leave the built-in default on")
 	}
 }
@@ -181,15 +183,15 @@ func writeAllContent(ctx context.Context) {
 	run.Finish("m", "answer")
 
 	_, span := tracerFor(TracerPrefix+"/test").Start(ctx, "chat m")
-	SetChatContent(ctx, span, ChatContent{
+	telemetry.SetChatContent(ctx, span, telemetry.ChatContent{
 		SystemInstructions: "sys",
-		InputMessages:      []ChatMessage{{Role: "user", Parts: []MessagePart{TextPart("hi")}}},
-		ToolDefinitions:    []Tool{{Name: "lookup", Description: "find", Parameters: map[string]any{"type": "object"}}},
-		OutputMessages: []ChatMessage{{Role: "assistant", Parts: []MessagePart{
-			ToolCallPart("call_1", "lookup", map[string]any{"q": "x"}), TextPart("answer")}}},
+		InputMessages:      []telemetry.ChatMessage{{Role: "user", Parts: []telemetry.MessagePart{telemetry.TextPart("hi")}}},
+		ToolDefinitions:    []telemetry.ToolDefinition{{Name: "lookup", Description: "find", Parameters: map[string]any{"type": "object"}}},
+		OutputMessages: []telemetry.ChatMessage{{Role: "assistant", Parts: []telemetry.MessagePart{
+			telemetry.ToolCallPart("call_1", "lookup", map[string]any{"q": "x"}), telemetry.TextPart("answer")}}},
 	})
-	SetToolCallArguments(ctx, span, map[string]any{"q": "x"})
-	SetToolCallResult(ctx, span, "found")
+	telemetry.SetToolCallArguments(ctx, span, map[string]any{"q": "x"})
+	telemetry.SetToolCallResult(ctx, span, "found")
 	span.End()
 }
 
@@ -285,7 +287,7 @@ func TestToolDefinitionsOmitEmptyMembers(t *testing.T) {
 	freshOptions(t)
 	exp := contentSpans(t)
 	_, span := tracerFor(TracerPrefix+"/test").Start(bg, "chat m")
-	SetChatContent(bg, span, ChatContent{ToolDefinitions: []Tool{{Name: "bare", Type: "custom"}}})
+	telemetry.SetChatContent(bg, span, telemetry.ChatContent{ToolDefinitions: []telemetry.ToolDefinition{{Name: "bare"}}})
 	span.End()
 	for _, a := range exp.GetSpans().Snapshots()[0].Attributes() {
 		if a.Key == "gen_ai.tool.definitions" && a.Value.AsString() != `[{"name":"bare","type":"function"}]` {
@@ -329,5 +331,99 @@ func TestJudgeExplanationFollowsConfiguredDefault(t *testing.T) {
 	}
 	if !scored {
 		t.Fatal("score must be written whatever the gate")
+	}
+}
+
+// A copy of a CreateHandler handler with a different setting, routed through
+// Config, runs with the copy's setting: the handler's own wrapper (which
+// closes over the original) keeps the core's binding.
+func TestCopiedHandlerKeepsTheCopysSetting(t *testing.T) {
+	freshOptions(t)
+	withFake(t, map[string]any{"cfg": enabledConfig("P", "", nil)})
+	var got = true
+	orig := captureProbe(CaptureDefault, &got)
+	off := *orig
+	off.CaptureContent = CaptureOff
+	if _, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{&off}}).Invoke(bg, "q", userCtx); err != nil {
+		t.Fatal(err)
+	}
+	if got {
+		t.Fatal("the copy's CaptureOff must apply through Config")
+	}
+	for ev, err := range Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{&off}}).Stream(bg, "q", userCtx) {
+		_, _ = ev, err
+	}
+	if got {
+		t.Fatal("the copy's CaptureOff must apply through Stream")
+	}
+	got = false
+	if _, err := orig.Invoke(bg, HandlerRequest{}); err != nil || !got {
+		t.Fatalf("the original still binds its own setting on a direct call: %v %v", got, err)
+	}
+}
+
+// The core's binding is consumed by the routed handler's wrapper only: a
+// handler that handler calls (directly or from a tool) binds its own setting.
+func TestCoreBindingIsConsumedOnce(t *testing.T) {
+	freshOptions(t)
+	withFake(t, map[string]any{"cfg": enabledConfig("P", "", nil)})
+	var inner bool
+	innerH := captureProbe(CaptureOn, &inner)
+	outer := createHandler(ProvidesFor{"P", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+		return innerH.Invoke(ctx, req)
+	}, nil, CaptureOff)
+	if _, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{outer}}).Invoke(bg, "q", userCtx); err != nil {
+		t.Fatal(err)
+	}
+	if !inner {
+		t.Fatal("a nested handler must bind its own CaptureOn")
+	}
+
+	// A literal outer handler never consumes the mark; the tool boundary does.
+	inner = false
+	literal := &ProviderHandler{ProvidesFor: ProvidesFor{"P", ModeMessages}, CaptureContent: CaptureOff,
+		Invoke: func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
+			_, err := req.ToolHandlers["t"].(ToolFunc)(ctx, nil)
+			return HandlerResult{Output: "ok"}, err
+		}}
+	tools := map[string]ToolHandler{"t": ToolFunc(func(ctx context.Context, _ map[string]any) (any, error) {
+		return innerH.Invoke(ctx, HandlerRequest{})
+	})}
+	cfg := enabledConfig("P", "", nil)
+	cfg["tools"] = map[string]any{"t": map[string]any{"name": "t", "type": "function", "parameters": map[string]any{}}}
+	withFake(t, map[string]any{"cfg": cfg})
+	if _, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{literal}, ToolHandlers: tools}).Invoke(bg, "q", userCtx); err != nil {
+		t.Fatal(err)
+	}
+	if !inner {
+		t.Fatal("a handler called from a tool must bind its own CaptureOn")
+	}
+}
+
+func TestConfigureComparesResolvedValues(t *testing.T) {
+	freshOptions(t)
+	var got bool
+	if _, err := captureProbe(CaptureDefault, &got).Invoke(bg, HandlerRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Configure(SDKOptions{CaptureContent: CaptureOn}); err != nil {
+		t.Fatalf("CaptureOn equals the effective default (on): %v", err)
+	}
+	if err := Configure(SDKOptions{CaptureContent: CaptureDefault}); err != nil {
+		t.Fatalf("CaptureDefault equals the effective default (on): %v", err)
+	}
+	if err := Configure(SDKOptions{CaptureContent: CaptureOff}); !errors.Is(err, ErrConfigureLocked) {
+		t.Fatalf("off after an invocation: %v, want ErrConfigureLocked", err)
+	}
+}
+
+func TestConfigureRejectsUnknownValues(t *testing.T) {
+	freshOptions(t)
+	err := Configure(SDKOptions{CaptureContent: CaptureOff + 1})
+	if err == nil || errors.Is(err, ErrConfigureLocked) {
+		t.Fatalf("an unknown ContentCapture must be rejected: %v", err)
+	}
+	if !telemetry.Enabled(bg) {
+		t.Fatal("a rejected Configure must leave the default unchanged")
 	}
 }

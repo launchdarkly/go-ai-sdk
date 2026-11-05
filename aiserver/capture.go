@@ -3,9 +3,10 @@ package aiserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"iter"
-	"sync"
-	"sync/atomic"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 // ContentCapture says whether prompt, completion and tool content is written
@@ -14,9 +15,9 @@ import (
 type ContentCapture uint8
 
 const (
-	CaptureDefault ContentCapture = iota
-	CaptureOn
-	CaptureOff
+	CaptureDefault ContentCapture = ContentCapture(telemetry.CaptureDefault)
+	CaptureOn      ContentCapture = ContentCapture(telemetry.CaptureOn)
+	CaptureOff     ContentCapture = ContentCapture(telemetry.CaptureOff)
 )
 
 // SDKOptions are process-wide behaviour defaults, set with Configure. They
@@ -27,90 +28,61 @@ type SDKOptions struct {
 	CaptureContent ContentCapture
 }
 
-// ErrConfigureLocked is returned by Configure when different options are
-// passed after the first AI invocation.
+// ErrConfigureLocked is returned by Configure when options with a different
+// effect are passed after the first AI invocation.
 var ErrConfigureLocked = errors.New("aiserver: Configure cannot change options after the first AI invocation; call Shutdown first")
-
-var (
-	optionsMu sync.Mutex
-	options   SDKOptions
-	// optionsLocked latches on the first ProviderHandler call or stream
-	// start; Shutdown clears it.
-	optionsLocked atomic.Bool
-)
 
 // Configure sets the process-wide defaults. It may replace them until the
 // first AI invocation (a ProviderHandler call or the start of its stream);
-// after that the same options are accepted and different ones return
-// ErrConfigureLocked. Shutdown restores the built-in defaults and the lock.
-// Handlers read the defaults when they run, so a handler built before
-// Configure uses the configured value.
+// after that, options with the same effect are accepted (CaptureDefault and
+// CaptureOn both mean on) and others return ErrConfigureLocked. A
+// CaptureContent value other than the three constants is an error. Shutdown
+// restores the built-in defaults and clears the lock. Handlers read the
+// defaults when they run, so a handler built before Configure uses the
+// configured value.
 func Configure(opts SDKOptions) error {
-	optionsMu.Lock()
-	defer optionsMu.Unlock()
-	if optionsLocked.Load() && opts != options {
+	if opts.CaptureContent > CaptureOff {
+		return fmt.Errorf("aiserver: Configure: invalid ContentCapture %d", opts.CaptureContent)
+	}
+	if !telemetry.Configure(uint8(opts.CaptureContent)) {
 		return ErrConfigureLocked
 	}
-	options = opts
 	return nil
 }
 
-func resetOptions() {
-	optionsMu.Lock()
-	defer optionsMu.Unlock()
-	options = SDKOptions{}
-	optionsLocked.Store(false)
-}
+func resetOptions() { telemetry.Reset() }
 
 // enabled resolves the setting: an explicit CaptureOn or CaptureOff wins,
 // then the configured default, then on.
-func (c ContentCapture) enabled() bool {
-	switch c {
-	case CaptureOn:
-		return true
-	case CaptureOff:
-		return false
-	}
-	optionsMu.Lock()
-	d := options.CaptureContent
-	optionsMu.Unlock()
-	return d != CaptureOff
-}
+func (c ContentCapture) enabled() bool { return telemetry.Resolve(uint8(c)) }
 
-type captureKey struct{}
-
-// startInvocation marks the start of one handler call: it latches Configure
-// and binds the handler's capture setting on ctx. The binding is set even for
-// CaptureDefault, so a nested call with no setting of its own follows the
-// process default rather than the enclosing handler's explicit value.
+// startInvocation latches Configure and binds c on ctx for one handler call.
 func startInvocation(ctx context.Context, c ContentCapture) context.Context {
-	optionsLocked.Store(true)
-	return context.WithValue(ctx, captureKey{}, c)
+	return telemetry.StartInvocation(ctx, uint8(c))
 }
 
-// CaptureContentEnabled reports whether content may be written on spans for
-// the handler call ctx belongs to: that handler's explicit setting, else the
-// configured default, else on. Outside any handler call it is the process
-// default.
-func CaptureContentEnabled(ctx context.Context) bool {
-	c, _ := ctx.Value(captureKey{}).(ContentCapture)
-	return c.enabled()
+// bindCall is startInvocation for the core call path: the binding is pending,
+// so the handler's own CreateHandler wrapper keeps it rather than re-binding
+// the value of the handler it was built from.
+func bindCall(ctx context.Context, c ContentCapture) context.Context {
+	return telemetry.BindCall(ctx, uint8(c))
 }
 
 // bindInvocation wraps a handler's functions so a direct call (not through
 // Config or a judge) still starts an invocation with the handler's setting.
 // It reads h.CaptureContent at call time, so a later change to the field is
-// honoured.
+// honoured. Through the core, the core's binding (from the handler value it
+// routed to, which may be a copy of h) is kept.
 func bindInvocation(h *ProviderHandler) *ProviderHandler {
 	invoke, stream := h.Invoke, h.Stream
 	if invoke != nil {
 		h.Invoke = func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
-			return invoke(startInvocation(ctx, h.CaptureContent), req)
+			return invoke(telemetry.Enter(ctx, uint8(h.CaptureContent)), req)
 		}
 	}
 	if stream != nil {
 		h.Stream = func(ctx context.Context, req HandlerRequest) iter.Seq2[HandlerStreamEvent, error] {
-			return stream(startInvocation(ctx, h.CaptureContent), req)
+			return stream(telemetry.Enter(ctx, uint8(h.CaptureContent)), req)
 		}
 	}
 	return h

@@ -16,6 +16,8 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 // flushLogger is the process tracer provider for a test: the SDK span
@@ -456,8 +458,8 @@ func TestEvaluationSpansFollowTheContentGate(t *testing.T) {
 			outside := sdkapi.CreateHandler(aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeMessages},
 				func(ctx context.Context, _ aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
 					_, sp := otel.Tracer(aiserver.TracerPrefix+"/test").Start(ctx, "non-evaluation")
-					aiserver.SetChatContent(ctx, sp, aiserver.ChatContent{SystemInstructions: "s",
-						InputMessages: []aiserver.ChatMessage{{Role: "user", Parts: []aiserver.MessagePart{aiserver.TextPart("hi")}}}})
+					telemetry.SetChatContent(ctx, sp, telemetry.ChatContent{SystemInstructions: "s",
+						InputMessages: []telemetry.ChatMessage{{Role: "user", Parts: []telemetry.MessagePart{telemetry.TextPart("hi")}}}})
 					sp.End()
 					return aiserver.HandlerResult{}, nil
 				}, nil, tc.handler)

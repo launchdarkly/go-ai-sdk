@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
-	"sync/atomic"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 // TracerPrefix scopes the tracers whose spans get a conversation id.
@@ -34,56 +35,9 @@ func conversationID(ctx context.Context) string {
 	return id
 }
 
-type spanAttributesKey struct{}
-
-// WithSpanAttributes binds attrs on ctx: every SDK span started while the
-// binding is current gets each one, write-if-absent. Only string and integer
-// values are bound; others are dropped. A nested binding adds to the
-// enclosing one, and its value wins for a key both set.
-func WithSpanAttributes(ctx context.Context, attrs ...attribute.KeyValue) context.Context {
-	outer, _ := ctx.Value(spanAttributesKey{}).([]attribute.KeyValue)
-	merged := make([]attribute.KeyValue, 0, len(outer)+len(attrs))
-	seen := map[attribute.Key]bool{}
-	for _, a := range attrs {
-		if t := a.Value.Type(); (t == attribute.STRING || t == attribute.INT64) && !seen[a.Key] {
-			seen[a.Key] = true
-			merged = append(merged, a)
-		}
-	}
-	for _, a := range outer {
-		if !seen[a.Key] {
-			merged = append(merged, a)
-		}
-	}
-	if len(merged) == 0 {
-		return ctx
-	}
-	return context.WithValue(ctx, spanAttributesKey{}, merged)
-}
-
-// SpanCounter counts the SDK spans started while it is bound on a context.
-type SpanCounter struct {
-	n      atomic.Int64
-	parent *SpanCounter
-}
-
-// Count is the number of SDK spans started so far under the counter,
-// including those under a nested counter.
-func (c *SpanCounter) Count() int { return int(c.n.Load()) }
-
-type spanCounterKey struct{}
-
-// WithSpanCounter binds a new counter on ctx. An enclosing counter keeps
-// counting spans started under the new one.
-func WithSpanCounter(ctx context.Context) (context.Context, *SpanCounter) {
-	parent, _ := ctx.Value(spanCounterKey{}).(*SpanCounter)
-	c := &SpanCounter{parent: parent}
-	return context.WithValue(ctx, spanCounterKey{}, c), c
-}
-
 // ConversationIDSpanProcessor stamps gen_ai.conversation.id and any
-// WithSpanAttributes binding write-if-absent, and counts spans for any
-// WithSpanCounter binding, on SDK spans only. With nothing bound it does
+// attributes the SDK bound on the span's context write-if-absent, and counts
+// the span for any SDK span counter bound there, on SDK spans only. With nothing bound it does
 // nothing.
 type ConversationIDSpanProcessor struct{}
 
@@ -91,15 +45,12 @@ func (ConversationIDSpanProcessor) OnStart(parent context.Context, s sdktrace.Re
 	if !strings.HasPrefix(s.InstrumentationScope().Name, TracerPrefix) {
 		return
 	}
-	for c, _ := parent.Value(spanCounterKey{}).(*SpanCounter); c != nil; c = c.parent {
-		c.n.Add(1)
-	}
+	telemetry.CountSpan(parent)
 	var stamp []attribute.KeyValue
 	if id := conversationID(parent); id != "" {
 		stamp = append(stamp, attribute.String("gen_ai.conversation.id", id))
 	}
-	bound, _ := parent.Value(spanAttributesKey{}).([]attribute.KeyValue)
-	stamp = append(stamp, bound...)
+	stamp = append(stamp, telemetry.BoundAttributes(parent)...)
 	if len(stamp) == 0 {
 		return
 	}
