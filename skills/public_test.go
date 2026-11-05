@@ -1,4 +1,4 @@
-package aiserver_test
+package skills_test
 
 import (
 	"bytes"
@@ -14,17 +14,18 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/skills"
 )
 
 func TestConstantsAndClosedSets(t *testing.T) {
-	if aiserver.SkillFilename != "SKILL.md" || aiserver.ManifestFilename != ".launchdarkly-skills.json" || aiserver.ManifestVersion != 1 {
+	if skills.SkillFilename != "SKILL.md" || skills.ManifestFilename != ".launchdarkly-skills.json" || skills.ManifestVersion != 1 {
 		t.Fatal("constant values")
 	}
-	reasons := []aiserver.SkillOutcomeReason{aiserver.ReasonAbsent, aiserver.ReasonIntegrityFailure,
-		aiserver.ReasonOK, aiserver.ReasonStoreUnavailable, aiserver.ReasonWrongVersion}
-	kinds := []aiserver.ReconcileActionKind{aiserver.ActionWritten, aiserver.ActionUpdated,
-		aiserver.ActionSkippedCurrent, aiserver.ActionRemoved, aiserver.ActionError}
-	modes := []aiserver.OnUnavailable{aiserver.OnUnavailableKeep, aiserver.OnUnavailableRaise}
+	reasons := []skills.SkillOutcomeReason{skills.ReasonAbsent, skills.ReasonIntegrityFailure,
+		skills.ReasonOK, skills.ReasonStoreUnavailable, skills.ReasonWrongVersion}
+	kinds := []skills.ReconcileActionKind{skills.ActionWritten, skills.ActionUpdated,
+		skills.ActionSkippedCurrent, skills.ActionRemoved, skills.ActionError}
+	modes := []skills.OnUnavailable{skills.OnUnavailableKeep, skills.OnUnavailableRaise}
 	if strings.Join(toStrings(reasons), ",") != "absent,integrity_failure,ok,store_unavailable,wrong_version" ||
 		strings.Join(toStrings(kinds), ",") != "written,updated,skipped_current,removed,error" ||
 		strings.Join(toStrings(modes), ",") != "keep,raise" {
@@ -88,25 +89,25 @@ func TestSkillsHelpersReportNoUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = aiserver.Shutdown(ctx) })
-	store := aiserver.NewInMemorySkillStore(nil)
-	aiserver.SetSkillStore(store)
+	store := skills.NewInMemorySkillStore(nil)
+	skills.SetSkillStore(store)
 	root := t.TempDir()
 	calls := []struct {
 		helper string
 		call   func()
 	}{
 		{"WatchAllSkills", func() {
-			_, w, err := aiserver.WatchAllSkills(ctx, root, nil)
+			_, w, err := skills.WatchAllSkills(ctx, root, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			w.Close()
 		}},
-		{"GetSkill", func() { _, _ = aiserver.GetSkill("a", 0) }},
-		{"GetSkillResult", func() { _, _ = aiserver.GetSkillResult("a", 0) }},
-		{"GetSkills", func() { _, _ = aiserver.GetSkills([]aiserver.SkillKey{"a"}) }},
-		{"AllSkills", func() { _, _ = aiserver.AllSkills() }},
-		{"WriteAllSkills", func() { _, _ = aiserver.WriteAllSkills(root, nil) }},
+		{"GetSkill", func() { _, _ = skills.GetSkill("a", 0) }},
+		{"GetSkillResult", func() { _, _ = skills.GetSkillResult("a", 0) }},
+		{"GetSkills", func() { _, _ = skills.GetSkills([]skills.SkillKey{"a"}) }},
+		{"AllSkills", func() { _, _ = skills.AllSkills() }},
+		{"WriteAllSkills", func() { _, _ = skills.WriteAllSkills(root, nil) }},
 	}
 	for _, c := range calls {
 		before := len(fake.usage())
@@ -118,7 +119,7 @@ func TestSkillsHelpersReportNoUsage(t *testing.T) {
 	}
 	// SkillRefs is pure: no usage event, no track at all.
 	before := len(fake.tracks)
-	_, _ = aiserver.SkillRefs(&aiserver.AiConfig{})
+	_, _ = skills.SkillRefs(&aiserver.AiConfig{})
 	if len(fake.tracks) != before {
 		t.Fatal("SkillRefs called track")
 	}
@@ -130,8 +131,8 @@ func TestShutdownClearsTheStore(t *testing.T) {
 	if _, err := aiserver.InitWithClient(context.Background(), &usageFakeLD{}, aiserver.InitOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	aiserver.SetSkillStore(aiserver.NewInMemorySkillStore(nil))
-	if _, err := aiserver.GetSkill("a", 0); err != nil {
+	skills.SetSkillStore(skills.NewInMemorySkillStore(nil))
+	if _, err := skills.GetSkill("a", 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := aiserver.Shutdown(context.Background()); err != nil {
@@ -141,7 +142,7 @@ func TestShutdownClearsTheStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = aiserver.Shutdown(context.Background()) })
-	if _, err := aiserver.GetSkill("a", 0); !errors.Is(err, aiserver.ErrNoSkillStore) {
+	if _, err := skills.GetSkill("a", 0); !errors.Is(err, skills.ErrNoSkillStore) {
 		t.Fatalf("after Shutdown: %v", err)
 	}
 }
@@ -155,11 +156,11 @@ func TestSetLoggerRoutesSkillsLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = aiserver.Shutdown(context.Background()) })
-	aiserver.SetSkillStore(aiserver.NewInMemorySkillStore(map[string]any{
+	skills.SetSkillStore(skills.NewInMemorySkillStore(map[string]any{
 		"a": map[string]any{"key": "a", "version": 1, "content": "hi"}, // no contentHash
 	}))
-	res, err := aiserver.GetSkillResult("a", 0)
-	if err != nil || res.Reason() != aiserver.ReasonIntegrityFailure {
+	res, err := skills.GetSkillResult("a", 0)
+	if err != nil || res.Reason() != skills.ReasonIntegrityFailure {
 		t.Fatalf("GetSkillResult: %v %v", res, err)
 	}
 	if !strings.Contains(buf.String(), "ld.skills.integrity_failure") {

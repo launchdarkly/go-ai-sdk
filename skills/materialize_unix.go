@@ -1,6 +1,6 @@
 //go:build unix
 
-package aiserver
+package skills
 
 import (
 	"bytes"

@@ -1,5 +1,5 @@
 // Package aiserver is the core LaunchDarkly AI SDK client for Go: AI Config
-// resolution, provider-handler routing, tracking, judges, and Agent Skills.
+// resolution, provider-handler routing, tracking, and judges.
 package aiserver
 
 import (

@@ -1,4 +1,4 @@
-package aiserver
+package skills
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
 
 func TestInMemoryStoreRoundTrip(t *testing.T) {
@@ -141,11 +143,11 @@ func TestStoreProbe(t *testing.T) {
 
 func TestSetSkillStoreLifecycle(t *testing.T) {
 	_, _ = setup(t)
-	fake := &fakeSkillsLD{}
-	if _, err := InitWithClient(context.Background(), fake, InitOptions{}); err != nil {
+	fake := &fakeLD{}
+	if _, err := aiserver.InitWithClient(context.Background(), fake, aiserver.InitOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = aiserver.Shutdown(context.Background()) })
 	first := NewInMemorySkillStore(map[string]any{"a": rawSkill("a", 1, "first")})
 	second := NewInMemorySkillStore(map[string]any{"a": rawSkill("a", 1, "second")})
 	SetSkillStore(first)
@@ -154,7 +156,7 @@ func TestSetSkillStoreLifecycle(t *testing.T) {
 	if got == nil || string(got.Content()) != "second" {
 		t.Fatalf("accessors did not read the new store: %v", got)
 	}
-	if c, err := GetClient(); err != nil || c != fake {
+	if c, err := aiserver.GetClient(); err != nil || c != fake {
 		t.Fatal("setting a store disturbed the client singleton")
 	}
 	SetSkillStore(nil)
@@ -163,7 +165,7 @@ func TestSetSkillStoreLifecycle(t *testing.T) {
 	if got, _ := GetSkill("a", 0); got == nil {
 		t.Fatal("a nil store cleared the configured one")
 	}
-	if err := Shutdown(context.Background()); err != nil {
+	if err := aiserver.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := GetSkill("a", 0); !errors.Is(err, ErrNoSkillStore) {
@@ -191,7 +193,7 @@ func TestNoStoreConfigured(t *testing.T) {
 func TestClearStateClearsStoreAndEmitter(t *testing.T) {
 	rec, _ := setup(t)
 	SetSkillStore(NewInMemorySkillStore(nil))
-	clearSkillState()
+	clearState()
 	if _, err := GetSkill("a", 0); !errors.Is(err, ErrNoSkillStore) {
 		t.Fatal("ClearState left the store")
 	}

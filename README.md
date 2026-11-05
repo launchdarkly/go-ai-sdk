@@ -20,8 +20,9 @@ Requires Go 1.26.
 
 | Package | Tier | What it does |
 |---|---|---|
-| [`aiserver`](aiserver) | 0 | Core client: `Config`, `Graph`, `ResolveGraph`, `InspectConfig`, registry, lifecycle, judges, telemetry, Agent Skills |
+| [`aiserver`](aiserver) | 0 | Core client: `Config`, `Graph`, `ResolveGraph`, `InspectConfig`, registry, lifecycle, judges, telemetry |
 | [`aiserver/experimental`](aiserver/experimental) | 0 | Experimental entry point: Evaluations from Code, shadow requests |
+| [`skills`](skills) | 1 | Agent Skills: skill references on AI Configs, verified content, materialization to disk, delivery store, watcher |
 | [`claudemessages`](claudemessages) | 1 | Anthropic Messages API handler — `{Anthropic, messages}` |
 | [`openaimessages`](openaimessages) | 1 | OpenAI Responses API handler — `{OpenAI, messages}` |
 | [`bedrockmessages`](bedrockmessages) | 1 | Amazon Bedrock Converse handler — `{Bedrock, messages}` |

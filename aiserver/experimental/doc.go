@@ -10,5 +10,5 @@
 //     variation on the served call's input and tracks it without serving it.
 //
 // When a feature is promoted to core, its names move to package aiserver and
-// leave this package. Agent Skills has been promoted: use the aiserver names.
+// leave this package. Agent Skills has been promoted: use package skills.
 package experimental

@@ -2,8 +2,8 @@
 
 Experimental entry point of the LaunchDarkly AI SDK for Go
 (`github.com/launchdarkly/go-ai-sdk/aiserver/experimental`). Every name here is published
-but may change in a minor release; none is exported from `aiserver`. Agent Skills is part of the
-core client: see [`aiserver`](../README.md#agent-skills).
+but may change in a minor release; none is exported from `aiserver`. Agent Skills is core, in its
+own package: see [`skills`](../../skills).
 
 <!-- Each feature owns one section below. Append; do not rewrite another feature's section. -->
 

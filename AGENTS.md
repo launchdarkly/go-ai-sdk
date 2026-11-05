@@ -13,6 +13,7 @@ Tier 0  aiserver                 core: no provider SDK imports
 Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         claudeagents   openaiagents   bedrockagents
         internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers shared by a pair
+        skills         Agent Skills (core; imports aiserver, no provider SDK)
 ```
 
 Tier 1 packages import `aiserver` and their provider SDK only. `aiserver`
@@ -112,7 +113,7 @@ One module (`go.mod`); each package imports only what it needs.
 | `github.com/anthropics/anthropic-sdk-go` | `claudemessages`, `claudeagents`, `llms` | Anthropic Messages API |
 | `github.com/openai/openai-go/v3` | `openaimessages`, `openaiagents`, `llms` | OpenAI Responses API; Chat Completions in `llms` |
 | `github.com/aws/aws-sdk-go-v2` (+ `config`, `credentials`, `service/bedrockruntime`, `eventstream`), `github.com/aws/smithy-go` | `bedrockmessages`, `bedrockagents`, `llms` | Bedrock Converse / ConverseStream |
-| `golang.org/x/sys` | `aiserver` | `*at()` filesystem calls for skill materialization |
+| `golang.org/x/sys` | `skills` | `*at()` filesystem calls for skill materialization |
 | `golang.org/x/text` | `internal/evaluations` | Unicode case folding for the tool key collision check |
 
 ## Common pitfalls

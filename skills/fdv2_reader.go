@@ -1,4 +1,4 @@
-package aiserver
+package skills
 
 import (
 	"encoding/json"

@@ -1,7 +1,4 @@
-// Agent Skills: value types, the SkillStore seam, integrity verification,
-// filesystem materialization, the FDv2 delivery transport and the watcher.
-
-package aiserver
+package skills
 
 import "slices"
 

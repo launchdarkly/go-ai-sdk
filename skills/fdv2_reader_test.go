@@ -1,4 +1,4 @@
-package aiserver
+package skills
 
 import (
 	"encoding/json"
@@ -392,7 +392,7 @@ func TestWireKindConstants(t *testing.T) {
 		t.Fatal("kind values")
 	}
 	fset := token.NewFileSet()
-	for _, file := range []string{"skills_fdv2_reader.go", "skills_types.go"} {
+	for _, file := range []string{"fdv2_reader.go", "types.go"} {
 		f, err := parser.ParseFile(fset, file, nil, 0)
 		if err != nil {
 			t.Fatal(err)
