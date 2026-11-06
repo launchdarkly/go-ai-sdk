@@ -5,7 +5,7 @@
 Tier 1 handler package. `ProvidesFor = {"*", "messages"}`: the wildcard fallback for any
 messages-mode variation. Built on the SDK's own [`llms`](../llms) package (model interface plus
 built-in OpenAI Chat Completions, Anthropic Messages and Bedrock Converse models). LangChain has
-no official Go SDK, and the community ports were removed (AIC-3609).
+no official Go SDK, and the community ports were removed.
 
 ## File map
 

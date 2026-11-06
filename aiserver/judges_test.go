@@ -205,7 +205,7 @@ func TestPickJudgeHandlerCollapse(t *testing.T) {
 }
 
 // A deferred judge result is tracked under the evaluated config, with exactly
-// the payload the inline path sends (AIC-3576).
+// the payload the inline path sends.
 func TestDeferredJudgeTrackDataMatchesInline(t *testing.T) {
 	parent := enabledConfig("P", "", judgedConfig(nil))
 	parent["_ldMeta"] = map[string]any{"enabled": true, "variationKey": "v1", "version": 3, "modelKey": "parent-model", "modelVersion": 7}

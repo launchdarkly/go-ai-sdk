@@ -129,3 +129,12 @@ One module (`go.mod`); each package imports only what it needs.
 - **Breaking out of a `Config(...).Stream` loop abandons the run**: no success or error is
   tracked. Drain to the `done` event if you need the metrics.
 - **One disabled node disables the whole graph** (`ErrGraphDisabled`).
+
+## Commit and PR titles
+
+PRs are squash-merged and the title becomes the commit, which release-please turns into the public changelog.
+
+- Use conventional commits: `feat`, `fix`, `perf`, `revert` show in the changelog; `docs`, `chore`, `refactor`, `test`, `build`, `ci`, `style` are hidden. Add `!` for breaking changes.
+- The scope names the package or area (`graph`, `lifecycle`, `evaluations`). Never put a ticket key in the PR title, commit scope or PR body. The branch name carries it (`user/TICKET/description`).
+- `shadow-requests` routes `feat`/`fix`/`perf` to **Experimental**. It must be exactly that, lowercase, and the only scope.
+- Wrong title after merge? Add a `BEGIN_COMMIT_OVERRIDE` / `END_COMMIT_OVERRIDE` block to the PR body before the release PR merges.

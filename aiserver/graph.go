@@ -324,9 +324,8 @@ func selectNodeHandler(n *GraphNode, handlers []*ProviderHandler) (*ProviderHand
 var unsafeToolChars = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
 // routingSuffix and handoffResult are the model-visible routing text for a
-// multi-edge node. The wording is pinned by §3.15a of TESTING.md in
-// launchdarkly/ai-sdks-monorepo (AIC-3601); keep it byte-identical to the other
-// SDKs. Do not reintroduce "final answer" or
+// multi-edge node. The wording is shared byte-for-byte with the TypeScript and
+// Python SDKs; keep it identical. Do not reintroduce "final answer" or
 // "final response": a pure router has no answer of its own and wrote the
 // target's. Keep "recorded" and "using your available tools first": nodes with
 // a real tool skipped it when the result read "Transferring to <key>".
