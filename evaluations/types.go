@@ -188,9 +188,8 @@ func (t EvalTool) ProjectKey() string {
 	return ""
 }
 
-// DatasetRow is the public dataset row type: what a scorer receives, and
-// one of the two forms of an inline row. A zero RowIndex on an inline row
-// means "use the position"; any other value must equal the position.
+// DatasetRow is the public dataset row type: what a scorer receives. It is
+// not an inline row type; InlineRows takes map[string]any rows.
 type DatasetRow struct {
 	RowIndex       int
 	Input          string
@@ -391,7 +390,8 @@ type RunOptions struct {
 	// request. A key may appear once, compared without case. With AIConfig,
 	// nil Tools while the variation lists tools is an ErrInvalidConfig,
 	// because the run has no implementation for them; a variation tool
-	// missing from Tools is logged as unused.
+	// missing from Tools is logged as unused. An empty non-nil slice runs
+	// with no tools, even when the variation lists some.
 	Tools []EvalTool
 	// Criteria are judges and scorers. nil with AIConfig uses the
 	// variation's judges; a non-nil empty slice runs generation only.

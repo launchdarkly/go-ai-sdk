@@ -130,7 +130,8 @@ func InitEvaluations(opts InitEvaluationsOptions) (*EvaluationsModule, error) {
 // on a client the caller installed.
 func (m *EvaluationsModule) SDKKey() string { return m.sdkKey }
 
-// resolveClient runs before any management API request.
+// resolveClient runs at the start of Run, before Run's first management API
+// request. Tools().Get calls the management API without a client.
 func (m *EvaluationsModule) resolveClient(ctx context.Context) (aiserver.LDClient, error) {
 	if c, err := getClient(); err == nil {
 		if m.sdkKey != "" {

@@ -68,7 +68,8 @@ func TestSurfaceIsPinned(t *testing.T) {
 	if want := slices.Sorted(slices.Values(surface)); !slices.Equal(got, want) {
 		t.Fatalf("evaluations surface:\n got %v\nwant %v", got, want)
 	}
-	// Defaults, event names, hosts and the usage ID stay internal.
+	// The former package-level defaults, event names, host constants and usage ID stay
+	// internal. (APIBaseURI / UIBaseURI are now InitEvaluationsOptions fields.)
 	for _, name := range []string{"DefaultJudgeThreshold", "DefaultScorerThreshold", "DefaultPassRateThreshold",
 		"GenerationEventName", "CriterionEventName", "APIBaseURI", "UIBaseURI", "HelperName"} {
 		if slices.Contains(got, name) {

@@ -52,8 +52,9 @@ through the handlers, which emit their usual spans under it. The runner also wri
 custom events, not spans.
 
 **`InitClient` — when to call it.** `InitEvaluations` resolves the project key and credentials only;
-it does no I/O. The client that emits result events is resolved before the first management API
-request (`EvaluationsModule.resolveClient`), on one of three paths:
+it does no I/O. `Tools().Get` calls the management API without a client. The client that emits
+result events is resolved when `Run` starts, before its first management API request
+(`EvaluationsModule.resolveClient`), on one of three paths:
 
 - **Lazy (default)** — no client installed: `Run` calls `aiserver.InitClient` with the resolved SDK key
   (`InitEvaluationsOptions.SDKKey`, else `LD_SDK_KEY`).

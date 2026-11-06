@@ -73,7 +73,7 @@ if !res.Passed { os.Exit(1) }
 | `Dataset` | `DatasetKey("...")` for a hosted dataset, or `InlineRows{...}` (`map[string]any` values with `input`, `expectedOutput`, `variables`, `metadata`, optional `rowIdx`; a `DatasetRow` is rejected). |
 | `Handler` / `Handlers` | Exactly one. Each config (generation and every judge) picks its handler by provider and mode; an exact provider beats `*`; there is no mode fallback. |
 | `Generation` / `AIConfig` | Exactly one. `AIConfig: &AIConfigRef{Key, Variation}` reads the latest variation version; `Overrides` replace single fields. |
-| `Tools` | One list of `EvalTool`. Define a tool in code with a literal (`EvalTool{Key, Implementation, Schema, Description}`; `Schema` is required, `{}` is valid). Use a library tool with `evals.Tools().Get(ctx, key, impl)`, which reads it and pins its version before `Run`; `Run` itself issues no tool request. Every key is non-blank and lowercase, may appear once, and must differ from every other under Unicode case folding (`straße` and `strasse` collide). A library tool must come from this module's project, and its `Key`, `Schema` and `Description` must stay as `Get` returned them (an edited copy fails `Run`; define an inline tool instead). With `AIConfig`, nil `Tools` fails when the variation lists tools. |
+| `Tools` | One list of `EvalTool`. Define a tool in code with a literal (`EvalTool{Key, Implementation, Schema, Description}`; `Schema` is required, `{}` is valid). Use a library tool with `evals.Tools().Get(ctx, key, impl)`, which reads it and pins its version before `Run`; `Run` itself issues no tool request. Every key is non-blank and lowercase, may appear once, and must differ from every other under Unicode case folding (`straße` and `strasse` collide). A library tool must come from this module's project, and its `Key`, `Schema` and `Description` must stay as `Get` returned them (an edited copy fails `Run`; define an inline tool instead). With `AIConfig`, nil `Tools` fails when the variation lists tools, and `[]EvalTool{}` runs with no tools. |
 | `Criteria` | `*Judge` (`NewJudge`) and `*Scorer` (`NewScorer`). With `AIConfig`, nil uses the variation's judges and `[]Criterion{}` runs none. |
 | `Concurrency` | In-flight handler, judge and scorer calls (default 10). |
 | `PollInterval` / `PollTimeout` | Summary polling (default 2s / 3m). Large datasets need a longer timeout. |
@@ -82,7 +82,7 @@ The SDK never computes a verdict: it reports scores, and LaunchDarkly rules on t
 thresholds pinned on the evaluation. `Passed` is true only when no row errored or failed.
 Management API requests go to `APIBaseURI`, then `LD_API_BASE_URI`, then `https://app.launchdarkly.com`.
 The run link uses `UIBaseURI`, then `LD_UI_BASE_URI`, then the same default. At either level a
-blank value counts as unset, and a trailing `/` is stripped. Both hosts are fixed at
+blank value counts as unset, and a trailing `/` is stripped. Both hosts are resolved once, at
 `InitEvaluations`.
 
 ## API reference
