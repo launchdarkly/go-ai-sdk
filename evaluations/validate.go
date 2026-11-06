@@ -323,46 +323,16 @@ func normalizeInlineRows(rows InlineRows) ([]rawRow, error) {
 	out := make([]rawRow, len(rows))
 	for pos, r := range rows {
 		var err error
-		switch t := r.(type) {
-		case DatasetRow:
-			out[pos], err = publicRow(pos, t)
-		case *DatasetRow:
-			if t == nil {
-				return nil, invalid("inline dataset row %d must be a DatasetRow or a map, got nil", pos)
-			}
-			out[pos], err = publicRow(pos, *t)
-		case map[string]any:
-			out[pos], err = mappingRow(pos, t)
-		default:
-			return nil, invalid("inline dataset row %d must be a DatasetRow or a map[string]any, got %T", pos, r)
+		// A DatasetRow is what a scorer receives, not an input type, so it is rejected too.
+		m, ok := r.(map[string]any)
+		if !ok {
+			return nil, invalid("inline dataset row %d must be a mapping (map[string]any), got %T", pos, r)
 		}
-		if err != nil {
+		if out[pos], err = mappingRow(pos, m); err != nil {
 			return nil, err
 		}
 	}
 	return out, nil
-}
-
-func publicRow(pos int, r DatasetRow) (rawRow, error) {
-	if r.RowIndex != 0 && r.RowIndex != pos {
-		return rawRow{}, invalid("inline dataset row %d has RowIndex %d; an inline row's index is its position", pos, r.RowIndex)
-	}
-	if r.Input == "" {
-		return rawRow{}, invalid("inline dataset row %d input must be a non-empty string", pos)
-	}
-	vars, err := rowObject(pos, "variables", r.Variables)
-	if err != nil {
-		return rawRow{}, err
-	}
-	meta, err := rowObject(pos, "metadata", r.Metadata)
-	if err != nil {
-		return rawRow{}, err
-	}
-	row := rawRow{index: pos, input: r.Input, variables: vars, metadata: meta}
-	if r.ExpectedOutput != "" {
-		row.expected = &r.ExpectedOutput
-	}
-	return row, nil
 }
 
 func mappingRow(pos int, m map[string]any) (rawRow, error) {

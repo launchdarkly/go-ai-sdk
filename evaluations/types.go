@@ -207,9 +207,9 @@ type DatasetKey string
 
 func (DatasetKey) isDataset() {}
 
-// InlineRows is a dataset defined in code. Each element is a DatasetRow
-// (or *DatasetRow) or a map[string]any in the upload wire shape: input,
-// expectedOutput, variables, metadata and an optional rowIdx.
+// InlineRows is a dataset defined in code. Each element is a map[string]any
+// in the upload wire shape: input, expectedOutput, variables, metadata and an
+// optional rowIdx. A DatasetRow is what a scorer receives; Run rejects one here.
 type InlineRows []any
 
 func (InlineRows) isDataset() {}

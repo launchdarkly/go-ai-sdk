@@ -35,14 +35,17 @@ func TestRunValidationBeforeIO(t *testing.T) {
 		{"nil dataset", func(a *RunOptions) { a.Dataset = nil }, []string{"dataset is required", "DatasetKey or InlineRows"}},
 		{"blank dataset", func(a *RunOptions) { a.Dataset = DatasetKey("  ") }, []string{"dataset must not be blank"}},
 		{"empty inline dataset", func(a *RunOptions) { a.Dataset = InlineRows{} }, []string{"Inline dataset is empty"}},
-		{"bare string row", func(a *RunOptions) { a.Dataset = InlineRows{"just text"} }, []string{"row 0"}},
+		{"bare string row", func(a *RunOptions) { a.Dataset = InlineRows{"just text"} }, []string{"row 0 must be a mapping"}},
 		{"snake_case near miss", func(a *RunOptions) { a.Dataset = inlineRow(map[string]any{"input": "x", "expected_output": "y"}) },
 			[]string{"row 1", `"expected_output"`, "expectedOutput"}},
 		{"rowIdx differs", func(a *RunOptions) { a.Dataset = inlineRow(map[string]any{"input": "x", "rowIdx": 5}) }, []string{"row 1", "rowIdx 5"}},
 		{"bool rowIdx", func(a *RunOptions) { a.Dataset = inlineRow(map[string]any{"input": "x", "rowIdx": true}) }, []string{"row 1", "true"}},
-		{"public row index differs", func(a *RunOptions) {
-			a.Dataset = InlineRows{DatasetRow{Input: "a"}, DatasetRow{RowIndex: 3, Input: "b"}}
-		}, []string{"row 1", "RowIndex 3"}},
+		{"public row type", func(a *RunOptions) { a.Dataset = InlineRows{map[string]any{"input": "a"}, DatasetRow{Input: "b"}} },
+			[]string{"row 1 must be a mapping", "evaluations.DatasetRow"}},
+		{"public row pointer", func(a *RunOptions) { a.Dataset = InlineRows{&DatasetRow{Input: "a"}} },
+			[]string{"row 0 must be a mapping", "*evaluations.DatasetRow"}},
+		{"nil public row pointer", func(a *RunOptions) { a.Dataset = InlineRows{(*DatasetRow)(nil)} },
+			[]string{"row 0 must be a mapping", "*evaluations.DatasetRow"}},
 		{"missing input", func(a *RunOptions) { a.Dataset = inlineRow(map[string]any{}) }, []string{"row 1 input"}},
 		{"empty input", func(a *RunOptions) { a.Dataset = inlineRow(map[string]any{"input": ""}) }, []string{"row 1 input"}},
 		{"non-string input", func(a *RunOptions) { a.Dataset = inlineRow(map[string]any{"input": 3}) }, []string{"row 1 input"}},
@@ -64,7 +67,7 @@ func TestRunValidationBeforeIO(t *testing.T) {
 			a.Dataset = inlineRow(map[string]any{"input": "x", "metadata": map[string]any{"at": time.Now()}})
 		}, []string{"row 1 metadata", "time.Time"}},
 		{"non-string key", func(a *RunOptions) {
-			a.Dataset = InlineRows{DatasetRow{Input: "x", Variables: map[string]any{"m": map[int]string{1: "a"}}}}
+			a.Dataset = InlineRows{map[string]any{"input": "x", "variables": map[string]any{"m": map[int]string{1: "a"}}}}
 		},
 			[]string{"row 0 variables", "non-string keys"}},
 		{"handler and handlers", func(a *RunOptions) { a.Handlers = []*aiserver.ProviderHandler{agent} }, []string{"Handler and Handlers"}},

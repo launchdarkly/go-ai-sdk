@@ -354,7 +354,7 @@ func TestInlineUploadBodyAndRendering(t *testing.T) {
 	var rec recorder
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, rec.wrap(nil)))
 	args.Dataset = InlineRows{
-		DatasetRow{Input: "Where is order {{order_id}}?", Variables: map[string]any{"order_id": "A-17"}},
+		map[string]any{"input": "Where is order {{order_id}}?", "variables": map[string]any{"order_id": "A-17"}},
 		map[string]any{"input": "b", "expectedOutput": "B", "metadata": map[string]any{"m": 1}, "rowIdx": 1},
 	}
 	mustRun(t, e.module(), args)
