@@ -214,15 +214,18 @@ func TestSkillRefsThroughInspectConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = aiserver.Shutdown(context.Background()) })
-	res := aiserver.InspectConfig(context.Background(), "cfg", ldcontext.New("u"))
-	if res.Config == nil || res.Config.Raw["skills"] == nil {
-		t.Fatalf("skills did not ride through InspectConfig: %+v", res)
+	res, err := aiserver.InspectConfig(context.Background(), "cfg", ldcontext.New("u"))
+	if err != nil || res.Config == nil || res.Config.Raw["skills"] == nil {
+		t.Fatalf("skills did not ride through InspectConfig: %+v err=%v", res, err)
 	}
 	refs, err := SkillRefs(res.Config)
 	if err != nil || len(refs) != 1 || refs[0].Key() != "pdf" || refs[0].Version() != 2 {
 		t.Fatalf("refs=%v err=%v", refs, err)
 	}
-	failed := aiserver.InspectConfig(context.Background(), "missing", ldcontext.New("u"))
+	failed, err := aiserver.InspectConfig(context.Background(), "missing", ldcontext.New("u"))
+	if err == nil {
+		t.Fatal("missing config returned no error")
+	}
 	if _, err := SkillRefs(failed.Config); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("a failed InspectConfig must not yield an empty list: %v", err)
 	}

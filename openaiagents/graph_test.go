@@ -49,7 +49,11 @@ var user = ldcontext.New("u-1")
 
 func resolve(t *testing.T, ld *fakeLD, key string) *aiserver.GraphDefinition {
 	t.Helper()
-	return aiserver.ResolveGraph(bg, key, user, aiserver.GraphOptions{})
+	def, err := aiserver.ResolveGraph(bg, key, user, aiserver.GraphOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return def
 }
 
 func handlersFor(calls *[]string) map[string]aiserver.ToolHandler {
