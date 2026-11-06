@@ -25,11 +25,11 @@
     }
   },
   "changelog-sections": [
+    { "type": "feature", "section": "Features" },
     { "type": "feat", "scope": "shadow-requests", "section": "Experimental" },
     { "type": "fix", "scope": "shadow-requests", "section": "Experimental" },
     { "type": "perf", "scope": "shadow-requests", "section": "Experimental" },
     { "type": "feat", "section": "Features" },
-    { "type": "feature", "section": "Features" },
     { "type": "fix", "section": "Bug Fixes" },
     { "type": "perf", "section": "Performance Improvements" },
     { "type": "revert", "section": "Reverts" },
