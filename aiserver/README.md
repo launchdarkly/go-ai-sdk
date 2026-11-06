@@ -131,7 +131,9 @@ Initialization paths:
   setting comes from the environment variables above.
 - **Explicit** — `InitClient(ctx, opts)` to pass options or fail fast at startup.
 - **Bring your own client** — `InitWithClient(ctx, ldClient, opts)` with any value
-  that satisfies `aiserver.LDClient` (a `*ldclient.LDClient` does).
+  that satisfies `aiserver.LDClient` (a `*ldclient.LDClient` does). Like
+  `InitClient`, it returns the installed client if there already is one, so
+  call `Shutdown` first to switch clients.
 
 ## Telemetry
 

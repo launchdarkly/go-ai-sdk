@@ -149,14 +149,22 @@ func setClient(c LDClient) {
 }
 
 // InitWithClient installs a pre-initialized client (BYOC). Go has no
-// overloads, so this is a separate function from InitClient.
+// overloads, so this is a separate function from InitClient. Like InitClient
+// it is idempotent: once a client is installed, it returns that client and
+// ignores c and opts, so call Shutdown first to switch clients.
 func InitWithClient(ctx context.Context, c LDClient, opts InitOptions) (LDClient, error) {
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
-	if currentClient() == nil {
-		if err := setupTelemetry(ctx, sdkKey(opts), opts); err != nil {
-			sdkLogger().Warn("OpenTelemetry setup failed; continuing without tracing", "error", err)
-		}
+	// Replacing the installed client would orphan it: when an InitClient was
+	// in flight, its callers already hold the client it built, and nothing
+	// would close that client or its streaming connection. The caller owns c,
+	// so it is not closed either.
+	if existing := currentClient(); existing != nil {
+		flushReports(existing)
+		return existing, nil
+	}
+	if err := setupTelemetry(ctx, sdkKey(opts), opts); err != nil {
+		sdkLogger().Warn("OpenTelemetry setup failed; continuing without tracing", "error", err)
 	}
 	setClient(c)
 	flushReports(c)

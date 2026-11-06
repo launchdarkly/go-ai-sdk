@@ -114,6 +114,77 @@ func TestInitConcurrentCallersShareOneClient(t *testing.T) {
 	}
 }
 
+// InitWithClient queues behind an InitClient that is still connecting. When
+// that attempt succeeds, its callers hold the client it built, so the passed
+// client must not replace it; when it fails, the passed client is installed.
+func TestInitWithClientDuringInFlightInit(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		initErr error
+	}{
+		{"attempt succeeds", nil},
+		{"attempt fails", errors.New("initialization timed out")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			release := make(chan struct{})
+			started := make(chan struct{})
+			built := &fakeLD{}
+			withLDFactory(t, func(string) (LDClient, error) {
+				close(started)
+				<-release
+				return built, tc.initErr
+			})
+			type result struct {
+				c   LDClient
+				err error
+			}
+			first, passed := make(chan result, 1), make(chan result, 1)
+			go func() {
+				c, err := InitClient(bg, InitOptions{SDKKey: "k", OTLPEndpoint: unreachableOTLP})
+				first <- result{c, err}
+			}()
+			<-started
+			byoc := &fakeLD{}
+			go func() {
+				c, err := InitWithClient(bg, byoc, InitOptions{OTLPEndpoint: unreachableOTLP})
+				passed <- result{c, err}
+			}()
+			// Give InitWithClient time to queue on the lock. If it has not, it
+			// runs after the attempt instead, which must end the same way.
+			time.Sleep(20 * time.Millisecond)
+			close(release)
+			f, p := <-first, <-passed
+			if p.err != nil {
+				t.Fatalf("InitWithClient: %v", p.err)
+			}
+			got, _ := GetClient()
+			if tc.initErr == nil {
+				if f.err != nil || f.c != built || p.c != built || got != built {
+					t.Errorf("InitClient=%v/%v InitWithClient=%v GetClient=%v; all want the built client", f.c, f.err, p.c, got)
+				}
+			} else {
+				if f.err == nil {
+					t.Error("InitClient succeeded with a client that did not initialize")
+				}
+				if p.c != byoc || got != byoc {
+					t.Errorf("InitWithClient=%v GetClient=%v; want the passed client", p.c, got)
+				}
+				if built.closed != 1 {
+					t.Errorf("failed attempt's client closed %d times, want 1", built.closed)
+				}
+			}
+			if byoc.closed != 0 {
+				t.Error("the caller's client was closed")
+			}
+			// Nothing is orphaned: Shutdown closes whichever client is installed.
+			_ = Shutdown(bg)
+			if tc.initErr == nil && built.closed != 1 {
+				t.Errorf("built client closed %d times after Shutdown, want 1", built.closed)
+			}
+		})
+	}
+}
+
 func TestBYOCAndSdkInfoLifecycle(t *testing.T) {
 	_ = Shutdown(bg)
 	t.Cleanup(func() { _ = Shutdown(bg) })
@@ -143,11 +214,13 @@ func TestBYOCAndSdkInfoLifecycle(t *testing.T) {
 	if len(info) != 2 || info[1].Data["aiSdkName"] != "late-pkg" {
 		t.Errorf("late registration: %v", info)
 	}
-	// Replacing a BYOC client without Shutdown does not reset reporting.
+	// A second InitWithClient keeps the installed client and reports nothing new.
 	other := &fakeLD{}
-	_, _ = InitWithClient(bg, other, InitOptions{})
-	if len(other.events("$ld:ai:sdk:info")) != 0 {
-		t.Error("replacing BYOC re-reported packages")
+	if c, _ := InitWithClient(bg, other, InitOptions{}); c != byoc {
+		t.Error("a second InitWithClient replaced the installed client")
+	}
+	if len(other.events("$ld:ai:sdk:info")) != 0 || len(byoc.events("$ld:ai:sdk:info")) != 2 {
+		t.Error("a second InitWithClient re-reported packages")
 	}
 	// Shutdown re-arms reporting for the next client.
 	_ = Shutdown(bg)
