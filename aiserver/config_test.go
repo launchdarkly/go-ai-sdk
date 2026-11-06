@@ -362,13 +362,13 @@ func TestSentinelErrors(t *testing.T) {
 			t.Errorf("%s: err = %v, want %v", c.key, err, c.want)
 		}
 	}
-	// The SDK's evaluation error is kept, so the message names the real cause.
-	f.evalErr = errors.New("feature flag evaluation called before LaunchDarkly client initialization completed")
+	// The SDK's evaluation error is wrapped, so errors.Is matches the cause.
+	f.evalErr = ld.ErrClientNotInitialized
 	_, err := Config(ConfigArgs{Key: "missing", Handlers: []*ProviderHandler{anth}}).Invoke(bg, "", userCtx)
-	if !errors.Is(err, ErrConfigNotFound) || !strings.Contains(err.Error(), "before LaunchDarkly client initialization") {
+	if !errors.Is(err, ErrConfigNotFound) || !errors.Is(err, ld.ErrClientNotInitialized) {
 		t.Errorf("evaluation error lost: %v", err)
 	}
-	if _, err := Graph("missing-graph", GraphOptions{Handlers: []*ProviderHandler{anth}}).Invoke(bg, "", userCtx); err == nil || !strings.Contains(err.Error(), "before LaunchDarkly client initialization") {
+	if _, err := Graph("missing-graph", GraphOptions{Handlers: []*ProviderHandler{anth}}).Invoke(bg, "", userCtx); !errors.Is(err, ld.ErrClientNotInitialized) {
 		t.Errorf("graph evaluation error lost: %v", err)
 	}
 }

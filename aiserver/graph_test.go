@@ -8,7 +8,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	ld "github.com/launchdarkly/go-server-sdk/v7"
+	"github.com/launchdarkly/go-server-sdk/v7/ldcomponents"
+	"github.com/launchdarkly/go-server-sdk/v7/testhelpers/ldtestdata"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -191,6 +195,26 @@ func TestReverseTraverseVisitsEveryChildBeforeItsParent(t *testing.T) {
 		if err != nil || v != "root" || !reflect.DeepEqual(order, want) {
 			t.Errorf("%s: reverse order = %v (%v, %v), want %v", key, order, v, err, want)
 		}
+	}
+}
+
+func TestMissingGraphFlagIsDisabled(t *testing.T) {
+	td := ldtestdata.DataSource()
+	c, err := ld.MakeCustomClient("k", ld.Config{DataSource: td, Events: ldcomponents.NoEvents()}, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = Shutdown(bg) })
+	if _, err := InitWithClient(bg, c, InitOptions{OTLPEndpoint: unreachableOTLP}); err != nil {
+		t.Fatal(err)
+	}
+	def, err := ResolveGraph(bg, "missing-graph", userCtx, GraphOptions{})
+	if err != nil || def == nil || def.Enabled {
+		t.Fatalf("def = %+v err = %v, want disabled and nil error", def, err)
+	}
+	_, err = Graph("missing-graph", GraphOptions{Handlers: []*ProviderHandler{(&recordingHandler{}).handler()}}).Invoke(bg, "hi", userCtx)
+	if !errors.Is(err, ErrGraphDisabled) {
+		t.Errorf("Invoke err = %v, want ErrGraphDisabled", err)
 	}
 }
 

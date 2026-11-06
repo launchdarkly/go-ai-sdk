@@ -71,7 +71,7 @@ func readVariationWith(ctx context.Context, key string, userCtx ldcontext.Contex
 		// No AI Config came back. Keep the SDK's reason (client not ready,
 		// unknown flag, wrong type) so the error names the real cause.
 		if evalErr != nil {
-			return nil, nil, fmt.Errorf("%w: variation %s returned null: %v", ErrConfigNotFound, key, evalErr)
+			return nil, nil, fmt.Errorf("%w: variation %s returned null: %w", ErrConfigNotFound, key, evalErr)
 		}
 		return nil, nil, fmt.Errorf("%w: variation %s returned null: the flag does not exist or is not an AI Config", ErrConfigNotFound, key)
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
+	ld "github.com/launchdarkly/go-server-sdk/v7"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -525,9 +526,11 @@ func (d *GraphDefinition) Route(ctx context.Context, n *GraphNode, input string,
 }
 
 // resolveDefinition fetches the topology and every node config. A missing
-// root or a disabled node is a turned-off graph: Enabled false, nil error.
-// Init, evaluation, parse, and node-resolution failures are errors. Either
-// way the returned definition is non-nil and safe to use.
+// flag, a rootless variation, or a disabled node is a turned-off graph:
+// Enabled false, nil error. The server SDK returns an unknown key as an
+// error with the default value; that is still turned off. A client that is
+// not ready, a malformed topology, and a node that fails for any other
+// reason are errors. Either way the returned definition is non-nil.
 func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Context, opts GraphOptions) (*GraphDefinition, error) {
 	def := &GraphDefinition{Key: key, userCtx: userCtx, opts: opts, nodes: map[string]*GraphNode{}}
 	off := func() *GraphDefinition {
@@ -539,7 +542,9 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 		return off(), err
 	}
 	v, evalErr := c.JSONVariation(key, userCtx, ldvalue.ObjectBuild().Build())
-	if evalErr != nil {
+	// An unknown flag comes back as the default plus an error. Only a client
+	// that is not ready is an evaluation failure; no root below is turned off.
+	if errors.Is(evalErr, ld.ErrClientNotInitialized) {
 		return off(), fmt.Errorf("graph %q: %w", key, evalErr)
 	}
 	raw, _ := variationToAny(v).(map[string]any)
