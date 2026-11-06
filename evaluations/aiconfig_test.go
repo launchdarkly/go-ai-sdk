@@ -41,7 +41,7 @@ func linked(extra map[string]any) map[string]any {
 	return v
 }
 
-func aiArgs(h ...*aiserver.ProviderHandler) RunArgs {
+func aiArgs(h ...*aiserver.ProviderHandler) RunOptions {
 	a := baseArgs(nil)
 	a.Handler, a.Handlers, a.Generation = nil, h, nil
 	a.AIConfig = &AIConfigRef{Key: "cfg", Variation: "v1"}
@@ -52,13 +52,13 @@ var sysMsgs = []any{map[string]any{"role": "system", "content": "SYS"}}
 
 func TestAIConfigHappyPathSequence(t *testing.T) {
 	e := aiConfigEnv(t, "completion", linked(map[string]any{"messages": sysMsgs, "tools": []any{map[string]any{"key": "lookup", "version": 4}}}))
-	e.route("GET", "projects/proj/ai-tools/lookup", resp{body: map[string]any{"version": 4}})
 	var rec recorder
+	m := e.module()
 	args := aiArgs(handler("OpenAI", aiserver.ModeMessages, rec.wrap(nil)))
-	args.Tools = map[string]aiserver.ToolHandler{"lookup": noopTool}
-	mustRun(t, e.module(), args)
-	assertSequence(t, e, cfgGET, varGET, modelGET, "GET projects/proj/ai-tools/lookup",
-		"GET projects/proj/datasets/ds", rowsPath, evalPath, runPath, summaryPath)
+	args.Tools = []EvalTool{e.libTool(m, "lookup", noopTool, map[string]any{"version": 4})}
+	mustRun(t, m, args)
+	// Run issues no tool request: Tools().Get already pinned the version.
+	assertSequence(t, e, cfgGET, varGET, modelGET, "GET projects/proj/datasets/ds", rowsPath, evalPath, runPath, summaryPath)
 	cfg := rec.all()[0].Config
 	// The model config's id wins over modelName; params layer variation over model config.
 	if cfg.Model.Name != "gpt-4o" || !reflect.DeepEqual(cfg.Model.Parameters, map[string]any{"max_tokens": 100.0, "temperature": 0.5}) {
@@ -241,25 +241,34 @@ func TestAIConfigVariationTools(t *testing.T) {
 	t.Run("empty tools runs with none", func(t *testing.T) {
 		e := aiConfigEnv(t, "completion", linked(map[string]any{"messages": sysMsgs, "tools": tools}))
 		args := aiArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-		args.Tools = map[string]aiserver.ToolHandler{}
+		args.Tools = []EvalTool{}
 		mustRun(t, e.module(), args)
 		assertNoURL(t, e, "ai-tools")
 		if !strings.Contains(e.logs.String(), "lookup") || !strings.Contains(e.logs.String(), "refund") {
 			t.Fatalf("missing tool warnings: %s", e.logs)
 		}
 	})
-	t.Run("version drift warns and uses the resolved version", func(t *testing.T) {
+	t.Run("version drift warns and uses the version Get pinned", func(t *testing.T) {
 		e := aiConfigEnv(t, "completion", linked(map[string]any{"messages": sysMsgs, "tools": tools[:1]}))
-		e.route("GET", "projects/proj/ai-tools/lookup", resp{body: map[string]any{"version": 9}})
+		m := e.module()
 		args := aiArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-		args.Tools = map[string]aiserver.ToolHandler{"lookup": noopTool}
-		mustRun(t, e.module(), args)
+		args.Tools = []EvalTool{e.libTool(m, "lookup", noopTool, map[string]any{"version": 9})}
+		mustRun(t, m, args)
 		logs := e.logs.String()
-		if !strings.Contains(logs, "pinnedVersion=4") || !strings.Contains(logs, "resolvedVersion=9") {
+		if !strings.Contains(logs, "pinnedVersion=4") || !strings.Contains(logs, "runVersion=9") {
 			t.Fatalf("drift warning: %s", logs)
 		}
 		if !strings.Contains(toJSON(e.body("POST", "projects/proj/evaluations")), `"version":9`) {
-			t.Fatal("run must use the resolved version")
+			t.Fatal("run must use the version Get pinned")
+		}
+	})
+	t.Run("an inline tool for a variation tool does not warn about drift", func(t *testing.T) {
+		e := aiConfigEnv(t, "completion", linked(map[string]any{"messages": sysMsgs, "tools": tools[:1]}))
+		args := aiArgs(handler("OpenAI", aiserver.ModeMessages, nil))
+		args.Tools = []EvalTool{{Key: "lookup", Implementation: noopTool, Schema: map[string]any{}}}
+		mustRun(t, e.module(), args)
+		if strings.Contains(e.logs.String(), "pinnedVersion") || strings.Contains(e.logs.String(), "does not use") {
+			t.Fatalf("unexpected warning: %s", e.logs)
 		}
 	})
 }

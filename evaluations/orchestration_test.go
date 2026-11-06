@@ -40,11 +40,11 @@ const (
 
 func TestHappyPathHostedSequence(t *testing.T) {
 	e := newEnv(t, 2)
-	e.route("GET", "projects/proj/ai-tools/lookup", resp{body: map[string]any{"version": 4, "description": "d", "schema": map[string]any{"type": "object"}}})
+	m := e.module()
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-	args.Tools = map[string]aiserver.ToolHandler{"lookup": noopTool}
-	res := mustRun(t, e.module(), args)
-	assertSequence(t, e, "GET projects/proj/ai-tools/lookup", "GET projects/proj/datasets/ds", rowsPath, evalPath, runPath, summaryPath)
+	args.Tools = []EvalTool{e.libTool(m, "lookup", noopTool, map[string]any{"version": 4, "description": "d", "schema": map[string]any{"type": "object"}})}
+	res := mustRun(t, m, args)
+	assertSequence(t, e, "GET projects/proj/datasets/ds", rowsPath, evalPath, runPath, summaryPath)
 	for _, bad := range []string{"/generation-results", "/evaluation-results", "dataset-rows", "/cancel"} {
 		assertNoURL(t, e, bad)
 	}
@@ -65,30 +65,31 @@ func TestHappyPathHostedSequence(t *testing.T) {
 func TestHappyPathAllInlineToolsSequence(t *testing.T) {
 	e := newEnv(t, 1)
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-	args.InlineTools = map[string]InlineTool{"lookup": {Implementation: noopTool, Schema: map[string]any{}}}
+	args.Tools = []EvalTool{{Key: "lookup", Implementation: noopTool, Schema: map[string]any{}}}
 	mustRun(t, e.module(), args)
 	assertSequence(t, e, "GET projects/proj/datasets/ds", rowsPath, evalPath, runPath, summaryPath)
 	assertNoURL(t, e, "/ai-tools")
 }
 
-func TestMixedToolsLookUpLibraryKeysOnly(t *testing.T) {
+// Run issues no tool request, keeps the caller's tool order, and sends each
+// library tool's pinned version and each inline tool's definition.
+func TestMixedToolsIssueNoToolRequest(t *testing.T) {
 	e := newEnv(t, 1)
-	for _, k := range []string{"alpha", "gamma"} {
-		e.route("GET", "projects/proj/ai-tools/"+k, resp{body: map[string]any{"version": 1}})
-	}
+	m := e.module()
+	gamma := e.libTool(m, "gamma", noopTool, map[string]any{"version": 3})
+	alpha := e.libTool(m, "alpha", noopTool, map[string]any{"version": 1})
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-	args.Tools = map[string]aiserver.ToolHandler{"alpha": noopTool, "gamma": noopTool}
-	args.InlineTools = map[string]InlineTool{"beta": {Implementation: noopTool, Schema: map[string]any{}}}
-	mustRun(t, e.module(), args)
-	var keys []string
-	for _, s := range e.sequence() {
-		if k, ok := strings.CutPrefix(s, "GET projects/proj/ai-tools/"); ok {
-			keys = append(keys, k)
-		}
+	args.Tools = []EvalTool{gamma, {Key: "beta", Implementation: noopTool, Schema: map[string]any{}}, alpha}
+	mustRun(t, m, args)
+	assertNoURL(t, e, "/ai-tools")
+	got := e.body("POST", "projects/proj/evaluations").(map[string]any)["tools"]
+	want := []any{
+		map[string]any{"key": "gamma", "version": 3.0, "source": "library"},
+		map[string]any{"key": "beta", "schema": map[string]any{}, "description": "", "source": "inline"},
+		map[string]any{"key": "alpha", "version": 1.0, "source": "library"},
 	}
-	slices.Sort(keys)
-	if !reflect.DeepEqual(keys, []string{"alpha", "gamma"}) {
-		t.Fatalf("tool GETs for %v", keys)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("create body tools\n got %v\nwant %v", got, want)
 	}
 }
 
@@ -96,7 +97,7 @@ func TestHappyPathInlineDatasetSequence(t *testing.T) {
 	e := newEnv(t, 2)
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
 	args.Dataset = InlineRows{map[string]any{"input": "a"}, map[string]any{"input": "b"}}
-	args.InlineTools = map[string]InlineTool{"lookup": {Implementation: noopTool, Schema: map[string]any{}}}
+	args.Tools = []EvalTool{{Key: "lookup", Implementation: noopTool, Schema: map[string]any{}}}
 	mustRun(t, e.module(), args)
 	assertSequence(t, e, evalPath, runPath, uploadPath, summaryPath)
 	assertNoURL(t, e, "/datasets/")
@@ -107,44 +108,79 @@ func TestHappyPathInlineDatasetSequence(t *testing.T) {
 
 func TestInlineDatasetWithLibraryTool(t *testing.T) {
 	e := newEnv(t, 1)
-	e.route("GET", "projects/proj/ai-tools/lookup", resp{body: map[string]any{"version": 1}})
+	m := e.module()
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
 	args.Dataset = InlineRows{map[string]any{"input": "a"}}
-	args.Tools = map[string]aiserver.ToolHandler{"lookup": noopTool}
-	mustRun(t, e.module(), args)
-	assertSequence(t, e, "GET projects/proj/ai-tools/lookup", evalPath, runPath, uploadPath, summaryPath)
+	args.Tools = []EvalTool{e.libTool(m, "lookup", noopTool, map[string]any{"version": 1})}
+	mustRun(t, m, args)
+	assertSequence(t, e, evalPath, runPath, uploadPath, summaryPath)
 }
 
-func TestToolResolution(t *testing.T) {
-	t.Run("404 names the tool and project and creates nothing", func(t *testing.T) {
+func TestToolsGet(t *testing.T) {
+	t.Run("pins the version and records the source and project", func(t *testing.T) {
 		e := newEnv(t, 1)
-		args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-		args.Tools = map[string]aiserver.ToolHandler{"lokup": noopTool}
-		err := runErr(t, e.module(), args, ErrNotFound, `"lokup"`, `"proj"`)
-		var apiErr *APIError
-		if !errors.As(err, &apiErr) {
-			t.Fatal("404 should wrap the APIError")
+		tool := e.libTool(e.module(), "t", noopTool, map[string]any{"version": 7, "description": "d", "schema": map[string]any{"type": "object"}})
+		if tool.Source() != ToolSourceLibrary || tool.Version() != 7 || tool.ProjectKey() != "proj" || tool.Key != "t" ||
+			tool.Description != "d" || !reflect.DeepEqual(tool.Schema, map[string]any{"type": "object"}) {
+			t.Fatalf("tool %+v source %s version %d project %q", tool, tool.Source(), tool.Version(), tool.ProjectKey())
 		}
-		for _, s := range e.sequence() {
-			if strings.HasPrefix(s, "POST") {
-				t.Fatalf("POST after a tool 404: %v", e.sequence())
-			}
+		inline := EvalTool{Key: "i"}
+		if inline.Source() != ToolSourceInline || inline.Version() != 0 || inline.ProjectKey() != "" {
+			t.Fatal("a literal must be inline")
+		}
+	})
+	t.Run("a tool edited after Get fails Run before any request", func(t *testing.T) {
+		e := newEnv(t, 1)
+		m := e.module()
+		tool := e.libTool(m, "lookup", noopTool, map[string]any{"version": 4, "schema": map[string]any{"type": "object"}})
+		tool.Schema["type"] = "string" // the returned map is the caller's copy, not the pin
+		args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
+		args.Tools = []EvalTool{tool}
+		runErr(t, m, args, ErrInvalidArgument, `library tool "lookup" was changed`)
+		e.assertNoRequests()
+		if tool.library.schema["type"] != "object" {
+			t.Fatal("editing the returned schema must not change the pin")
+		}
+	})
+	t.Run("404 names the tool and project", func(t *testing.T) {
+		e := newEnv(t, 1)
+		_, err := e.module().Tools().Get(context.Background(), "lokup", noopTool)
+		var apiErr *APIError
+		if !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), `"lokup"`) || !strings.Contains(err.Error(), `"proj"`) || !errors.As(err, &apiErr) {
+			t.Fatalf("err = %v", err)
 		}
 	})
 	t.Run("missing version", func(t *testing.T) {
 		e := newEnv(t, 1)
 		e.route("GET", "projects/proj/ai-tools/t", resp{body: map[string]any{"schema": map[string]any{}}})
-		args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-		args.Tools = map[string]aiserver.ToolHandler{"t": noopTool}
-		runErr(t, e.module(), args, ErrInvalidResponse, `"t"`, "version")
+		_, err := e.module().Tools().Get(context.Background(), "t", noopTool)
+		if !errors.Is(err, ErrInvalidResponse) || !strings.Contains(err.Error(), "version") {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("invalid arguments fail before any request", func(t *testing.T) {
+		for _, tc := range []struct {
+			key  string
+			impl aiserver.ToolHandler
+			want string
+		}{{" ", noopTool, "blank"}, {"Lookup", noopTool, `use "lookup"`}, {"t", nil, "implementation"}, {"t", aiserver.ToolFunc(nil), "implementation"}} {
+			e := newEnv(t, 1)
+			_, err := e.module().Tools().Get(context.Background(), tc.key, tc.impl)
+			if !errors.Is(err, ErrInvalidArgument) || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Get(%q): %v", tc.key, err)
+			}
+			if len(e.requests()) != 0 {
+				t.Fatalf("Get(%q) sent %v", tc.key, e.sequence())
+			}
+		}
 	})
 	t.Run("description and schema default", func(t *testing.T) {
 		e := newEnv(t, 1)
-		e.route("GET", "projects/proj/ai-tools/t", resp{body: map[string]any{"version": 2}})
+		m := e.module()
 		var rec recorder
 		args := baseArgs(handler("OpenAI", aiserver.ModeMessages, rec.wrap(nil)))
-		args.Tools = map[string]aiserver.ToolHandler{"t": noopTool}
-		mustRun(t, e.module(), args)
+		args.Tools = []EvalTool{e.libTool(m, "t", noopTool, map[string]any{"version": 2})}
+		mustRun(t, m, args)
 		tool := rec.all()[0].Config.Tools["t"]
 		if tool.Description != "" || tool.Parameters == nil || len(tool.Parameters) != 0 {
 			t.Fatalf("defaults %+v", tool)
@@ -178,7 +214,7 @@ func TestDatasetResolutionAndPagination(t *testing.T) {
 		if e.count("datasets/ds/rows?mode=all&limit=200&offset=0") != 1 || e.count("datasets/ds/rows?mode=all&limit=200&offset=200") != 1 {
 			t.Fatalf("pages: %v", e.sequence())
 		}
-		if n := len(e.ld.events(GenerationEventName)); n != 250 {
+		if n := len(e.ld.events(generationEventName)); n != 250 {
 			t.Fatalf("generated %d rows", n)
 		}
 	})
@@ -204,16 +240,15 @@ func TestDatasetResolutionAndPagination(t *testing.T) {
 }
 
 func TestEvaluationCreateBody(t *testing.T) {
-	libResp := resp{body: map[string]any{"version": 4}}
 	cases := []struct {
 		name   string
-		mutate func(*RunArgs)
+		mutate func(a *RunOptions, lib EvalTool)
 		want   map[string]any
 	}{
-		{"no tools", func(a *RunArgs) {}, map[string]any{
+		{"no tools", func(*RunOptions, EvalTool) {}, map[string]any{
 			"name": "eval-key", "generationProvider": "OpenAI", "generationModel": "gpt-4o", "messages": []any{}}},
-		{"library only, with parameters and snippets", func(a *RunArgs) {
-			a.Tools = map[string]aiserver.ToolHandler{"lib": noopTool}
+		{"library only, with parameters and snippets", func(a *RunOptions, lib EvalTool) {
+			a.Tools = []EvalTool{lib}
 			a.Generation.Parameters = map[string]any{"temperature": 0.2}
 			a.Generation.PromptSnippets = map[string]string{"tone": "kind"}
 			a.Generation.Messages = []aiserver.Message{{Role: "system", Text: "be {{snippet.tone}}"}}
@@ -222,25 +257,25 @@ func TestEvaluationCreateBody(t *testing.T) {
 			"parameters": map[string]any{"temperature": 0.2}, "promptSnippets": map[string]any{"tone": "kind"},
 			"messages": []any{map[string]any{"role": "system", "content": "be {{snippet.tone}}"}},
 			"tools":    []any{map[string]any{"key": "lib", "version": 4.0, "source": "library"}}}},
-		{"mixed, in key order, instructions wrapped", func(a *RunArgs) {
+		{"mixed, in list order, instructions wrapped", func(a *RunOptions, lib EvalTool) {
 			a.Handler = handler("OpenAI", aiserver.ModeAgent, nil)
-			a.Generation.Mode, a.Generation.Instructions = ModeAgent, "act"
-			a.Tools = map[string]aiserver.ToolHandler{"lib": noopTool}
-			a.InlineTools = map[string]InlineTool{"aaa": {Implementation: noopTool, Schema: map[string]any{"type": "object"}}}
+			a.Generation.Mode, a.Generation.Instructions = GenerationModeAgent, "act"
+			a.Tools = []EvalTool{lib, {Key: "aaa", Implementation: noopTool, Schema: map[string]any{"type": "object"}}}
 		}, map[string]any{
 			"name": "eval-key", "generationProvider": "OpenAI", "generationModel": "gpt-4o",
 			"messages": []any{map[string]any{"role": "system", "content": "act"}},
 			"tools": []any{
-				map[string]any{"key": "aaa", "schema": map[string]any{"type": "object"}, "description": "", "source": "inline"},
-				map[string]any{"key": "lib", "version": 4.0, "source": "library"}}}},
+				map[string]any{"key": "lib", "version": 4.0, "source": "library"},
+				map[string]any{"key": "aaa", "schema": map[string]any{"type": "object"}, "description": "", "source": "inline"}}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, 1)
-			e.route("GET", "projects/proj/ai-tools/lib", libResp)
+			m := e.module()
+			lib := e.libTool(m, "lib", noopTool, map[string]any{"version": 4})
 			args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-			tc.mutate(&args)
-			mustRun(t, e.module(), args)
+			tc.mutate(&args, lib)
+			mustRun(t, m, args)
 			if got := e.body("POST", "projects/proj/evaluations"); !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("create body\n got: %s\nwant: %s", toJSON(got), toJSON(tc.want))
 			}
@@ -291,8 +326,13 @@ func TestPathSegmentsAreEncoded(t *testing.T) {
 	e.route("GET", runs+"/"+enc(run)+"/summary", resp{body: map[string]any{"total": 1, "passed": 1}})
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
 	args.Dataset = DatasetKey(ds)
-	args.Tools = map[string]aiserver.ToolHandler{tool: noopTool}
-	res := mustRun(t, e.moduleWith(Options{ProjectKey: p}), args)
+	m := e.moduleWith(InitEvaluationsOptions{ProjectKey: p})
+	lib, err := m.Tools().Get(context.Background(), tool, noopTool)
+	if err != nil {
+		t.Fatalf("Tools().Get on the encoded path: %v", err)
+	}
+	args.Tools = []EvalTool{lib}
+	res := mustRun(t, m, args)
 	if !strings.HasSuffix(res.URL, "/projects/my%20proj/ai/evaluations/ev%2F1/runs/run%3F1") {
 		t.Fatalf("url %s", res.URL)
 	}
@@ -303,7 +343,7 @@ func TestPathSegmentsAreEncoded(t *testing.T) {
 	e2.route("POST", runs+"/"+enc(run)+"/dataset-rows", resp{status: 400})
 	e2.route("POST", runs+"/"+enc(run)+"/cancel", resp{status: 200})
 	args.Dataset, args.Tools = InlineRows{map[string]any{"input": "x"}}, nil
-	runErr(t, e2.moduleWith(Options{ProjectKey: p}), args, ErrUploadFailed)
+	runErr(t, e2.moduleWith(InitEvaluationsOptions{ProjectKey: p}), args, ErrUploadFailed)
 	if e2.count("run%3F1/dataset-rows") != 1 || e2.count("run%3F1/cancel") != 1 {
 		t.Fatalf("encoded upload/cancel paths: %v", e2.sequence())
 	}
@@ -314,7 +354,7 @@ func TestInlineUploadBodyAndRendering(t *testing.T) {
 	var rec recorder
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, rec.wrap(nil)))
 	args.Dataset = InlineRows{
-		DatasetRow{Input: "Where is order {{order_id}}?", Variables: map[string]any{"order_id": "A-17"}},
+		map[string]any{"input": "Where is order {{order_id}}?", "variables": map[string]any{"order_id": "A-17"}},
 		map[string]any{"input": "b", "expectedOutput": "B", "metadata": map[string]any{"m": 1}, "rowIdx": 1},
 	}
 	mustRun(t, e.module(), args)
@@ -373,7 +413,7 @@ func TestInlineUploadBatches(t *testing.T) {
 			lastUpload = i
 		}
 	}
-	if first := slices.Index(log, "track "+GenerationEventName); first < lastUpload {
+	if first := slices.Index(log, "track "+generationEventName); first < lastUpload {
 		t.Fatalf("a track (%d) preceded the last upload (%d)", first, lastUpload)
 	}
 }
@@ -449,7 +489,7 @@ func TestHostedRegressionEventID(t *testing.T) {
 	if e.count("dataset-rows") != 0 {
 		t.Fatal("hosted run uploaded rows")
 	}
-	ev := e.ld.events(GenerationEventName)[0].Data
+	ev := e.ld.events(generationEventName)[0].Data
 	// json.dumps(identity, sort_keys=True, separators=(",", ":")) in Python.
 	if ev["eventId"] != "4de0c74ccd1dfc456a3f4024eca2a6cda2d80455eb80ddedd94146198b44c784" {
 		t.Fatalf("eventId %v", ev["eventId"])

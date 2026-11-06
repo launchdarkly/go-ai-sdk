@@ -244,18 +244,20 @@ func (e *fakeEnv) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: status, Header: h, Body: io.NopCloser(bytes.NewReader(b)), Request: req}, nil
 }
 
-// module builds a Module for project "proj" over the fake transport with
+// module builds an EvaluationsModule for project "proj" over the fake transport with
 // instant sleeps.
-func (e *fakeEnv) module() *Module { return e.moduleWith(Options{ProjectKey: "proj"}) }
+func (e *fakeEnv) module() *EvaluationsModule {
+	return e.moduleWith(InitEvaluationsOptions{ProjectKey: "proj"})
+}
 
 // moduleWith is module with caller options; the transport and logger are set here.
-func (e *fakeEnv) moduleWith(opts Options) *Module {
+func (e *fakeEnv) moduleWith(opts InitEvaluationsOptions) *EvaluationsModule {
 	e.t.Helper()
 	e.t.Setenv("LD_API_TOKEN", "api-token")
 	opts.HTTPClient, opts.Logger = &http.Client{Transport: e}, slog.New(slog.NewTextHandler(e.logs, nil))
-	m, err := Init(opts)
+	m, err := InitEvaluations(opts)
 	if err != nil {
-		e.t.Fatalf("Init: %v", err)
+		e.t.Fatalf("InitEvaluations: %v", err)
 	}
 	m.api.sleep = func(ctx context.Context, d time.Duration) error { return ctx.Err() }
 	return m
@@ -354,13 +356,13 @@ func (r *recorder) all() []aiserver.HandlerRequest {
 }
 
 func gen() *GenerationConfig {
-	return &GenerationConfig{Provider: "OpenAI", Model: "gpt-4o", Mode: ModeCompletion}
+	return &GenerationConfig{Provider: "OpenAI", Model: "gpt-4o", Mode: GenerationModeCompletion}
 }
 
 // baseArgs is a valid hosted, generation-source run over one OpenAI
 // messages handler.
-func baseArgs(h *aiserver.ProviderHandler) RunArgs {
-	return RunArgs{Key: "eval-key", Dataset: DatasetKey("ds"), Handler: h, Generation: gen(), PollTimeout: time.Second}
+func baseArgs(h *aiserver.ProviderHandler) RunOptions {
+	return RunOptions{Key: "eval-key", Dataset: DatasetKey("ds"), Handler: h, Generation: gen(), PollTimeout: time.Second}
 }
 
 // judgeVariation is what flag delivery serves for a judge.
@@ -408,7 +410,22 @@ func constScorer(v float64) ScorerFunc {
 
 func ptr[T any](v T) *T { return &v }
 
-func mustRun(t *testing.T, m *Module, args RunArgs) *EvalRunResult {
+// libTool reads library tool key with Tools().Get over a route answering
+// body, then clears the request logs so the test sees only Run's requests.
+func (e *fakeEnv) libTool(m *EvaluationsModule, key string, impl aiserver.ToolHandler, body map[string]any) EvalTool {
+	e.t.Helper()
+	e.route("GET", "projects/proj/ai-tools/"+segment(key), resp{body: body})
+	tool, err := m.Tools().Get(context.Background(), key, impl)
+	if err != nil {
+		e.t.Fatalf("Tools().Get(%q): %v", key, err)
+	}
+	e.mu.Lock()
+	e.reqs, e.log = nil, nil
+	e.mu.Unlock()
+	return tool
+}
+
+func mustRun(t *testing.T, m *EvaluationsModule, args RunOptions) *EvalRunResult {
 	t.Helper()
 	res, err := m.Run(context.Background(), args)
 	if err != nil {
@@ -417,7 +434,7 @@ func mustRun(t *testing.T, m *Module, args RunArgs) *EvalRunResult {
 	return res
 }
 
-func runErr(t *testing.T, m *Module, args RunArgs, sentinel error, contains ...string) error {
+func runErr(t *testing.T, m *EvaluationsModule, args RunOptions, sentinel error, contains ...string) error {
 	t.Helper()
 	_, err := m.Run(context.Background(), args)
 	if err == nil {

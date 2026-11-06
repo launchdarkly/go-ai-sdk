@@ -15,10 +15,9 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
 )
 
-// HelperName is the usage ID Init reports: the one the AI SDKs' usage-ID
-// registry assigns to initEvaluations, which Python reports too, so usage
-// aggregates across languages.
-const HelperName = "experimental.initEvaluations"
+// helperName is the usage ID InitEvaluations reports. The TypeScript and
+// Python SDKs report the same ID, so usage aggregates across languages.
+const helperName = "client.initEvaluations"
 
 // Seams replaced by tests: the core client singleton, its initialization,
 // and judge resolution through flag delivery.
@@ -37,10 +36,10 @@ var (
 
 const defaultConcurrency = 10
 
-// Options configure Init. Each string option falls back to its environment
-// variable; a blank value at either level counts as unset. The management API
-// and UI hosts are fixed (APIBaseURI, UIBaseURI) and have no option.
-type Options struct {
+// InitEvaluationsOptions configure InitEvaluations. Each string option falls
+// back to its environment variable; a blank value at either level counts as
+// unset.
+type InitEvaluationsOptions struct {
 	// ProjectKey is the project holding the evaluations, runs, tools,
 	// datasets and judges. Default: LD_PROJECT_KEY.
 	ProjectKey string
@@ -59,18 +58,37 @@ type Options struct {
 	MaxAttempts int
 	// Logger receives warnings. Default: the SDK logger (aiserver.SetLogger).
 	Logger *slog.Logger
+	// APIBaseURI is the management API host. Default: LD_API_BASE_URI, then
+	// https://app.launchdarkly.com. LD_BASE_URI is never used: it configures
+	// flag delivery and may point at a relay proxy.
+	APIBaseURI string
+	// UIBaseURI is the host of the run link in the result; it carries no API
+	// traffic. Default: LD_UI_BASE_URI, then https://app.launchdarkly.com.
+	// It is not derived from APIBaseURI.
+	UIBaseURI string
 }
 
-// Module runs evaluations from code. Create it with Init.
-type Module struct {
+// EvaluationsModule runs evaluations from code. Create it with InitEvaluations.
+type EvaluationsModule struct {
 	api        *apiClient
 	projectKey string
+	uiBase     string
 	sdkKey     string
 	logger     *slog.Logger
 	flushBound int
 }
 
 func env(name string) string { return strings.TrimSpace(os.Getenv(name)) }
+
+// host resolves a host option: explicit, then env, then the default, with
+// any trailing "/" stripped. A blank value at either level counts as unset.
+func host(explicit, name string) string {
+	v := option(explicit, name)
+	if v == "" {
+		v = defaultBaseURI
+	}
+	return strings.TrimRight(v, "/")
+}
 
 // option is the trimmed explicit value, else the trimmed environment value.
 func option(explicit, name string) string {
@@ -80,40 +98,41 @@ func option(explicit, name string) string {
 	return env(name)
 }
 
-// Init resolves the project key and both credentials and returns the
+// InitEvaluations resolves the project key and both credentials and returns the
 // module. It performs no network I/O and fails on a missing value in this
 // order: project key, token, SDK key.
-func Init(opts Options) (*Module, error) {
-	aiserver.ReportUsage(HelperName, "", "")
+func InitEvaluations(opts InitEvaluationsOptions) (*EvaluationsModule, error) {
+	aiserver.ReportUsage(helperName, "", "")
 	project := option(opts.ProjectKey, "LD_PROJECT_KEY")
 	if project == "" {
-		return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly project key; set LD_PROJECT_KEY or pass Options.ProjectKey", ErrMissingCredential)
+		return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly project key; set LD_PROJECT_KEY or pass InitEvaluationsOptions.ProjectKey", ErrMissingCredential)
 	}
 	token := option(opts.APIToken, "LD_API_TOKEN")
 	if token == "" {
-		return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly API access token; set LD_API_TOKEN or pass Options.APIToken", ErrMissingCredential)
+		return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly API access token; set LD_API_TOKEN or pass InitEvaluationsOptions.APIToken", ErrMissingCredential)
 	}
 	sdkKey := option(opts.SDKKey, "LD_SDK_KEY")
 	if sdkKey == "" {
 		if _, err := getClient(); err != nil {
 			return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly SDK key and no initialized client to emit result events with; "+
-				"results reach LaunchDarkly only as SDK events, so set LD_SDK_KEY, pass Options.SDKKey, or call aiserver.InitWithClient first", ErrMissingCredential)
+				"results reach LaunchDarkly only as SDK events, so set LD_SDK_KEY, pass InitEvaluationsOptions.SDKKey, or call aiserver.InitWithClient first", ErrMissingCredential)
 		}
 	}
 	logger := opts.Logger
 	if logger == nil {
 		logger = bridge.Logger()
 	}
-	return &Module{api: newAPIClient(token, opts.HTTPClient, opts.RequestTimeout, opts.MaxAttempts),
-		projectKey: project, sdkKey: sdkKey, logger: logger, flushBound: defaultFlushBound}, nil
+	return &EvaluationsModule{api: newAPIClient(host(opts.APIBaseURI, "LD_API_BASE_URI"), token, opts.HTTPClient, opts.RequestTimeout, opts.MaxAttempts),
+		projectKey: project, uiBase: host(opts.UIBaseURI, "LD_UI_BASE_URI"), sdkKey: sdkKey, logger: logger, flushBound: defaultFlushBound}, nil
 }
 
 // SDKKey is the key the module initializes a client with; "" when it relies
 // on a client the caller installed.
-func (m *Module) SDKKey() string { return m.sdkKey }
+func (m *EvaluationsModule) SDKKey() string { return m.sdkKey }
 
-// resolveClient runs before any management API request.
-func (m *Module) resolveClient(ctx context.Context) (aiserver.LDClient, error) {
+// resolveClient runs at the start of Run, before Run's first management API
+// request. Tools().Get calls the management API without a client.
+func (m *EvaluationsModule) resolveClient(ctx context.Context) (aiserver.LDClient, error) {
 	if c, err := getClient(); err == nil {
 		if m.sdkKey != "" {
 			m.logger.Warn("a LaunchDarkly client is already initialized; evaluation events are sent with it and the evaluations SDK key is ignored. Both must point at the project under evaluation.")
@@ -134,7 +153,7 @@ func (m *Module) resolveClient(ctx context.Context) (aiserver.LDClient, error) {
 // pool, scores each generated row against the criteria, reports every result
 // as an event, and polls the run summary until LaunchDarkly has accounted
 // for every row.
-func (m *Module) Run(ctx context.Context, args RunArgs) (*EvalRunResult, error) {
+func (m *EvaluationsModule) Run(ctx context.Context, args RunOptions) (*EvalRunResult, error) {
 	r, err := m.prepare(args)
 	if err != nil {
 		return nil, err

@@ -16,7 +16,7 @@ import (
 // apiFixture is an apiClient over the fake transport that records delays.
 func apiFixture(t *testing.T) (*fakeEnv, *apiClient, *[]time.Duration) {
 	e := newEnv(t, 1)
-	c := newAPIClient("raw-token", &http.Client{Transport: e}, 0, 0)
+	c := newAPIClient(defaultBaseURI, "raw-token", &http.Client{Transport: e}, 0, 0)
 	var delays []time.Duration
 	c.sleep = func(_ context.Context, d time.Duration) error { delays = append(delays, d); return nil }
 	c.random = func() float64 { return 0.25 }
@@ -228,7 +228,7 @@ func TestAPIRealHTTPTimeout(t *testing.T) {
 		r.URL.Scheme, r.URL.Host = target.Scheme, target.Host
 		return http.DefaultTransport.RoundTrip(r)
 	})
-	c := newAPIClient("tok", &http.Client{Transport: rt}, 50*time.Millisecond, 3)
+	c := newAPIClient(defaultBaseURI, "tok", &http.Client{Transport: rt}, 50*time.Millisecond, 3)
 	c.sleep = func(context.Context, time.Duration) error { return nil }
 	v, err := c.get(context.Background(), "projects/"+segment("p/q")+"/x")
 	if err != nil || v.(map[string]any)["ok"] != true || calls.Load() != 2 {

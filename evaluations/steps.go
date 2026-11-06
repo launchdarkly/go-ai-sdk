@@ -34,10 +34,10 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	modeName := ModeCompletion // the API default
+	modeName := string(GenerationModeCompletion) // the API default
 	if v, present := cfgObj["mode"]; present && v != nil {
 		s, ok := v.(string)
-		if !ok || (s != ModeAgent && s != ModeCompletion && s != "judge") {
+		if !ok || (s != string(GenerationModeAgent) && s != string(GenerationModeCompletion) && s != "judge") {
 			return fmt.Errorf("evaluations: %w: AI Config %q has unsupported mode %#v", ErrInvalidConfig, ref.Key, v)
 		}
 		modeName = s
@@ -122,7 +122,7 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 		params = nil
 	}
 
-	g := GenerationConfig{Provider: provider, Model: modelName, Mode: modeName, Parameters: params,
+	g := GenerationConfig{Provider: provider, Model: modelName, Mode: GenerationMode(modeName), Parameters: params,
 		Instructions: instructions, Messages: messages}
 	if of, ok := latest["outputFormat"].(map[string]any); ok {
 		g.OutputFormat = of
@@ -138,19 +138,22 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 	r.gen, r.genHandler = g, h
 
 	tools := variationTools(latest)
-	if r.args.Tools == nil && r.args.InlineTools == nil && len(tools) > 0 {
+	if r.args.Tools == nil && len(tools) > 0 {
 		keys := make([]string, len(tools))
 		for i, t := range tools {
 			keys[i] = t.key
 		}
-		return fmt.Errorf("evaluations: %w: AI Config variation %q/%q uses tools with no implementation: %q; pass Tools or InlineTools with an implementation for each",
+		return fmt.Errorf("evaluations: %w: AI Config variation %q/%q uses tools with no implementation: %q; pass Tools with an EvalTool for each",
 			ErrInvalidConfig, ref.Key, ref.Variation, keys)
 	}
-	r.pinnedTools = map[string]int{}
 	for _, t := range tools {
-		r.pinnedTools[t.key] = t.version
-		if !r.hasTool(t.key) {
+		rt := r.findTool(t.key)
+		switch {
+		case rt == nil:
 			r.m.logger.Warn("AI Config variation attaches a tool this run does not use", "aiConfig", ref.Key, "variation", ref.Variation, "tool", t.key)
+		case !rt.inline && rt.version != t.version:
+			r.m.logger.Warn("AI Config variation pins a different tool version; the run uses the version Tools().Get pinned",
+				"aiConfig", ref.Key, "variation", ref.Variation, "tool", t.key, "pinnedVersion", t.version, "runVersion", rt.version)
 		}
 	}
 	if r.args.Criteria == nil {
@@ -168,13 +171,13 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 	return nil
 }
 
-func (r *runState) hasTool(key string) bool {
-	for _, t := range r.tools {
-		if t.key == key {
-			return true
+func (r *runState) findTool(key string) *runTool {
+	for i := range r.tools {
+		if r.tools[i].key == key {
+			return &r.tools[i]
 		}
 	}
-	return false
+	return nil
 }
 
 // latestVersion picks the item with the highest integer version.
@@ -264,39 +267,6 @@ func variationJudges(v map[string]any) []string {
 }
 
 // --- tools, dataset, records --------------------------------------
-
-// resolveTools pins each library tool's version; inline tools need nothing.
-func (r *runState) resolveTools(ctx context.Context) error {
-	for i := range r.tools {
-		t := &r.tools[i]
-		if t.inline {
-			continue
-		}
-		raw, err := r.m.api.get(ctx, "projects/"+r.project()+"/ai-tools/"+segment(t.key))
-		if err != nil {
-			return notFound(err, "LaunchDarkly AI tool %q was not found in project %q", t.key, r.m.projectKey)
-		}
-		obj, err := asObject(raw, fmt.Sprintf("tool %q", t.key))
-		if err != nil {
-			return err
-		}
-		v, ok := asInt(obj["version"])
-		if !ok {
-			return fmt.Errorf("evaluations: %w: LaunchDarkly AI tool %q has no integer version", ErrInvalidResponse, t.key)
-		}
-		t.version = v
-		t.description, _ = obj["description"].(string)
-		t.schema, _ = obj["schema"].(map[string]any)
-		if t.schema == nil {
-			t.schema = map[string]any{}
-		}
-		if pinned, ok := r.pinnedTools[t.key]; ok && pinned != v {
-			r.m.logger.Warn("AI Config variation pins a different tool version; the run uses the resolved version",
-				"tool", t.key, "pinnedVersion", pinned, "resolvedVersion", v)
-		}
-	}
-	return nil
-}
 
 func (r *runState) fetchDataset(ctx context.Context) error {
 	path := "projects/" + r.project() + "/datasets/" + segment(r.datasetKey)

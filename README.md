@@ -21,8 +21,9 @@ Requires Go 1.26.
 | Package | Tier | What it does |
 |---|---|---|
 | [`aiserver`](aiserver) | 0 | Core client: `Config`, `Graph`, `ResolveGraph`, `InspectConfig`, registry, lifecycle, judges, telemetry |
-| [`aiserver/experimental`](aiserver/experimental) | 0 | Experimental entry point: Evaluations from Code, shadow requests |
+| [`aiserver/experimental`](aiserver/experimental) | 0 | Experimental entry point: shadow requests |
 | [`skills`](skills) | 1 | Agent Skills: skill references on AI Configs, verified content, materialization to disk, delivery store, watcher |
+| [`evaluations`](evaluations) | 1 | Evaluations from Code: run a dataset through a handler, score it with judges and scorers, gate CI on the verdict |
 | [`claudemessages`](claudemessages) | 1 | Anthropic Messages API handler — `{Anthropic, messages}` |
 | [`openaimessages`](openaimessages) | 1 | OpenAI Responses API handler — `{OpenAI, messages}` |
 | [`bedrockmessages`](bedrockmessages) | 1 | Amazon Bedrock Converse handler — `{Bedrock, messages}` |
@@ -113,8 +114,10 @@ unset.
 | `LD_SERVICE_NAME` | no | `service.name` resource attribute; default `go-sdk` |
 | `LD_ENVIRONMENT` | no | `deployment.environment` resource attribute; omitted when unset |
 | `LD_ENVIRONMENT_ID` | no | LaunchDarkly environment ID for AI Config Monitoring trace correlation (`environmentId` / `feature_flag.set.id`); omitted when unset |
-| `LD_PROJECT_KEY` | only for Evaluations from Code | LaunchDarkly project key ([experimental](aiserver/experimental/README.md#evaluations-from-code)) |
-| `LD_API_TOKEN` | only for Evaluations from Code | LaunchDarkly API access token ([experimental](aiserver/experimental/README.md#evaluations-from-code)) |
+| `LD_PROJECT_KEY` | only for Evaluations from Code | LaunchDarkly project key ([evaluations](evaluations/README.md)) |
+| `LD_API_TOKEN` | only for Evaluations from Code | LaunchDarkly API access token ([evaluations](evaluations/README.md)) |
+| `LD_API_BASE_URI` | no | Evaluations management API host; default `https://app.launchdarkly.com`; never taken from `LD_BASE_URI` ([evaluations](evaluations/README.md)) |
+| `LD_UI_BASE_URI` | no | Host of evaluation run links; default `https://app.launchdarkly.com` ([evaluations](evaluations/README.md)) |
 
 - **Providers:** each handler reads its provider's usual environment
   (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, the AWS credential chain /

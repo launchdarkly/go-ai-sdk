@@ -19,7 +19,7 @@ import (
 func TestNoCriteriaSkipsThePhase(t *testing.T) {
 	e := newEnv(t, 2)
 	mustRun(t, e.module(), baseArgs(handler("OpenAI", aiserver.ModeMessages, nil)))
-	if len(e.ld.events(CriterionEventName)) != 0 || len(e.judgeCalls) != 0 {
+	if len(e.ld.events(criterionEventName)) != 0 || len(e.judgeCalls) != 0 {
 		t.Fatal("criterion phase ran without criteria")
 	}
 	assertSequence(t, e, "GET projects/proj/datasets/ds", rowsPath, evalPath, runPath, summaryPath)
@@ -44,7 +44,7 @@ func TestSDKNeverComputesAVerdict(t *testing.T) {
 				mustScorer(t, "sc", constScorer(0.6), &ScorerOptions{Threshold: ptr(threshold)})}
 			mustRun(t, e.module(), args)
 			for _, ev := range e.ld.tracks {
-				if ev.Event == CriterionEventName && ev.Data["score"] != 0.6 {
+				if ev.Event == criterionEventName && ev.Data["score"] != 0.6 {
 					t.Fatalf("score %v", ev.Data["score"])
 				}
 				for _, k := range []string{"verdict", "passed", "successDirection"} {
@@ -59,12 +59,12 @@ func TestSDKNeverComputesAVerdict(t *testing.T) {
 
 func TestJudgeResolution(t *testing.T) {
 	e := newEnv(t, 3)
-	e.route("GET", "projects/proj/ai-tools/lib", resp{body: map[string]any{"version": 1}})
 	e.judges["acc"] = judgeVariation("OpenAI", "completion", map[string]any{"_ldMeta": map[string]any{"enabled": true}})
+	m := e.module()
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, verdict(1, "great")))
-	args.Tools = map[string]aiserver.ToolHandler{"lib": noopTool}
+	args.Tools = []EvalTool{e.libTool(m, "lib", noopTool, map[string]any{"version": 1})}
 	args.Criteria = []Criterion{mustJudge(t, "acc", nil)}
-	mustRun(t, e.module(), args)
+	mustRun(t, m, args)
 	if len(e.judgeCalls) != 1 {
 		t.Fatalf("resolved %d times; must be once per run", len(e.judgeCalls))
 	}
@@ -72,11 +72,10 @@ func TestJudgeResolution(t *testing.T) {
 		t.Fatalf("resolution context %v", c)
 	}
 	log := e.logSnapshot()
-	if !(slices.Index(log, "GET projects/proj/ai-tools/lib") < slices.Index(log, "judge acc") &&
-		slices.Index(log, "judge acc") < slices.Index(log, "GET projects/proj/datasets/ds")) {
-		t.Fatalf("resolution must sit between tool verification and dataset resolution: %v", log)
+	if i := slices.Index(log, "judge acc"); !(i == 0 && i < slices.Index(log, "GET projects/proj/datasets/ds")) {
+		t.Fatalf("resolution must come first, before dataset resolution: %v", log)
 	}
-	ev := e.ld.events(CriterionEventName)[0].Data
+	ev := e.ld.events(criterionEventName)[0].Data
 	if ev["variationKey"] != "" {
 		t.Fatalf("variationKey %v", ev["variationKey"])
 	}
@@ -140,13 +139,14 @@ func TestJudgeHandlerSelection(t *testing.T) {
 	cases := []struct {
 		name               string
 		pool               []*aiserver.ProviderHandler
-		genProvider, genMd string
+		genProvider        string
+		genMd              GenerationMode
 		judgeProv, judgeMd string
 		wantGen, wantJudge int // pool indexes
 	}{
-		{"mixed providers", []*aiserver.ProviderHandler{handler("OpenAI", "messages", nil), handler("Anthropic", "messages", nil)}, "OpenAI", ModeCompletion, "Anthropic", "completion", 0, 1},
-		{"mixed modes", []*aiserver.ProviderHandler{handler("OpenAI", "agent", nil), handler("OpenAI", "messages", nil)}, "OpenAI", ModeAgent, "OpenAI", "completion", 0, 1},
-		{"one handler for both phases", []*aiserver.ProviderHandler{handler("OpenAI", "messages", nil)}, "OpenAI", ModeCompletion, "OpenAI", "judge", 0, 0},
+		{"mixed providers", []*aiserver.ProviderHandler{handler("OpenAI", "messages", nil), handler("Anthropic", "messages", nil)}, "OpenAI", GenerationModeCompletion, "Anthropic", "completion", 0, 1},
+		{"mixed modes", []*aiserver.ProviderHandler{handler("OpenAI", "agent", nil), handler("OpenAI", "messages", nil)}, "OpenAI", GenerationModeAgent, "OpenAI", "completion", 0, 1},
+		{"one handler for both phases", []*aiserver.ProviderHandler{handler("OpenAI", "messages", nil)}, "OpenAI", GenerationModeCompletion, "OpenAI", "judge", 0, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -166,7 +166,7 @@ func TestJudgeHandlerSelection(t *testing.T) {
 			args := baseArgs(nil)
 			args.Handler, args.Handlers = nil, tc.pool
 			args.Generation = &GenerationConfig{Provider: tc.genProvider, Model: "m", Mode: tc.genMd}
-			if tc.genMd == ModeAgent {
+			if tc.genMd == GenerationModeAgent {
 				args.Generation.Instructions = "act"
 			}
 			args.Criteria = []Criterion{mustJudge(t, "acc", nil)}
@@ -193,7 +193,7 @@ func TestJudgeCoverageAndPromptFailFast(t *testing.T) {
 		e.judges["acc"] = judgeVariation("OpenAI", "completion", nil)
 		var rec recorder
 		args := baseArgs(handler("OpenAI", aiserver.ModeAgent, rec.wrap(nil)))
-		args.Generation = &GenerationConfig{Provider: "OpenAI", Model: "m", Mode: ModeAgent}
+		args.Generation = &GenerationConfig{Provider: "OpenAI", Model: "m", Mode: GenerationModeAgent}
 		args.Criteria = []Criterion{mustJudge(t, "acc", nil)}
 		runErr(t, e.module(), args, ErrJudgeResolution, `"acc"`, "[OpenAI, agent]")
 		if rec.n() != 0 || e.count("POST") != 0 {
@@ -226,7 +226,7 @@ func TestJudgeCoverageAndPromptFailFast(t *testing.T) {
 
 // judgeEnv runs one judge "acc" over rows with a pool of one messages
 // handler; judge receives every judge call.
-func judgeEnv(t *testing.T, rows int, judge func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error), extra map[string]any) (*fakeEnv, RunArgs, *recorder) {
+func judgeEnv(t *testing.T, rows int, judge func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error), extra map[string]any) (*fakeEnv, RunOptions, *recorder) {
 	e := newEnv(t, rows)
 	e.judges["acc"] = judgeVariation("OpenAI", "completion", extra)
 	rec := &recorder{}
@@ -245,7 +245,8 @@ func TestJudgesGetNoTools(t *testing.T) {
 	var genTools map[string]aiserver.ToolHandler
 	e, args, rec := judgeEnv(t, 1, verdict(1, "ok"), map[string]any{"tools": map[string]any{
 		"t": map[string]any{"name": "t", "type": "function", "parameters": map[string]any{}}}})
-	e.route("GET", "projects/proj/ai-tools/lib", resp{body: map[string]any{"version": 1}})
+	m := e.module()
+	lib := e.libTool(m, "lib", noopTool, map[string]any{"version": 1})
 	inner := args.Handler.Invoke
 	args.Handler.Invoke = func(ctx context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
 		if _, isJudge := req.Variables["message_history"]; !isJudge {
@@ -253,9 +254,8 @@ func TestJudgesGetNoTools(t *testing.T) {
 		}
 		return inner(ctx, req)
 	}
-	args.Tools = map[string]aiserver.ToolHandler{"lib": noopTool}
-	args.InlineTools = map[string]InlineTool{"inl": {Implementation: noopTool, Schema: map[string]any{}}}
-	mustRun(t, e.module(), args)
+	args.Tools = []EvalTool{lib, {Key: "inl", Implementation: noopTool, Schema: map[string]any{}}}
+	mustRun(t, m, args)
 	if len(genTools) != 2 {
 		t.Fatalf("generation tools %v", genTools)
 	}
@@ -331,7 +331,7 @@ func TestDefaultTemplateJudgeScoresWithoutEdits(t *testing.T) {
 	if !strings.Contains(rendered, judging.FormattingInstructions) || strings.Contains(rendered, "{{") {
 		t.Fatalf("the rendered rubric lacks the formatting instructions or left a placeholder: %q", rendered)
 	}
-	ev := e.ld.events(CriterionEventName)[0].Data
+	ev := e.ld.events(criterionEventName)[0].Data
 	if ev["status"] != "COMPLETE" || ev["score"] != 0.8 || ev["reason"] != "grounded" {
 		t.Fatalf("event %v", ev)
 	}
@@ -375,7 +375,7 @@ func TestMessageHistoryCarriesTheTrajectory(t *testing.T) {
 		}
 		return inner(ctx, req)
 	}
-	args.InlineTools = map[string]InlineTool{"lookup": {Schema: map[string]any{}, Implementation: aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) {
+	args.Tools = []EvalTool{{Key: "lookup", Schema: map[string]any{}, Implementation: aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) {
 		return "{{expected_output}} café 東京", nil
 	})}}
 	mustRun(t, e.module(), args)
@@ -433,7 +433,7 @@ func TestJudgeResponseParsing(t *testing.T) {
 			if rec.n() != 1 {
 				t.Fatalf("judge invoked %d times; never retried", rec.n())
 			}
-			ev := e.ld.events(CriterionEventName)[0].Data
+			ev := e.ld.events(criterionEventName)[0].Data
 			if tc.cause == "" {
 				if ev["status"] != "COMPLETE" || ev["score"] != tc.score || ev["reason"] != "r" {
 					t.Fatalf("event %v", ev)
@@ -495,7 +495,7 @@ func TestJudgeUsageAndEventFields(t *testing.T) {
 	}, nil)
 	args.Criteria = append(args.Criteria, mustScorer(t, "len", constScorer(1), nil))
 	mustRun(t, e.module(), args)
-	evs := e.ld.events(CriterionEventName)
+	evs := e.ld.events(criterionEventName)
 	if len(evs) != 4 {
 		t.Fatalf("%d criterion events", len(evs))
 	}
@@ -613,20 +613,20 @@ func TestPhaseSequencingAndIsolation(t *testing.T) {
 	log := e.logSnapshot()
 	lastGen, firstJudge := -1, slices.Index(log, "judge-invoke")
 	for i, s := range log {
-		if s == "track "+GenerationEventName {
+		if s == "track "+generationEventName {
 			lastGen = i
 		}
 	}
 	if lastGen > firstJudge || slices.Index(log, "flush") > firstJudge {
 		t.Fatalf("generation events and the boundary flush must precede the first judge: %v", log)
 	}
-	for _, ev := range e.ld.events(CriterionEventName) {
+	for _, ev := range e.ld.events(criterionEventName) {
 		if ev.Data["rowIndex"] == 1.0 {
 			t.Fatal("a row that did not generate got a criterion event")
 		}
 	}
-	if len(e.ld.events(CriterionEventName)) != 4 || scored.Load() != 2 {
-		t.Fatalf("%d criterion events, %d scorer calls", len(e.ld.events(CriterionEventName)), scored.Load())
+	if len(e.ld.events(criterionEventName)) != 4 || scored.Load() != 2 {
+		t.Fatalf("%d criterion events, %d scorer calls", len(e.ld.events(criterionEventName)), scored.Load())
 	}
 	genCalls.Range(func(k, v any) bool {
 		if v.(*atomic.Int32).Load() != 1 {
@@ -662,7 +662,7 @@ func TestCriterionConcurrencyAcrossPairs(t *testing.T) {
 func TestJudgeEventWithoutResolvedMetadata(t *testing.T) {
 	e, args, _ := judgeEnv(t, 1, verdict(0.5, "r"), map[string]any{"_ldMeta": map[string]any{"enabled": true, "mode": "completion"}})
 	mustRun(t, e.module(), args)
-	d := e.ld.events(CriterionEventName)[0].Data
+	d := e.ld.events(criterionEventName)[0].Data
 	if _, has := d["version"]; has || d["variationKey"] != "" || d["status"] != "COMPLETE" {
 		t.Fatalf("event %v", d)
 	}

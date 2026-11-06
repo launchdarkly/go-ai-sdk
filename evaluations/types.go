@@ -3,9 +3,8 @@
 // judges and scorers, reports every result to LaunchDarkly as custom events,
 // and polls the run summary for a verdict.
 //
-// Experimental. The public surface is re-exported from
-// github.com/launchdarkly/go-ai-sdk/aiserver/experimental; names may change
-// in a minor release.
+// Import it as github.com/launchdarkly/go-ai-sdk/evaluations. Start with
+// InitEvaluations, then call EvaluationsModule.Run.
 package evaluations
 
 import (
@@ -23,7 +22,7 @@ import (
 var (
 	// ErrInvalidArgument: a run argument failed validation before any I/O.
 	ErrInvalidArgument = errors.New("invalid argument")
-	// ErrMissingCredential: Init could not resolve LD_PROJECT_KEY, LD_API_TOKEN or LD_SDK_KEY.
+	// ErrMissingCredential: InitEvaluations could not resolve LD_PROJECT_KEY, LD_API_TOKEN or LD_SDK_KEY.
 	ErrMissingCredential = errors.New("missing credential")
 	// ErrNoClient: no LaunchDarkly client is available to emit result events.
 	ErrNoClient = errors.New("no LaunchDarkly client")
@@ -51,11 +50,14 @@ func invalid(format string, args ...any) error {
 	return fmt.Errorf("evaluations: %w: "+format, append([]any{ErrInvalidArgument}, args...)...)
 }
 
-// Generation modes accepted by GenerationConfig.Mode, as the LaunchDarkly UI
-// shows them.
+// GenerationMode is the mode of a generation written in code, as the
+// LaunchDarkly UI shows it: GenerationModeCompletion or GenerationModeAgent.
+type GenerationMode string
+
+// Generation modes accepted by GenerationConfig.Mode.
 const (
-	ModeCompletion = "completion"
-	ModeAgent      = "agent"
+	GenerationModeCompletion GenerationMode = "completion"
+	GenerationModeAgent      GenerationMode = "agent"
 )
 
 // GenerationConfig holds the generation settings written in code.
@@ -72,7 +74,7 @@ type GenerationConfig struct {
 	// the mode of a handler in the pool; when unsure, use the AI Config's mode
 	// in LaunchDarkly. Mode selects the handler only and is never sent to
 	// LaunchDarkly.
-	Mode string
+	Mode GenerationMode
 	// Parameters are model parameters; nil when none.
 	Parameters map[string]any
 	// Instructions is the agent prompt. Mutually exclusive with Messages.
@@ -108,22 +110,86 @@ type AIConfigRef struct {
 	Variation string
 }
 
-// InlineTool defines a tool in code: the executable plus the schema and
-// description the model is shown. The schema is copied when the run is
-// validated, so later changes to the caller's map do not reach the run.
-type InlineTool struct {
-	// Implementation is the aiserver.ToolFunc the handler calls. A
-	// NativeTool is not allowed: a native tool has no schema to define.
+// ToolSource says where an EvalTool came from.
+type ToolSource string
+
+const (
+	// ToolSourceInline is a tool defined in code.
+	ToolSourceInline ToolSource = "inline"
+	// ToolSourceLibrary is a tool read from the LaunchDarkly tool library
+	// with ToolsClient.Get.
+	ToolSourceLibrary ToolSource = "library"
+)
+
+// EvalTool is a tool a run gives to its handler. Pass a slice of these in
+// RunOptions.Tools.
+//
+// Write a struct literal to define a tool in code. Schema is required, and
+// an empty map is valid. Source is then ToolSourceInline and Version is 0.
+// Neither can be set in a literal, so a literal is always inline.
+//
+// Call EvaluationsModule.Tools().Get instead to use a tool from the
+// LaunchDarkly tool library. That returns a tool with Source
+// ToolSourceLibrary and the version it pinned.
+//
+// A key must be lowercase. An *aiserver.NativeTool implementation is valid
+// only for a library tool, because the provider supplies its schema. Run
+// copies Schema when it validates the tool, so later changes to the caller's
+// map do not reach the run. Do not change Key, Schema or Description of a
+// library tool: Run rejects it, because the run would record the pinned
+// version for a different tool. Define an inline tool instead.
+type EvalTool struct {
+	// Key is the tool key. Must be lowercase.
+	Key string
+	// Implementation is what the handler calls: an aiserver.ToolFunc, or an
+	// *aiserver.NativeTool for a library tool.
 	Implementation aiserver.ToolHandler
-	// Schema is the tool's JSON Schema; required, {} for a no-argument tool.
+	// Schema is the JSON Schema of the tool's parameters.
 	Schema map[string]any
-	// Description defaults to "".
+	// Description is shown to the model. Default "".
 	Description string
+
+	library *libraryPin // set only by ToolsClient.Get
 }
 
-// DatasetRow is the public dataset row type: what a scorer receives, and
-// one of the two forms of an inline row. A zero RowIndex on an inline row
-// means "use the position"; any other value must equal the position.
+// libraryPin is what ToolsClient.Get read. Run checks the exported fields
+// against it, so a copy edited after Get cannot be recorded as this version.
+type libraryPin struct {
+	key, description string
+	schema           map[string]any
+	version          int
+	projectKey       string
+}
+
+// Source is ToolSourceLibrary for a tool from ToolsClient.Get, else
+// ToolSourceInline.
+func (t EvalTool) Source() ToolSource {
+	if t.library != nil {
+		return ToolSourceLibrary
+	}
+	return ToolSourceInline
+}
+
+// Version is the library version ToolsClient.Get pinned; 0 for an inline
+// tool.
+func (t EvalTool) Version() int {
+	if t.library != nil {
+		return t.library.version
+	}
+	return 0
+}
+
+// ProjectKey is the project ToolsClient.Get read a library tool from; "" for
+// an inline tool.
+func (t EvalTool) ProjectKey() string {
+	if t.library != nil {
+		return t.library.projectKey
+	}
+	return ""
+}
+
+// DatasetRow is the public dataset row type: what a scorer receives. It is
+// not an inline row type; InlineRows takes map[string]any rows.
 type DatasetRow struct {
 	RowIndex       int
 	Input          string
@@ -140,9 +206,9 @@ type DatasetKey string
 
 func (DatasetKey) isDataset() {}
 
-// InlineRows is a dataset defined in code. Each element is a DatasetRow
-// (or *DatasetRow) or a map[string]any in the upload wire shape: input,
-// expectedOutput, variables, metadata and an optional rowIdx.
+// InlineRows is a dataset defined in code. Each element is a map[string]any
+// in the upload wire shape: input, expectedOutput, variables, metadata and an
+// optional rowIdx. A DatasetRow is what a scorer receives; Run rejects one here.
 type InlineRows []any
 
 func (InlineRows) isDataset() {}
@@ -158,9 +224,9 @@ const (
 
 // Default thresholds.
 const (
-	DefaultJudgeThreshold    = 0.5
-	DefaultScorerThreshold   = 1.0
-	DefaultPassRateThreshold = 0.95
+	defaultJudgeThreshold    = 0.5
+	defaultScorerThreshold   = 1.0
+	defaultPassRateThreshold = 0.95
 )
 
 // Criterion is a Judge or a Scorer.
@@ -192,8 +258,8 @@ func NewJudge(key string, opts *JudgeOptions) (*Judge, error) {
 	if opts == nil {
 		opts = &JudgeOptions{}
 	}
-	j := &Judge{key: key, threshold: orDefault(opts.Threshold, DefaultJudgeThreshold),
-		passRate: orDefault(opts.PassRateThreshold, DefaultPassRateThreshold), groundTruthContext: opts.GroundTruthContext}
+	j := &Judge{key: key, threshold: orDefault(opts.Threshold, defaultJudgeThreshold),
+		passRate: orDefault(opts.PassRateThreshold, defaultPassRateThreshold), groundTruthContext: opts.GroundTruthContext}
 	if err := j.validate(); err != nil {
 		return nil, err
 	}
@@ -250,8 +316,8 @@ func NewScorer(name string, fn ScorerFunc, opts *ScorerOptions) (*Scorer, error)
 	if dir == "" {
 		dir = HigherIsBetter
 	}
-	s := &Scorer{name: name, fn: fn, threshold: orDefault(opts.Threshold, DefaultScorerThreshold),
-		passRate: orDefault(opts.PassRateThreshold, DefaultPassRateThreshold), direction: dir}
+	s := &Scorer{name: name, fn: fn, threshold: orDefault(opts.Threshold, defaultScorerThreshold),
+		passRate: orDefault(opts.PassRateThreshold, defaultPassRateThreshold), direction: dir}
 	if err := s.validate(); err != nil {
 		return nil, err
 	}
@@ -302,8 +368,8 @@ func validateThresholds(threshold, passRate float64) error {
 	return nil
 }
 
-// RunArgs are the arguments to Module.Run.
-type RunArgs struct {
+// RunOptions are the arguments to EvaluationsModule.Run.
+type RunOptions struct {
 	// Key names the evaluation Run creates. Every Run creates a new
 	// evaluation, so the key must be unique per run (e.g. timestamp-suffixed).
 	Key string
@@ -319,11 +385,14 @@ type RunArgs struct {
 	Generation *GenerationConfig
 	AIConfig   *AIConfigRef
 	Overrides  *GenerationOverrides
-	// Tools are library tools, resolved by key against LaunchDarkly.
-	// InlineTools are defined in code. Leaving both nil with AIConfig uses
-	// the variation's tools; a non-nil empty map means "no tools".
-	Tools       map[string]aiserver.ToolHandler
-	InlineTools map[string]InlineTool
+	// Tools are the tools the handler may call: inline tools written as
+	// literals, and library tools from Tools().Get. Run issues no tool
+	// request. A key may appear once, compared without case. With AIConfig,
+	// nil Tools while the variation lists tools is an ErrInvalidConfig,
+	// because the run has no implementation for them; a variation tool
+	// missing from Tools is logged as unused. An empty non-nil slice runs
+	// with no tools, even when the variation lists some.
+	Tools []EvalTool
 	// Criteria are judges and scorers. nil with AIConfig uses the
 	// variation's judges; a non-nil empty slice runs generation only.
 	Criteria []Criterion
