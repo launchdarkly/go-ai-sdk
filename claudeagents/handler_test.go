@@ -215,7 +215,7 @@ func TestTelemetry(t *testing.T) {
 	if _, err := e.handler().Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "hello", ToolHandlers: tools, Variables: ldVars}); err != nil {
 		t.Fatal(err)
 	}
-	root := e.spans(SpanName)[0]
+	root := e.spans("invoke_agent")[0]
 	got := attrs(root)
 	for k, want := range map[string]string{
 		"gen_ai.system": "anthropic", "gen_ai.operation.name": "invoke_agent", "gen_ai.request.model": "test-model",
@@ -298,8 +298,8 @@ func TestStream(t *testing.T) {
 	if u := aiserver.ParseUsage(done.Usage); u.Input != 5 || u.Output != 3 {
 		t.Errorf("usage = %+v", u)
 	}
-	root := attrs(e.spans(SpanName)[0])
-	if root["gen_ai.usage.total_tokens"] != "8" || root["launchdarkly.config.key"] != "test-config" || root["gen_ai.completion.0.content"] != "Hello world" {
+	root := attrs(e.spans("invoke_agent")[0])
+	if root["gen_ai.operation.name"] != "invoke_agent" || root["gen_ai.usage.total_tokens"] != "8" || root["launchdarkly.config.key"] != "test-config" || root["gen_ai.completion.0.content"] != "Hello world" {
 		t.Errorf("stream root attrs = %v", root)
 	}
 
@@ -308,7 +308,7 @@ func TestStream(t *testing.T) {
 	for _, err := range e.handler().Stream(bg, aiserver.HandlerRequest{Config: cfg(nil), UserInput: "q"}) {
 		gotErr = err
 	}
-	if gotErr == nil || e.spans(SpanName)[0].Status().Code != codes.Error {
+	if gotErr == nil || e.spans("invoke_agent")[0].Status().Code != codes.Error {
 		t.Errorf("stream error not propagated: %v", gotErr)
 	}
 }
@@ -318,7 +318,7 @@ func TestStreamAbandoned(t *testing.T) {
 	for range e.handler().Stream(bg, aiserver.HandlerRequest{Config: cfg(nil), UserInput: "q"}) {
 		break
 	}
-	root := e.spans(SpanName)
+	root := e.spans("invoke_agent")
 	if len(root) != 1 || root[0].Status().Code != codes.Unset || attrs(root[0])["launchdarkly.stream.abandoned"] != "true" {
 		t.Errorf("abandoned root = %v", root)
 	}

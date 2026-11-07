@@ -26,7 +26,7 @@ const (
 	// PackageVersion is this package's release version.
 	PackageVersion = "0.1.0" // x-release-please-version
 	// SpanName is the root span name for both the blocking and streaming paths.
-	SpanName = "openai.messages"
+	SpanName = "invoke_agent"
 	// maxSteps bounds the tool loop, matching the JavaScript and Python handlers.
 	maxSteps = 10
 )

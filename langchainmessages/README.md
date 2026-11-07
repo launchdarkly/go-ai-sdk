@@ -131,8 +131,7 @@ core client do.
 ```go
 const PackageName = "github.com/launchdarkly/go-ai-sdk/langchainmessages"
 const PackageVersion = "0.1.0"
-const SpanName = "langchain.invoke"        // blocking root span
-const StreamSpanName = "langchain.stream"  // streaming root span
+const SpanName = "invoke_agent" // root span, blocking and streaming
 var ProvidesFor = aiserver.ProvidesFor{Provider: "*", Mode: aiserver.ModeMessages}
 var ErrMaxSteps, ErrNoToolHandler, ErrEmptyResponse error
 

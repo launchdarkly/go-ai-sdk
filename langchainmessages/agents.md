@@ -21,7 +21,7 @@ no official Go SDK, and the community ports were removed.
 ## Public exports
 
 ```go
-const PackageName, PackageVersion, SpanName, StreamSpanName
+const PackageName, PackageVersion, SpanName
 var ProvidesFor
 var ErrMaxSteps, ErrNoToolHandler, ErrEmptyResponse
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
@@ -44,7 +44,7 @@ func LangChainMessages(ctx, configKey, userInput string, userCtx ldcontext.Conte
 ## Implementation details
 
 - **`config`** — `langchainwire.ModelConfig` applies the Bedrock `model.region` prefix. `provider.name`
-  (lowercased, `openai` when empty) is `gen_ai.system` and picks the built-in model.
+  (lowercased, `openai` when empty) is `gen_ai.provider.name` (`gen_ai.system` is always `langchain`) and picks the built-in model.
   `model.parameters` maps to `llms.CallOption`s; `model.custom` is never read. `tools` are
   filtered by `aiserver.CallableTools` and sent with `llms.WithTools`, sorted by name.
   `outputFormat` (blocking only) adds `llms.WithJSONMode()` plus the schema instruction on the
@@ -60,7 +60,7 @@ func LangChainMessages(ctx, configKey, userInput string, userCtx ldcontext.Conte
   unregistered tool returns `ErrNoToolHandler` (its `execute_tool` span ends ERROR); more than 10 tool rounds returns `ErrMaxSteps`.
 - **`variables`** — template substitution in `ComposePrompt`; the `__ld` / `ldContext` entries
   are written to the root span by `aiserver.StartHandlerRun`.
-- **Spans** — root `langchain.invoke` (blocking) / `langchain.stream` (streaming), `chat <model>`
+- **Spans** — root `invoke_agent` (blocking and streaming), `chat <model>`
   per turn and `execute_tool <name>` per call as siblings under the root (`aiserver.HandlerRun`).
 - **Usage** — read from `ContentChoice.GenerationInfo`, first choice that has it:
   Anthropic `InputTokens`/`OutputTokens`/`CacheReadInputTokens`/`CacheCreationInputTokens`

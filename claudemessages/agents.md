@@ -62,8 +62,8 @@ The handler receives `aiserver.HandlerRequest{Config, UserInput, ToolHandlers, V
   image blocks.
 
 Loop: at most 10 provider turns (the JS and Python bound). One `chat <model>` span per turn and
-one `execute_tool <name>` span per tool call, siblings under the `claude.messages` root
-(`gen_ai.operation.name = chat`). The blocking output is the last response's text; the stream's
+one `execute_tool <name>` span per tool call, siblings under the `invoke_agent` root
+(`gen_ai.operation.name = invoke_agent`). The blocking output is the last response's text; the stream's
 `done` output and the streamed root's `gen_ai.completion.0.content` are every turn's text
 concatenated. A stream consumer that stops iterating marks the root
 `launchdarkly.stream.abandoned` and leaves its status unset.

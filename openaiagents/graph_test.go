@@ -173,7 +173,7 @@ func TestToOpenAIAgentsRun(t *testing.T) {
 		spans[0].Status().Code != codes.Ok {
 		t.Errorf("graph span attrs = %v status %v", a, spans[0].Status())
 	}
-	// One openai.agent.run span per node run under the graph span, with the
+	// One invoke_agent span per node run under the graph span, with the
 	// node's association and the context identity; chat / execute_tool
 	// children carry neither.
 	byName := spansByName(exp)

@@ -28,10 +28,8 @@ const (
 	PackageName = "github.com/launchdarkly/go-ai-sdk/openaiagents"
 	// PackageVersion is this package's release version.
 	PackageVersion = "0.1.0" // x-release-please-version
-	// SpanName is the blocking handler's root span.
-	SpanName = "openai.agent.run"
-	// StreamSpanName is the streaming handler's root span.
-	StreamSpanName = "openai.agent.run.stream"
+	// SpanName is the root span name for both the blocking and streaming paths.
+	SpanName = "invoke_agent"
 	// operation is gen_ai.operation.name on the root span.
 	operation = "invoke_agent"
 )
@@ -128,12 +126,8 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 	// Agent mode: instructions win over config system messages;
 	// history and userInput become structured input items.
 	p := aiserver.ComposePrompt(req, aiserver.ModeAgent)
-	name := SpanName
-	if onText != nil {
-		name = StreamSpanName
-	}
 	span := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{
-		Tracer: PackageName, Name: name, System: "openai", Operation: operation, RequestModel: cfg.Model.Name,
+		Tracer: PackageName, Name: SpanName, System: "openai", Operation: operation, RequestModel: cfg.Model.Name,
 	}, req, p)
 	defer span.EndOnPanic()
 
