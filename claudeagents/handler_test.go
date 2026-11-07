@@ -215,7 +215,7 @@ func TestTelemetry(t *testing.T) {
 	if _, err := e.handler().Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "hello", ToolHandlers: tools, Variables: ldVars}); err != nil {
 		t.Fatal(err)
 	}
-	root := e.spans(SpanName)[0]
+	root := e.spans("invoke_agent")[0]
 	got := attrs(root)
 	for k, want := range map[string]string{
 		"gen_ai.system": "anthropic", "gen_ai.operation.name": "invoke_agent", "gen_ai.request.model": "test-model",

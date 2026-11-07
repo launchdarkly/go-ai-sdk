@@ -96,7 +96,7 @@ package does the same.
   image blocks.
 
 Loop: one `chat <model>` span per provider turn and one `execute_tool <name>` span per tool
-call, siblings under the `claude.query` root (`gen_ai.operation.name = invoke_agent`). A tool
+call, siblings under the `invoke_agent` root (`gen_ai.operation.name = invoke_agent`). A tool
 executes with its `execute_tool` span as the active span. `pause_turn` resends the assistant
 turn. Running out of steps while the model still wants tools returns `ErrMaxSteps`.
 
@@ -109,7 +109,7 @@ own sub-agent tools, and then tracks `$ld:ai:graph:handoff_success` (`sourceKey`
 `:handoff_failure` when the child failed. `$ld:ai:graph:*` events carry the graph's `TrackData`
 (as `aiserver.Graph`); a definition resolved without a context tracks nothing. Each Anthropic
 node tracks its own generation, duration and token events under a node `TrackData` that shares
-the graph's run id. Each node's `claude.query` root span gets the LaunchDarkly association
+the graph's run id. Each node's `invoke_agent` root span gets the LaunchDarkly association
 (including `launchdarkly.graph.key`) and the user's context identity through `spanIdentity`,
 because the core only reads the typed context from variables it builds itself. A non-Anthropic node runs through `GraphDefinition.RunNode` and gets no
 sub-agent tools. The `ld.ai.graph` span carries `ld.ai.graph.key`, `launchdarkly.graph.path` and

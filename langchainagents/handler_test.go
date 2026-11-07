@@ -314,13 +314,13 @@ func TestTelemetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	spans := spansByName(exp)
-	root := spans[SpanName]
+	root := spans["invoke_agent"]
 	if len(root) != 1 {
 		t.Fatalf("spans = %v", spans)
 	}
 	a := spanAttrs(root[0])
 	want := map[string]string{
-		"gen_ai.system": "anthropic", "gen_ai.operation.name": "invoke_agent", "gen_ai.request.model": "test-model",
+		"gen_ai.system": "langchain", "gen_ai.provider.name": "anthropic", "gen_ai.operation.name": "invoke_agent", "gen_ai.request.model": "test-model",
 		"gen_ai.response.model": "test-model", "gen_ai.usage.input_tokens": "4", "gen_ai.usage.output_tokens": "5",
 		"gen_ai.usage.total_tokens": "9", "gen_ai.usage.prompt_tokens": "4", "gen_ai.usage.completion_tokens": "5",
 		"gen_ai.prompt.0.role": "system", "gen_ai.prompt.0.content": "Sys", "gen_ai.prompt.1.role": "user",
@@ -438,12 +438,12 @@ func TestStreaming(t *testing.T) {
 		*done.Output != "Let me check. Done!" || done.Usage["input_tokens"] != 3.0 || done.Usage["output_tokens"] != 4.0 || got["a"] != "v" {
 		t.Errorf("chunks %q done %+v args %v", chunks, done, got)
 	}
-	root := spansByName(exp)[SpanName]
+	root := spansByName(exp)["invoke_agent"]
 	if len(root) != 1 {
 		t.Fatal("no streaming root span")
 	}
 	a := spanAttrs(root[0])
-	if a["gen_ai.system"] != "anthropic" || a["gen_ai.usage.total_tokens"] != "7" || a["launchdarkly.run.id"] != "run-123" ||
+	if a["gen_ai.system"] != "langchain" || a["gen_ai.provider.name"] != "anthropic" || a["gen_ai.usage.total_tokens"] != "7" || a["launchdarkly.run.id"] != "run-123" ||
 		a["gen_ai.completion.0.content"] != "Let me check. Done!" || a["gen_ai.prompt.0.content"] != "I" || root[0].Status().Code != codes.Ok ||
 		!hasEvent(root[0], "gen_ai.content.prompt", "q") || !hasEvent(root[0], "gen_ai.content.completion", "Done!") {
 		t.Errorf("stream root = %v", a)
@@ -562,7 +562,7 @@ func TestLangChainAgents(t *testing.T) {
 		t.Errorf("res %+v keys %v msgs %v", res, ld.requestedKeys(), turns(f.call(0).msgs))
 	}
 	spans := spansByName(exp)
-	if a := spanAttrs(spans[SpanName][0]); a["context.contextKeys.user"] != "u-1" || a["context.contextKeys.org"] != "o-1" || a["gen_ai.system"] != "openai" {
+	if a := spanAttrs(spans[SpanName][0]); a["context.contextKeys.user"] != "u-1" || a["context.contextKeys.org"] != "o-1" || a["gen_ai.system"] != "langchain" || a["gen_ai.provider.name"] != "openai" {
 		t.Errorf("root identity = %v", a)
 	}
 	for _, s := range append(spans["chat m"], spans["execute_tool a"]...) {

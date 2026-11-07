@@ -108,13 +108,13 @@ func TestStreamTelemetry(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	roots := spansNamed(exp, SpanName)
+	roots := spansNamed(exp, "invoke_agent")
 	if len(roots) != 1 {
 		t.Fatalf("roots = %d", len(roots))
 	}
 	root := roots[0]
 	wantAttrs(t, "stream root", attrsOf(root), map[string]string{
-		"gen_ai.system": "anthropic", "gen_ai.operation.name": "chat", "gen_ai.request.model": "test-model",
+		"gen_ai.system": "anthropic", "gen_ai.operation.name": "invoke_agent", "gen_ai.request.model": "test-model",
 		"gen_ai.response.model": "test-model", "gen_ai.usage.input_tokens": "3", "gen_ai.usage.output_tokens": "2",
 		"gen_ai.usage.total_tokens": "5", "gen_ai.usage.prompt_tokens": "3", "gen_ai.usage.completion_tokens": "2",
 		"gen_ai.prompt.0.role": "system", "gen_ai.prompt.0.content": "sys", "gen_ai.prompt.1.role": "user", "gen_ai.prompt.1.content": "q",

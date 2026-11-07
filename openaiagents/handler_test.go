@@ -431,8 +431,8 @@ func TestTelemetry(t *testing.T) {
 	h, _, exp := setup(t, response("r", textOutput("done"), 10, 4, 3))
 	invoke(t, h, aiserver.HandlerRequest{Config: cfg(instructions("Be terse")), UserInput: "hi",
 		Variables: map[string]any{aiserver.VarLD: ldFixture}})
-	assertRoot(t, exp, "openai.agent.run", 10, 3, 4, "done")
-	if SpanName != "openai.agent.run" || StreamSpanName != "openai.agent.run.stream" {
+	assertRoot(t, exp, "invoke_agent", 10, 3, 4, "done")
+	if SpanName != "invoke_agent" {
 		t.Error("span name constants changed")
 	}
 	chat := spansByName(exp)["chat test-model"]
@@ -497,7 +497,7 @@ func TestStream(t *testing.T) {
 			evs[2].Usage["input_tokens"] != 10.0 || evs[2].Usage["output_tokens"] != 3.0 {
 			t.Fatalf("events = %+v", evs)
 		}
-		assertRoot(t, exp, StreamSpanName, 10, 3, 4, "done")
+		assertRoot(t, exp, "invoke_agent", 10, 3, 4, "done")
 	})
 
 	t.Run("tool loop: chunks from both turns, done output concatenated, args passed", func(t *testing.T) {
@@ -539,7 +539,7 @@ func TestStream(t *testing.T) {
 		if _, err := collect(t, h, aiserver.HandlerRequest{Config: cfg(nil)}); err == nil {
 			t.Fatal("want error")
 		}
-		if s := spansByName(exp)[StreamSpanName]; len(s) != 1 {
+		if s := spansByName(exp)[SpanName]; len(s) != 1 {
 			t.Fatalf("spans = %v", spansByName(exp))
 		}
 		for _, s := range exp.GetSpans().Snapshots() {

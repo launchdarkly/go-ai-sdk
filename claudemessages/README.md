@@ -110,7 +110,7 @@ res, err := claudemessages.ClaudeMessages(ctx, "my-ai-config", "Hello", ldcontex
 ```go
 const PackageName = "github.com/launchdarkly/go-ai-sdk/claudemessages"
 const PackageVersion = "0.1.0"
-const SpanName = "claude.messages"
+const SpanName = "invoke_agent"
 var ProvidesFor = aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeMessages}
 var ErrToolNotFound error
 

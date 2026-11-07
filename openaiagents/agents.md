@@ -27,7 +27,7 @@ lives in `internal/openaiwire`, also used by `openaimessages`.
 ## Public exports
 
 ```go
-const PackageName, PackageVersion, SpanName, StreamSpanName
+const PackageName, PackageVersion, SpanName
 var ProvidesFor aiserver.ProvidesFor
 var ErrMaxTurns, ErrToolNotOffered, ErrNoRoot, ErrNilGraph error
 type Options struct{ Client *openai.Client; APIKey string; CaptureContent aiserver.ContentCapture; MaxTurns int }
@@ -75,13 +75,13 @@ call switches the active agent (the first one per turn wins; the output is
 `{"assistant":"<name>"}`), firing `handoff` then `agentStart`. `agentEnd` fires once, for the
 final agent.
 
-Handler spans: root `openai.agent.run` (or `openai.agent.run.stream`), `gen_ai.operation.name =
+Handler spans: root `invoke_agent` (blocking and streaming), `gen_ai.operation.name =
 invoke_agent`, one `chat <model>` child per turn and one `execute_tool <name>` child per tool call.
 
 Native graph (`NativeGraph.Invoke`): one agent per reachable node (`Traverse`), then a handoff per
 outgoing edge (cycles are fine). History and input seed the root only. Hooks map to LD events
 when `NativeGraphOptions.Context` is set (`nativeRun`). Each stretch one agent is active, from
-`agentStart` to its `handoff` or `agentEnd`, is a node run: an `openai.agent.run` span under the
+`agentStart` to its `handoff` or `agentEnd`, is a node run: an `invoke_agent` span under the
 graph span (node association + context identity, `chat` / `execute_tool` children) and per-node
 `$ld:ai:duration:total`, `$ld:ai:generation:success` (or `:error`) and `$ld:ai:tokens:*` (> 0).
 `agentStart` → `$ld:ai:graph:node` (once per node, `nodeKey` / `index`). A handoff is tracked when
