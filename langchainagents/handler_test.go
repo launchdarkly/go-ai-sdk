@@ -443,7 +443,7 @@ func TestStreaming(t *testing.T) {
 		t.Fatal("no streaming root span")
 	}
 	a := spanAttrs(root[0])
-	if a["gen_ai.system"] != "langchain" || a["gen_ai.provider.name"] != "anthropic" || a["gen_ai.usage.total_tokens"] != "7" || a["launchdarkly.run.id"] != "run-123" ||
+	if a["gen_ai.system"] != "langchain" || a["gen_ai.provider.name"] != "anthropic" || a["gen_ai.operation.name"] != "invoke_agent" || a["gen_ai.usage.total_tokens"] != "7" || a["launchdarkly.run.id"] != "run-123" ||
 		a["gen_ai.completion.0.content"] != "Let me check. Done!" || a["gen_ai.prompt.0.content"] != "I" || root[0].Status().Code != codes.Ok ||
 		!hasEvent(root[0], "gen_ai.content.prompt", "q") || !hasEvent(root[0], "gen_ai.content.completion", "Done!") {
 		t.Errorf("stream root = %v", a)
