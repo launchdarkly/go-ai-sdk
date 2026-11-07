@@ -7,6 +7,8 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 // judgeScope holds a judge handler's root span open after the handler
@@ -68,9 +70,29 @@ func (s *judgeScope) release() {
 }
 
 // withJudgeEvaluation runs fn with a judge scope on ctx. fn calls record
-// after it has a finite score.
-func withJudgeEvaluation(ctx context.Context, judgeKey string, fn func(ctx context.Context, record func(score float64, explanation string)) error) error {
+// after it has a finite score. target is the graded run's track data, the
+// one the judge's metric event carries: every SDK span the judge starts gets
+// its non-empty run id, config key and variation key, so a judge can be
+// joined to the run it graded.
+func withJudgeEvaluation(ctx context.Context, judgeKey string, target TrackData, fn func(ctx context.Context, record func(score float64, explanation string)) error) error {
 	s := &judgeScope{key: judgeKey}
 	defer s.release()
+	ctx = telemetry.WithSpanAttributes(ctx, judgeTargetAttributes(target)...)
 	return fn(context.WithValue(ctx, judgeScopeKey{}, s), s.record)
+}
+
+// judgeTargetAttributes are the launchdarkly.judge.target.* attributes for
+// the graded run, each only when non-empty.
+func judgeTargetAttributes(td TrackData) []attribute.KeyValue {
+	var attrs []attribute.KeyValue
+	for _, a := range [...]struct{ key, value string }{
+		{"launchdarkly.judge.target.run.id", td.RunID},
+		{"launchdarkly.judge.target.config.key", td.ConfigKey},
+		{"launchdarkly.judge.target.variation.key", td.VariationKey},
+	} {
+		if a.value != "" {
+			attrs = append(attrs, attribute.String(a.key, a.value))
+		}
+	}
+	return attrs
 }
