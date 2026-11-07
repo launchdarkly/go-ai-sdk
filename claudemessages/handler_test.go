@@ -298,6 +298,7 @@ func TestToolFilteringAndLoop(t *testing.T) {
 	if !strings.Contains(events["gen_ai.content.prompt"], "q") || events["gen_ai.content.completion"] != "final" {
 		t.Errorf("content events = %v", events)
 	}
+	assertSpanTree(t, "invoke tool loop", exp.GetSpans().Snapshots())
 }
 
 // launchdarkly.graph.key is set when __ld carries a graph key.
@@ -473,6 +474,7 @@ func TestStreamToolLoop(t *testing.T) {
 		t.Fatalf("chunks=%v done=%+v args=%v", chunks, done, gotArgs)
 	}
 
+	assertSpanTree(t, "stream tool loop", exp.GetSpans().Snapshots())
 	exp.Reset()
 	var gotErr error
 	for _, err := range h.Stream(bg, aiserver.HandlerRequest{Config: cfg(nil), UserInput: "q"}) {
