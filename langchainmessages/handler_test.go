@@ -512,6 +512,7 @@ func TestStreamToolLoop(t *testing.T) {
 	if root.Status().Code != codes.Ok || root.EndTime().IsZero() || !hasEvent(root, "gen_ai.content.prompt", "q") || !hasEvent(root, "gen_ai.content.completion", "sunny") {
 		t.Errorf("stream root status/events wrong")
 	}
+	assertSpanTree(t, "stream tool loop", exp.GetSpans().Snapshots())
 }
 
 func TestStreamErrorAndAbandon(t *testing.T) {

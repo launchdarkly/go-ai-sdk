@@ -811,6 +811,7 @@ func TestStream(t *testing.T) {
 		t.Errorf("stream root status %v events %v", root.Status(), rootEvents)
 	}
 
+	assertSpanTree(t, "stream tool loop", exp.GetSpans().Snapshots())
 	// Abandonment: break on the first chunk → spans abandoned, status unset.
 	exp.Reset()
 	for range h.Stream(bg, aiserver.HandlerRequest{Config: cfg(instructions("x"))}) {

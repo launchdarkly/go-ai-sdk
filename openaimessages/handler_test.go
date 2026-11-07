@@ -603,6 +603,7 @@ func TestStream(t *testing.T) {
 		if n := len(spansByName(exp)["chat test-model"]); n != 2 {
 			t.Errorf("chat spans = %d", n)
 		}
+		assertSpanTree(t, "stream tool loop", exp.GetSpans().Snapshots())
 	})
 	t.Run("provider error", func(t *testing.T) {
 		h, _, exp := setup(t, "STATUS400")
