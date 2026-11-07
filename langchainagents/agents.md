@@ -54,7 +54,7 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
 ## Implementation details
 
 - **`config`** — `ModelConfig` applies the Bedrock `model.region` prefix; lowercased
-  `provider.name` is `gen_ai.system` and picks the built-in model. `aiserver.ComposePrompt(req,
+  `provider.name` is `gen_ai.provider.name` (`gen_ai.system` is always `langchain`) and picks the built-in model. `aiserver.ComposePrompt(req,
   ModeAgent)` gives the system prompt (instructions win over system messages) and the turns.
   `outputFormat` (blocking only) appends `aiserver.OutputFormatInstruction` to the system prompt
   (best effort). `model.parameters` → `llms.CallOption`s; `model.custom` is never read.
@@ -90,10 +90,10 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
   and `$ld:ai:graph:invocation_success`; on error `$ld:ai:graph:invocation_failure`.
   `$ld:ai:graph:*` events carry the graph's `TrackData` (as `aiserver.Graph`), per-node events the
   node's. `$ld:ai:graph:path` is never tracked.
-- **Spans** — handler: root `langchain.agent` (`gen_ai.operation.name = invoke_agent`),
+- **Spans** — handler: root `invoke_agent` (`gen_ai.operation.name = invoke_agent`),
   `chat <model>` / `execute_tool <name>` children. ToLangGraph: `ld.ai.graph` with
   `ld.ai.graph.key`, LD association attributes without context identity, usage,
-  `launchdarkly.graph.path`; ended on every path. Under it, one `langchain.agent` span per node
+  `launchdarkly.graph.path`; ended on every path. Under it, one `invoke_agent` span per node
   run with the node's association and the context identity, and `chat` / `execute_tool` children
   (handoff and NativeTool calls included).
 - **Streaming** — `llms.WithStreamingFunc` deltas are `chunk` events; `done.output` joins every

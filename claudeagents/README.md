@@ -144,7 +144,7 @@ process without it.
 ```go
 const PackageName = "github.com/launchdarkly/go-ai-sdk/claudeagents"
 const PackageVersion = "0.1.0"
-const SpanName = "claude.query"
+const SpanName = "invoke_agent"
 const DefaultMaxSteps = 10
 const SubAgentToolPrefix = "mcp__subagents__"
 var ProvidesFor = aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeAgent}

@@ -26,10 +26,8 @@ const (
 	PackageName = "github.com/launchdarkly/go-ai-sdk/langchainmessages"
 	// PackageVersion is this package's release version.
 	PackageVersion = "0.1.0" // x-release-please-version
-	// SpanName is the blocking root span name.
-	SpanName = "langchain.invoke"
-	// StreamSpanName is the streaming root span name.
-	StreamSpanName = "langchain.stream"
+	// SpanName is the root span name for both the blocking and streaming paths.
+	SpanName = "invoke_agent"
 	// maxSteps bounds the tool loop; 10 matches the JavaScript handler.
 	maxSteps = 10
 )
@@ -150,12 +148,8 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 	if enforce {
 		p.System = aiserver.WithOutputFormat(p.System, schema)
 	}
-	name := SpanName
-	if streaming {
-		name = StreamSpanName
-	}
 	r := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{
-		Tracer: PackageName, Name: name, System: provider, RequestModel: cfg.Model.Name,
+		Tracer: PackageName, Name: SpanName, System: langchainwire.GenAISystem, ProviderName: provider, RequestModel: cfg.Model.Name,
 	}, req, p)
 	defer r.EndOnPanic()
 

@@ -347,10 +347,10 @@ func TestToolLoopAndTelemetry(t *testing.T) {
 	if len(spans[SpanName]) != 1 || len(spans["chat test-model"]) != 3 || len(spans["execute_tool a"]) != 1 || len(spans["execute_tool b"]) != 1 {
 		t.Fatalf("span tree = %v", spans)
 	}
-	root := spans[SpanName][0]
+	root := spans["invoke_agent"][0]
 	attrs := spanAttrs(root)
 	for k, want := range map[string]string{
-		"gen_ai.system": "anthropic", "gen_ai.operation.name": "chat", "gen_ai.request.model": "test-model",
+		"gen_ai.system": "langchain", "gen_ai.provider.name": "anthropic", "gen_ai.operation.name": "invoke_agent", "gen_ai.request.model": "test-model",
 		"gen_ai.response.model": "test-model", "gen_ai.usage.input_tokens": "4", "gen_ai.usage.output_tokens": "5",
 		"gen_ai.usage.total_tokens": "9", "gen_ai.usage.prompt_tokens": "4", "gen_ai.usage.completion_tokens": "5",
 		"gen_ai.prompt.0.role": "system", "gen_ai.prompt.0.content": "x", "gen_ai.prompt.1.role": "user",
@@ -492,13 +492,13 @@ func TestStreamToolLoop(t *testing.T) {
 	}
 
 	spans := spansByName(exp)
-	if len(spans[StreamSpanName]) != 1 || len(spans[SpanName]) != 0 || len(spans["chat test-model"]) != 2 || len(spans["execute_tool a"]) != 1 {
+	if len(spans["invoke_agent"]) != 1 || len(spans["chat test-model"]) != 2 || len(spans["execute_tool a"]) != 1 {
 		t.Fatalf("stream span tree = %v", spans)
 	}
-	root := spans[StreamSpanName][0]
+	root := spans[SpanName][0]
 	attrs := spanAttrs(root)
 	for k, want := range map[string]string{
-		"gen_ai.system": "anthropic", "gen_ai.operation.name": "chat", "gen_ai.request.model": "test-model",
+		"gen_ai.system": "langchain", "gen_ai.provider.name": "anthropic", "gen_ai.operation.name": "invoke_agent", "gen_ai.request.model": "test-model",
 		"gen_ai.response.model": "test-model", "gen_ai.usage.input_tokens": "8", "gen_ai.usage.output_tokens": "6",
 		"gen_ai.usage.total_tokens": "14", "gen_ai.usage.prompt_tokens": "8", "gen_ai.usage.completion_tokens": "6",
 		"gen_ai.prompt.1.content": "q", "gen_ai.completion.0.content": "Let me check. It is sunny.",
@@ -627,7 +627,8 @@ func TestStructuredOutput(t *testing.T) {
 	}
 }
 
-// LangChain rule: gen_ai.system is the lowercased provider.
+// LangChain rule: gen_ai.system is "langchain" on every span, and
+// gen_ai.provider.name is the lowercased configured provider.
 func TestGenAISystemFromProvider(t *testing.T) {
 	for provider, want := range map[string]string{"Anthropic": "anthropic", "OpenAI": "openai", "": "openai"} {
 		h, _, exp := setup(t, textTurn("ok", 1, 1))
@@ -635,8 +636,9 @@ func TestGenAISystemFromProvider(t *testing.T) {
 		c.Provider.Name = provider
 		_, _ = h.Invoke(bg, aiserver.HandlerRequest{Config: c})
 		for _, s := range exp.GetSpans().Snapshots() {
-			if got := spanAttrs(s)["gen_ai.system"]; got != want {
-				t.Errorf("provider %q: %s gen_ai.system = %q", provider, s.Name(), got)
+			a := spanAttrs(s)
+			if a["gen_ai.system"] != "langchain" || a["gen_ai.provider.name"] != want {
+				t.Errorf("provider %q: %s gen_ai.system = %q, gen_ai.provider.name = %q", provider, s.Name(), a["gen_ai.system"], a["gen_ai.provider.name"])
 			}
 		}
 	}
@@ -832,8 +834,8 @@ func TestLangChainMessagesNilOptions(t *testing.T) {
 	if got := ld.requestedKeys(); !reflect.DeepEqual(got, []string{"cfg"}) {
 		t.Errorf("evaluated flag keys %v, want [cfg]", got)
 	}
-	if a := spanAttrs(spansByName(exp)[SpanName][0]); a["gen_ai.system"] != "openai" {
-		t.Errorf("gen_ai.system = %q", a["gen_ai.system"])
+	if a := spanAttrs(spansByName(exp)[SpanName][0]); a["gen_ai.system"] != "langchain" || a["gen_ai.provider.name"] != "openai" {
+		t.Errorf("gen_ai.system = %q, gen_ai.provider.name = %q", a["gen_ai.system"], a["gen_ai.provider.name"])
 	}
 }
 

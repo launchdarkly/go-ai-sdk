@@ -417,10 +417,10 @@ func assertRootTelemetry(t *testing.T, exp *tracetest.InMemoryExporter, wantIn, 
 	if len(spans[SpanName]) != 1 || len(spans["chat test-model"]) != chats {
 		t.Fatalf("span tree = %v", spans)
 	}
-	root := spans[SpanName][0]
+	root := spans["invoke_agent"][0]
 	a := attrs(root)
 	for k, want := range map[string]string{
-		"gen_ai.system": "openai", "gen_ai.operation.name": "chat", "gen_ai.request.model": "test-model",
+		"gen_ai.system": "openai", "gen_ai.operation.name": "invoke_agent", "gen_ai.request.model": "test-model",
 		"gen_ai.response.model":                servedModel,
 		"gen_ai.usage.input_tokens":            fmt.Sprint(wantIn),
 		"gen_ai.usage.prompt_tokens":           fmt.Sprint(wantIn),

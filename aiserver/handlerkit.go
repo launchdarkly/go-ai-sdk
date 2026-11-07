@@ -153,9 +153,9 @@ func trackSpan(s trace.Span) trace.Span { return &trackedSpan{s} }
 // HandlerSpanOptions describe a handler's root span.
 type HandlerSpanOptions struct {
 	Tracer       string // instrumentation scope; must start with TracerPrefix
-	Name         string // documented span name, e.g. "claude.messages"
+	Name         string // root span name: "invoke_agent" for every handler
 	System       string // gen_ai.system, e.g. "anthropic"
-	Operation    string // gen_ai.operation.name; "" means "chat"
+	Operation    string // gen_ai.operation.name; "" means "invoke_agent"
 	RequestModel string
 	ProviderName string // gen_ai.provider.name; "" means System
 }
@@ -180,7 +180,7 @@ type HandlerRun struct {
 // attributes + gen_ai.content.prompt).
 func StartHandlerRun(ctx context.Context, opts HandlerSpanOptions, req HandlerRequest, p Prompt) *HandlerRun {
 	if opts.Operation == "" {
-		opts.Operation = "chat"
+		opts.Operation = "invoke_agent"
 	}
 	if opts.ProviderName == "" {
 		opts.ProviderName = opts.System

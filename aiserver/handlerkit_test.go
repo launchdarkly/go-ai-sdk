@@ -143,7 +143,7 @@ func TestHandlerRunContentEvents(t *testing.T) {
 // success, failure and abandonment, and the root carries run usage.
 func TestHandlerRunSpanTree(t *testing.T) {
 	exp := withSpans(t)
-	opts := HandlerSpanOptions{Tracer: TracerPrefix + "/t", Name: "claude.messages", System: "anthropic", RequestModel: "m"}
+	opts := HandlerSpanOptions{Tracer: TracerPrefix + "/t", Name: "invoke_agent", System: "anthropic", RequestModel: "m"}
 	req := HandlerRequest{Variables: map[string]any{VarLD: TrackData{ConfigKey: "cfg", VariationKey: "v", RunID: "r"}}}
 	byName := func() map[string]tracetest.SpanStub {
 		out := map[string]tracetest.SpanStub{}
@@ -169,7 +169,7 @@ func TestHandlerRunSpanTree(t *testing.T) {
 	r.EndChat(r.StartChat("m"), "", SpanUsage{Input: 1, Output: 1}, "")
 	r.Finish("m-resp", "done")
 	s := byName()
-	root := s["claude.messages"]
+	root := s["invoke_agent"]
 	if len(exp.GetSpans()) != 4 {
 		t.Fatalf("spans = %d, want root + 2 chat + 1 tool", len(exp.GetSpans()))
 	}
@@ -185,7 +185,7 @@ func TestHandlerRunSpanTree(t *testing.T) {
 		}
 	}
 	for k, want := range map[string]string{
-		"gen_ai.system": "anthropic", "gen_ai.provider.name": "anthropic", "gen_ai.operation.name": "chat",
+		"gen_ai.system": "anthropic", "gen_ai.provider.name": "anthropic", "gen_ai.operation.name": "invoke_agent",
 		"gen_ai.request.model": "m", "gen_ai.response.model": "m-resp",
 		"gen_ai.usage.input_tokens": "4", "gen_ai.usage.output_tokens": "3", "gen_ai.usage.total_tokens": "7",
 		"gen_ai.usage.prompt_tokens": "4", "gen_ai.usage.completion_tokens": "3",
@@ -218,7 +218,7 @@ func TestHandlerRunSpanTree(t *testing.T) {
 			t.Errorf("failed run: %s status=%v ended=%v", c.Name, c.Status.Code, !c.EndTime.IsZero())
 		}
 	}
-	if got := attr(byName()["claude.messages"], "gen_ai.usage.input_tokens"); got != "5" || len(exp.GetSpans()) != 3 {
+	if got := attr(byName()["invoke_agent"], "gen_ai.usage.input_tokens"); got != "5" || len(exp.GetSpans()) != 3 {
 		t.Errorf("failed root input tokens = %q, spans = %d", got, len(exp.GetSpans()))
 	}
 

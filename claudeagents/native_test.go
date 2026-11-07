@@ -112,7 +112,7 @@ func TestToClaudeAgentsRun(t *testing.T) {
 	}
 	q := e.spans(SpanName)
 	if len(q) != 2 {
-		t.Fatalf("want 2 claude.query spans, got %d", len(q))
+		t.Fatalf("want 2 invoke_agent spans, got %d", len(q))
 	}
 	// the leaf runs inside the root's execute_tool span
 	tools := e.spans("execute_tool mcp__subagents__leaf")

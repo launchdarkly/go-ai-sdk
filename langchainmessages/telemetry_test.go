@@ -39,7 +39,7 @@ func TestChatSpanFinishReasonsAndUsage(t *testing.T) {
 	for k, want := range map[string]string{
 		"gen_ai.response.finish_reasons": `["content_filter"]`, "gen_ai.usage.input_tokens": "15", "gen_ai.usage.output_tokens": "0",
 		"gen_ai.usage.completion_tokens": "0", "gen_ai.usage.cache_read.input_tokens": "3", "gen_ai.usage.cache_creation.input_tokens": "2",
-		"gen_ai.system": "anthropic", "gen_ai.provider.name": "anthropic",
+		"gen_ai.system": "langchain", "gen_ai.provider.name": "anthropic",
 	} {
 		if last[k] != want {
 			t.Errorf("final chat %s = %q, want %q", k, last[k], want)

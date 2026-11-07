@@ -29,7 +29,7 @@ const (
 	PackageVersion = "0.1.0" // x-release-please-version
 	// SpanName is the handler's root span. There is no separate
 	// streaming span name, so streaming uses the same name.
-	SpanName = "langchain.agent"
+	SpanName = "invoke_agent"
 	// operation is gen_ai.operation.name on the root span.
 	operation = "invoke_agent"
 )
@@ -138,7 +138,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 		p.System = aiserver.WithOutputFormat(p.System, cfg.OutputFormat)
 	}
 	r := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{
-		Tracer: PackageName, Name: SpanName, System: langchainwire.ProviderName(cfg), Operation: operation,
+		Tracer: PackageName, Name: SpanName, System: langchainwire.GenAISystem, ProviderName: langchainwire.ProviderName(cfg), Operation: operation,
 		RequestModel: cfg.Model.Name,
 	}, req, p)
 	defer r.EndOnPanic()
