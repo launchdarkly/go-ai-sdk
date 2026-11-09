@@ -3,6 +3,7 @@ package evaluations
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -291,7 +292,11 @@ func (r *runState) runPhases(ctx context.Context, em *emitter) error {
 	}
 	for _, g := range gens {
 		em.track(generationEventName, g.row.index, func() (map[string]any, error) {
-			return em.payload(g.row.index, nil, generationFields(g))
+			f, err := generationFields(g)
+			if err != nil {
+				return nil, err
+			}
+			return em.payload(g.row.index, nil, f)
 		})
 	}
 	if len(r.criteria) == 0 {
@@ -468,22 +473,37 @@ func (r *runState) generate(ctx context.Context) ([]*genResult, error) {
 	return results, nil
 }
 
-func generationFields(g *genResult) map[string]any {
-	f := map[string]any{
-		"status":      g.status,
-		"startedAt":   timestamp(g.started),
-		"generatedAt": timestamp(g.started.Add(g.elapsed)),
-		"latencyMs":   g.elapsed.Milliseconds(),
-		"output":      g.output,
+// generationFields builds the generation event's own fields. contentHash
+// covers status, output, error (null when absent), errorMessage and usage,
+// and output is sent as the normalized value the hash covers.
+func generationFields(g *genResult) (map[string]any, error) {
+	output, err := jcsValue(g.output)
+	if err != nil {
+		return nil, err
 	}
+	content := map[string]any{"status": g.status, "output": output, "error": nil}
 	if g.status == statusError {
-		f["error"] = map[string]any{"code": generationErrorCode, "message": g.errMsg}
-		f["errorMessage"] = g.errMsg
+		content["error"] = map[string]any{"code": generationErrorCode, "message": g.errMsg}
+		content["errorMessage"] = g.errMsg
 	}
 	if g.usage != nil {
-		f["usage"] = usageWire(g.usage)
+		content["usage"] = usageWire(g.usage)
 	}
-	return f
+	hash, err := contentHash(content)
+	if err != nil {
+		return nil, err
+	}
+	f := maps.Clone(content)
+	if output == nil && !isNil(g.output) {
+		// An output of NaN or ±Inf is sent as null, as JavaScript sends it;
+		// payload drops nil values, so spell the null out.
+		f["output"] = json.RawMessage("null")
+	}
+	f["contentHash"] = hash
+	f["startedAt"] = timestamp(g.started)
+	f["generatedAt"] = timestamp(g.started.Add(g.elapsed))
+	f["latencyMs"] = g.elapsed.Milliseconds()
+	return f, nil
 }
 
 // --- evaluation phase ---------------------------------------------

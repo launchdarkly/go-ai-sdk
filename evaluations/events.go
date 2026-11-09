@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"reflect"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -37,38 +40,180 @@ type flushWaiter interface {
 	FlushAndWait(timeout time.Duration) bool
 }
 
-// canonicalJSON is the eventId serialization: keys sorted,
-// compact, and byte-identical to Python's json.dumps(sort_keys=True,
-// separators=(",", ":")). Python's default ensure_ascii escapes every
-// non-ASCII character as \uXXXX (surrogate pairs above U+FFFF) and leaves
-// <, > and & literal. encoding/json escapes <>& unless SetEscapeHTML(false),
-// already escapes U+2028/U+2029 the same way, and writes other non-ASCII
-// literally, so those are escaped here.
+// canonicalJSON is RFC 8785 canonical JSON (JCS), the form eventId and
+// contentHash hash in every SDK: no whitespace, object keys sorted by UTF-16
+// code unit, strings and numbers spelled as JavaScript's JSON.stringify spells
+// them. Values are first normalized by jcsValue.
 func canonicalJSON(v any) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
+	t, err := jcsValue(v)
+	if err != nil {
 		return nil, err
 	}
-	var out strings.Builder
-	for _, r := range strings.TrimSuffix(buf.String(), "\n") {
-		switch {
-		case r < 0x80:
-			out.WriteRune(r)
-		case r > 0xFFFF:
-			hi, lo := utf16.EncodeRune(r)
-			fmt.Fprintf(&out, `\u%04x\u%04x`, hi, lo)
+	var b strings.Builder
+	writeJCS(&b, t)
+	return []byte(b.String()), nil
+}
+
+// jcsValue returns v as the JSON tree canonicalJSON writes, built only from
+// nil, bool, string, float64, map[string]any and []any. Every number becomes
+// a float64 (so an integer above 2^53 becomes the nearest double), -0 becomes
+// 0, and NaN or ±Inf becomes nil (null), as JSON.stringify writes them. The
+// RFC would reject non-finite numbers instead; the SDK contract writes null.
+// The generation event carries this tree too, so it holds what was hashed.
+func jcsValue(v any) (any, error) {
+	if isNil(v) {
+		return nil, nil
+	}
+	switch x := v.(type) {
+	case bool, string:
+		return x, nil
+	case json.Number:
+		f, _ := strconv.ParseFloat(string(x), 64) // out of range parses to ±Inf, written as null
+		return jcsNumber(f), nil
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			n, err := jcsValue(e)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = n
+		}
+		return out, nil
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			n, err := jcsValue(e)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = n
+		}
+		return out, nil
+	}
+	switch rv := reflect.ValueOf(v); rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return jcsNumber(float64(rv.Int())), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return jcsNumber(float64(rv.Uint())), nil
+	case reflect.Float32, reflect.Float64:
+		return jcsNumber(rv.Float()), nil
+	}
+	// Any other value (a struct, a typed map or slice) is hashed as the JSON
+	// it marshals to.
+	// ponytail: a struct holding NaN or ±Inf fails json.Marshal here and its
+	// event is logged and dropped; walk structs by reflection if handlers
+	// ever return such values.
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var decoded any
+	if err := dec.Decode(&decoded); err != nil {
+		return nil, err
+	}
+	return jcsValue(decoded)
+}
+
+func jcsNumber(f float64) any {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return nil
+	}
+	return f + 0 // -0 + 0 is +0
+}
+
+// writeJCS writes a jcsValue tree.
+func writeJCS(b *strings.Builder, v any) {
+	switch x := v.(type) {
+	case nil:
+		b.WriteString("null")
+	case bool:
+		b.WriteString(strconv.FormatBool(x))
+	case float64:
+		// encoding/json spells a finite float64 as ECMAScript does.
+		n, _ := json.Marshal(x)
+		b.Write(n)
+	case string:
+		writeJCSString(b, x)
+	case []any:
+		b.WriteByte('[')
+		for i, e := range x {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			writeJCS(b, e)
+		}
+		b.WriteByte(']')
+	case map[string]any:
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		slices.SortFunc(keys, func(a, c string) int {
+			return slices.Compare(utf16.Encode([]rune(a)), utf16.Encode([]rune(c)))
+		})
+		b.WriteByte('{')
+		for i, k := range keys {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			writeJCSString(b, k)
+			b.WriteByte(':')
+			writeJCS(b, x[k])
+		}
+		b.WriteByte('}')
+	}
+}
+
+// writeJCSString escapes only what JSON.stringify escapes: the quote, the
+// backslash and control characters. Everything else, U+2028 and U+2029
+// included, is written as is. Invalid UTF-8 becomes U+FFFD.
+func writeJCSString(b *strings.Builder, s string) {
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			b.WriteString(`\"`)
+		case '\\':
+			b.WriteString(`\\`)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\f':
+			b.WriteString(`\f`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
 		default:
-			fmt.Fprintf(&out, `\u%04x`, r)
+			if r < 0x20 {
+				fmt.Fprintf(b, `\u%04x`, r)
+			} else {
+				b.WriteRune(r)
+			}
 		}
 	}
-	return []byte(out.String()), nil
+	b.WriteByte('"')
 }
 
 // eventID is the hex SHA-256 of the canonical identity set.
 func eventID(identity map[string]any) (string, error) {
 	b, err := canonicalJSON(identity)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// contentHash is the hex SHA-256 of the canonical JSON of what a row
+// generated (status, output, error, and errorMessage and usage when set), so
+// the same content hashes the same in every SDK whatever the row or run.
+func contentHash(content map[string]any) (string, error) {
+	b, err := canonicalJSON(content)
 	if err != nil {
 		return "", err
 	}
