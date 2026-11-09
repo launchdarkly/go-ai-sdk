@@ -3,6 +3,7 @@ package evaluations
 import (
 	"context"
 	"fmt"
+	"go/token"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
@@ -48,4 +49,31 @@ func (c *ToolsClient) Get(ctx context.Context, key string, impl aiserver.ToolHan
 	pin := &libraryPin{key: key, description: description, schema: schema, version: version, projectKey: project}
 	clone, _ := cloneJSON(schema).(map[string]any)
 	return EvalTool{Key: key, Implementation: impl, Schema: clone, Description: description, library: pin}, nil
+}
+
+// toolErrorResult is what the model receives from a tool that returned an
+// error: "Error: <Class>: <message>", as the JavaScript and Python SDKs write
+// it. Class is the returned (outer) error's type name when it is exported,
+// else "Error", so errors.New("x") gives "Error: Error: x" as a plain
+// JavaScript Error does. Spans keep the raw Go type instead (errorType).
+func toolErrorResult(err error) string {
+	class := errorType(err)
+	if !token.IsExported(class) {
+		class = "Error"
+	}
+	return "Error: " + class + ": " + err.Error()
+}
+
+// answerErrors makes a failing tool answer the model with toolErrorResult
+// instead of failing the handler, so the row goes on and measures how the
+// agent copes. Every error is answered, cancellation included, as in the
+// JavaScript SDK. A panic is not recovered here: it fails the row.
+func answerErrors(fn aiserver.ToolFunc) aiserver.ToolFunc {
+	return func(ctx context.Context, args map[string]any) (any, error) {
+		out, err := fn(ctx, args)
+		if err != nil {
+			return toolErrorResult(err), nil
+		}
+		return out, nil
+	}
 }

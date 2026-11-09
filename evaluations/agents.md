@@ -25,6 +25,10 @@ Rules that are easy to break: `Run` issues no tool request (library tools come p
 `message_history` comes only from `internal/judging.BuildMessageHistory`; a row that failed
 generation gets no criterion event; the final flush is deferred; an inline run omits
 `datasetId`/`datasetKey` everywhere; the default thresholds, event names and hosts stay unexported.
+A local tool that returns an error answers the model with `Error: <Class>: <message>` (`answerErrors`, wrapped
+outside the recorder, so the call is still recorded as failed and its `execute_tool` span is ERROR with `tool_error`).
+`<Class>` is the returned (outer) error's type name when exported, else `Error`; spans keep the raw type
+(`errorType`). Cancellation errors are answered too, as in the JavaScript SDK; panics still fail the row.
 Check: `gofmt -l evaluations && go vet ./evaluations/ && go test -race ./evaluations/`.
 
 ```go
