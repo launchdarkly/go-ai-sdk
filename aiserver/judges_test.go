@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"iter"
 	"reflect"
 	"strings"
 	"testing"
@@ -254,5 +256,64 @@ func TestDeferredJudgeTrackDataMatchesInline(t *testing.T) {
 	task.ParentTrackData.GraphKey = "g1"
 	if res, _ := RunJudge(bg, task, []*ProviderHandler{h}); res == nil || res.TrackData.GraphKey != "g1" {
 		t.Errorf("graphKey lost: %+v", res)
+	}
+}
+
+// Every online judge gets "input": the user input, or "" when there is none,
+// so a rubric that uses {{input}} never sees the literal placeholder.
+func TestJudgesAlwaysReceiveInput(t *testing.T) {
+	withFake(t, map[string]any{
+		"cfg":   enabledConfig("P", "", judgedConfig(nil)),
+		"judge": enabledConfig("P", "judge", nil),
+		"g":     map[string]any{"root": "node", "edges": map[string]any{}},
+		"node":  enabledConfig("P", "agent", judgedConfig(nil)),
+	})
+	withSpans(t)
+	var judgeReqs []HandlerRequest
+	h := spanJudgeHandler(`{"score":1,"reasoning":"r"}`, false, nil, &judgeReqs)
+	agent := createHandler(ProvidesFor{"P", ModeAgent}, func(context.Context, HandlerRequest) (HandlerResult, error) {
+		return HandlerResult{Output: "answer"}, nil
+	}, nil, CaptureDefault)
+	streaming := createHandler(ProvidesFor{"P", ModeMessages}, h.Invoke, func(_ context.Context, req HandlerRequest) iter.Seq2[HandlerStreamEvent, error] {
+		return func(yield func(HandlerStreamEvent, error) bool) {
+			yield(HandlerStreamEvent{Type: EventChunk, Text: "answer"}, nil)
+		}
+	}, CaptureDefault)
+	paths := map[string]func(input string) error{
+		"inline": func(input string) error {
+			_, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, input, userCtx)
+			return err
+		},
+		"deferred": func(input string) error {
+			resp, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}, SkipJudges: true}).Invoke(bg, input, userCtx)
+			if err != nil || len(resp.JudgeTasks) != 1 {
+				return fmt.Errorf("tasks %v: %w", resp.JudgeTasks, err)
+			}
+			_, err = RunJudge(bg, resp.JudgeTasks[0], []*ProviderHandler{h})
+			return err
+		},
+		"stream": func(input string) error {
+			_, err := drain(Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{streaming}}).Stream(bg, input, userCtx))
+			return err
+		},
+		"graph node": func(input string) error {
+			def := ResolveGraph(bg, "g", userCtx, GraphOptions{Handlers: []*ProviderHandler{agent, h}})
+			_, err := def.RunNode(bg, def.Root, input, RunNodeOptions{})
+			return err
+		},
+	}
+	for name, run := range paths {
+		for _, input := range []string{"question", ""} {
+			judgeReqs = nil
+			if err := run(input); err != nil {
+				t.Fatalf("%s %q: %v", name, input, err)
+			}
+			if len(judgeReqs) != 1 {
+				t.Fatalf("%s %q: %d judge calls", name, input, len(judgeReqs))
+			}
+			if got, has := judgeReqs[0].Variables["input"]; !has || got != input {
+				t.Errorf("%s %q: input = %#v (present %v)", name, input, got, has)
+			}
+		}
 	}
 }

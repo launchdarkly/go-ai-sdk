@@ -123,7 +123,9 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 			res, err := executeAndTrack(ctx, execArgs{
 				configKey: j.Key, config: effective, meta: jmeta, userCtx: a.userCtx, handler: h,
 				userInput: a.output, graphKey: a.graphKey,
-				variables: map[string]any{"message_history": history, "response_to_evaluate": a.output},
+				// input is always sent ("" when there is none), so a rubric's {{input}}
+				// never renders as the literal placeholder.
+				variables: map[string]any{"message_history": history, "response_to_evaluate": a.output, "input": a.userInput},
 			})
 			if err != nil {
 				return err
@@ -238,6 +240,7 @@ func RunJudge(ctx context.Context, task JudgeTask, handlers []*ProviderHandler) 
 	vars := map[string]any{}
 	vars["message_history"] = judging.BuildMessageHistory(task.UserInput, task.Trajectory, task.ActualOutput)
 	vars["response_to_evaluate"] = task.ActualOutput
+	vars["input"] = task.UserInput // always present, "" when there is none
 
 	var out *JudgeRunResult
 	err := withJudgeEvaluation(ctx, task.ConfigKey, task.ParentTrackData, func(ctx context.Context, record func(float64, string)) error {
