@@ -36,6 +36,7 @@ type RunOptions struct {
 	SpanAttributes []attribute.KeyValue // added to the handler's root span
 	ExistingClient bool                 // true: use the initialized client and never start one
 	NoFlagEvent    bool                 // true: no feature_flag event on the handler's root span
+	NoUsage        bool                 // true: no $ld:ai:sdk:usage for the call (SDK packages report their own)
 }
 
 // ConversationID returns the conversation id bound on ctx, or "". Set by the
@@ -54,6 +55,11 @@ var TrackDataFor func(configKey string, config, meta any, runID string, extra ma
 // ConfigWithOptions returns an *aiserver.AIConfig for args (an
 // aiserver.ConfigArgs) that runs with opts. Set by the core package at init.
 var ConfigWithOptions func(args any, opts RunOptions) any
+
+// GraphWithOptions returns an *aiserver.AgentGraph for key and opts (an
+// aiserver.GraphOptions). Only run.NoUsage applies to a graph. Set by the
+// core package at init.
+var GraphWithOptions func(key string, opts any, run RunOptions) any
 
 var (
 	mu    sync.Mutex

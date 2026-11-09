@@ -12,6 +12,9 @@ func init() {
 	bridge.ConfigWithOptions = func(args any, opts bridge.RunOptions) any {
 		return &AIConfig{args: args.(ConfigArgs), opts: opts}
 	}
+	bridge.GraphWithOptions = func(key string, opts any, run bridge.RunOptions) any {
+		return &AgentGraph{key: key, opts: opts.(GraphOptions), noUsage: run.NoUsage}
+	}
 	bridge.ConversationID = conversationID
 	bridge.WithExactConversationID = func(ctx context.Context, id string) context.Context {
 		return context.WithValue(ctx, conversationKey{}, id)

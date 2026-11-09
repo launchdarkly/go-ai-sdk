@@ -11,7 +11,6 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
-	"github.com/launchdarkly/go-ai-sdk/internal/sdkcall"
 )
 
 // ConfigArgs are the options for Config.
@@ -21,9 +20,6 @@ type ConfigArgs struct {
 	ToolHandlers map[string]ToolHandler
 	Registry     *Registry
 	SkipJudges   bool
-	// SDKCall suppresses $ld:ai:sdk:usage for this value. Only internal/sdkapi
-	// can build a non-zero token. Applications leave it zero.
-	SDKCall sdkcall.Token
 }
 
 // AIConfig is the value Config returns.
@@ -176,7 +172,7 @@ func resolveOutputFormat(raw any, outputFormat map[string]any) any {
 func (c *AIConfig) Invoke(ctx context.Context, userInput string, userCtx ldcontext.Context, opts ...CallOption) (ProviderResponse, error) {
 	co := NewCallOptions(opts...)
 	variables, history := co.Variables, co.History
-	if !c.args.SDKCall.Marked() {
+	if !c.opts.NoUsage {
 		reportUsage("client.config.invoke", "", "")
 	}
 	r, err := c.resolve(ctx, userCtx)
@@ -207,7 +203,7 @@ func (c *AIConfig) Invoke(ctx context.Context, userInput string, userCtx ldconte
 func (c *AIConfig) Stream(ctx context.Context, userInput string, userCtx ldcontext.Context, opts ...CallOption) iter.Seq2[StreamEvent, error] {
 	co := NewCallOptions(opts...)
 	variables, history := co.Variables, co.History
-	if !c.args.SDKCall.Marked() {
+	if !c.opts.NoUsage {
 		reportUsage("client.config.stream", "", "")
 	}
 	return func(yield func(StreamEvent, error) bool) {

@@ -8,20 +8,18 @@ import (
 	"iter"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
-	"github.com/launchdarkly/go-ai-sdk/internal/sdkcall"
+	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
 	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 // Config is aiserver.Config without a usage report.
 func Config(args aiserver.ConfigArgs) *aiserver.AIConfig {
-	args.SDKCall = sdkcall.Mark()
-	return aiserver.Config(args)
+	return bridge.ConfigWithOptions(args, bridge.RunOptions{NoUsage: true}).(*aiserver.AIConfig)
 }
 
 // Graph is aiserver.Graph without a usage report.
 func Graph(key string, opts aiserver.GraphOptions) *aiserver.AgentGraph {
-	opts.SDKCall = sdkcall.Mark()
-	return aiserver.Graph(key, opts)
+	return bridge.GraphWithOptions(key, opts, bridge.RunOptions{NoUsage: true}).(*aiserver.AgentGraph)
 }
 
 // CreateHandler is aiserver.CreateHandler without a usage report. As there,

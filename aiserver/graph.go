@@ -20,7 +20,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
-	"github.com/launchdarkly/go-ai-sdk/internal/sdkcall"
 	"github.com/launchdarkly/go-ai-sdk/internal/trajectory"
 )
 
@@ -83,9 +82,6 @@ type GraphOptions struct {
 	GraphJudge string
 	// Registry supplies handlers and tools; local values take precedence.
 	Registry *Registry
-	// SDKCall suppresses $ld:ai:sdk:usage for this graph. Only internal/sdkapi
-	// can build a non-zero token. Applications leave it zero.
-	SDKCall sdkcall.Token
 }
 
 // RunNodeOptions are per-node options for RunNode and Route.
@@ -619,8 +615,9 @@ func ResolveGraph(ctx context.Context, key string, userCtx ldcontext.Context, op
 // AgentGraph is the value Graph returns: a model-driven router bound to a
 // graph flag key.
 type AgentGraph struct {
-	key  string
-	opts GraphOptions
+	key     string
+	opts    GraphOptions
+	noUsage bool // set through bridge.GraphWithOptions by SDK packages
 }
 
 // Graph returns a model-driven graph runner. It starts at the root, lets the
@@ -643,7 +640,7 @@ func (g *AgentGraph) definition(ctx context.Context, userCtx ldcontext.Context) 
 func (g *AgentGraph) Invoke(ctx context.Context, input string, userCtx ldcontext.Context, opts ...CallOption) (GraphResponse, error) {
 	co := NewCallOptions(opts...)
 	variables, history := co.Variables, co.History
-	if !g.opts.SDKCall.Marked() {
+	if !g.noUsage {
 		reportUsage("client.graph.invoke", "", "")
 	}
 	var out GraphResponse
@@ -668,7 +665,7 @@ func (g *AgentGraph) Invoke(ctx context.Context, input string, userCtx ldcontext
 func (g *AgentGraph) Stream(ctx context.Context, input string, userCtx ldcontext.Context, opts ...CallOption) iter.Seq2[GraphStreamEvent, error] {
 	co := NewCallOptions(opts...)
 	variables, history := co.Variables, co.History
-	if !g.opts.SDKCall.Marked() {
+	if !g.noUsage {
 		reportUsage("client.graph.stream", "", "")
 	}
 	return g.stream(ctx, input, userCtx, variables, history)
