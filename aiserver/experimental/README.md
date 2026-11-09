@@ -54,3 +54,11 @@ a plain invoke, even when the served call streamed, with no tools and no judges.
 every provider your shadow variations use, since a shadow with no matching handler is skipped.
 Shadows need a client with `JSONVariationDetail`, which `*ld.LDClient` has; with any other client
 the served call still runs and no shadow does. Plain `aiserver.Config` never runs shadows.
+
+Shadows see your variables as JSON values. Each task copies them through `encoding/json`, so a
+shadow shares no map with the caller, and a background shadow and a queued one see the same
+values. A whole number arrives as an `int64` (a `uint64` above that range) with its exact value,
+and any other number as a `float64`. Other values arrive as whatever their JSON decodes to, so in
+a few cases a shadow renders a prompt differently from the served call: a struct or a typed map
+such as `map[string]string` becomes a `map[string]any` that `{{profile.name}}` can reach, and a
+`time.Time` becomes a string, so it renders without the quotes the served call puts around it.

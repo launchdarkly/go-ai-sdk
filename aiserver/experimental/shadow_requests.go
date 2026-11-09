@@ -1,6 +1,7 @@
 package experimental
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1" //nolint:gosec // a sampling bucket, not a security check
 	"encoding/hex"
@@ -565,9 +566,66 @@ func jsonCopy(m map[string]any) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	return decodeVariables(b)
+}
+
+// decodeVariables decodes variables as a shadow sees them. A whole number is
+// an int64 (a uint64 above that range), so an id above 2^53 keeps its exact
+// value; any other number is a float64.
+func decodeVariables(b []byte) (map[string]any, error) {
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber()
 	var out map[string]any
-	err = json.Unmarshal(b, &out)
-	return out, err
+	if err := d.Decode(&out); err != nil {
+		return nil, err
+	}
+	fromNumbers(out)
+	return out, nil
+}
+
+// fromNumbers replaces every json.Number inside v, in place.
+func fromNumbers(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, val := range t {
+			t[k] = fromNumbers(val)
+		}
+	case []any:
+		for i, val := range t {
+			t[i] = fromNumbers(val)
+		}
+	case json.Number:
+		if i, err := strconv.ParseInt(string(t), 10, 64); err == nil {
+			return i
+		}
+		if u, err := strconv.ParseUint(string(t), 10, 64); err == nil {
+			return u
+		}
+		f, _ := t.Float64()
+		return f
+	}
+	return v
+}
+
+// UnmarshalJSON decodes Variables as decodeVariables does, so a queued task
+// renders its prompts as a background shadow would.
+func (t *ShadowTask) UnmarshalJSON(b []byte) error {
+	type plain ShadowTask
+	aux := struct {
+		*plain
+		Variables json.RawMessage `json:"variables,omitempty"`
+	}{plain: (*plain)(t)}
+	if err := json.Unmarshal(b, &aux); err != nil {
+		return err
+	}
+	if aux.Variables != nil {
+		vars, err := decodeVariables(aux.Variables)
+		if err != nil {
+			return err
+		}
+		t.Variables = vars
+	}
+	return nil
 }
 
 func copyHistory(history []aiserver.Message) []aiserver.Message {

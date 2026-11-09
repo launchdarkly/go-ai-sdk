@@ -1143,6 +1143,51 @@ func TestShadowVariablesAreDetachedFromTheCaller(t *testing.T) {
 	}
 }
 
+func TestShadowVariablesKeepLargeIntegersExact(t *testing.T) {
+	const id = int64(1<<53 + 1) // 9007199254740993: the nearest float64 is 9007199254740992
+	const prompt = "{{id}} {{big}} {{ratio}} {{huge}} {{list}}"
+	served := map[string]any{"id": id, "big": uint64(1<<64 - 1), "ratio": 0.5, "huge": 1e21, "list": []any{id}}
+	want := aiserver.ParseTemplate(prompt, served)
+	if want != "9007199254740993 18446744073709551615 0.5 1000000000000000000000 [9007199254740993]" {
+		t.Fatalf("served call renders %q", want)
+	}
+	check := func(name string, vars map[string]any) {
+		t.Helper()
+		if vars["id"] != id {
+			t.Fatalf("%s: id %#v", name, vars["id"])
+		}
+		if got := aiserver.ParseTemplate(prompt, vars); got != want {
+			t.Fatalf("%s renders %q, the served call %q", name, got, want)
+		}
+	}
+
+	install(t, fallthroughPayload(), ldreason.NewEvalReasonFallthrough())
+	p := newPair()
+	invokeAndWait(t, mustShadow(t, p.handlers(), ShadowOptions{}), aiserver.WithVariables(served))
+	check("background shadow", p.b.last().Variables)
+
+	var tasks []ShadowTask
+	invokeAndWait(t, mustShadow(t, p.handlers(), ShadowOptions{OnTask: func(task ShadowTask) { tasks = append(tasks, task) }}),
+		aiserver.WithVariables(served))
+	check("task", tasks[0].Variables)
+	b, err := json.Marshal(tasks[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded ShadowTask
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	check("task after a JSON round trip", decoded.Variables)
+	if decoded.ShadowRequestID != tasks[0].ShadowRequestID || decoded.ConfigRaw == nil {
+		t.Fatalf("decoded %+v", decoded)
+	}
+	if res := RunShadow(context.Background(), decoded, p.handlers()); res.Error != "" {
+		t.Fatal(res.Error)
+	}
+	check("deferred shadow", p.b.last().Variables)
+}
+
 func TestDeferredTaskKeepsUnmodeledVariationFields(t *testing.T) {
 	payload := fallthroughPayload()
 	variation := payload["shadowConfiguration"].(map[string]any)["variations"].(map[string]any)["claude-candidate"].(map[string]any)
