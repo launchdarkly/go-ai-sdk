@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -213,6 +214,29 @@ func TestNonFiniteOutputIsSentAsNull(t *testing.T) {
 		}
 		if d["contentHash"] != tc.digest {
 			t.Errorf("output %v: contentHash %v", tc.output, d["contentHash"])
+		}
+	}
+}
+
+// Distinct keys that both decode to U+FFFD still sort the same way every
+// time, so the hash is stable.
+func TestCanonicalJSONKeysEqualInUTF16SortStably(t *testing.T) {
+	v := map[string]any{"\xff": 1, "\xfe": 2, "a": 3}
+	want := "{\"a\":3,\"�\":2,\"�\":1}" // "\xfe" before "\xff" by bytes
+	for range 50 {
+		b, err := canonicalJSON(v)
+		if err != nil || string(b) != want {
+			t.Fatalf("got %q (%v), want %q", b, err, want)
+		}
+	}
+}
+
+// A type outside the jcsValue tree is an error, not silently written as nothing.
+func TestWriteJCSRejectsUnhandledTypes(t *testing.T) {
+	for _, v := range []any{1, map[string]any{"k": int64(2)}, []any{struct{}{}}} {
+		var b strings.Builder
+		if err := writeJCS(&b, v); err == nil || !strings.Contains(err.Error(), "unsupported type") {
+			t.Errorf("%#v: err %v, wrote %q", v, err, b.String())
 		}
 	}
 }

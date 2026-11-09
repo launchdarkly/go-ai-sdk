@@ -2,6 +2,7 @@ package evaluations
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -50,7 +51,9 @@ func canonicalJSON(v any) ([]byte, error) {
 		return nil, err
 	}
 	var b strings.Builder
-	writeJCS(&b, t)
+	if err := writeJCS(&b, t); err != nil {
+		return nil, err
+	}
 	return []byte(b.String()), nil
 }
 
@@ -124,8 +127,9 @@ func jcsNumber(f float64) any {
 	return f + 0 // -0 + 0 is +0
 }
 
-// writeJCS writes a jcsValue tree.
-func writeJCS(b *strings.Builder, v any) {
+// writeJCS writes a jcsValue tree. Any other type is an error, never
+// silently skipped, so a gap in jcsValue cannot change a hash unnoticed.
+func writeJCS(b *strings.Builder, v any) error {
 	switch x := v.(type) {
 	case nil:
 		b.WriteString("null")
@@ -133,7 +137,10 @@ func writeJCS(b *strings.Builder, v any) {
 		b.WriteString(strconv.FormatBool(x))
 	case float64:
 		// encoding/json spells a finite float64 as ECMAScript does.
-		n, _ := json.Marshal(x)
+		n, err := json.Marshal(x)
+		if err != nil {
+			return err
+		}
 		b.Write(n)
 	case string:
 		writeJCSString(b, x)
@@ -143,7 +150,9 @@ func writeJCS(b *strings.Builder, v any) {
 			if i > 0 {
 				b.WriteByte(',')
 			}
-			writeJCS(b, e)
+			if err := writeJCS(b, e); err != nil {
+				return err
+			}
 		}
 		b.WriteByte(']')
 	case map[string]any:
@@ -152,7 +161,9 @@ func writeJCS(b *strings.Builder, v any) {
 			keys = append(keys, k)
 		}
 		slices.SortFunc(keys, func(a, c string) int {
-			return slices.Compare(utf16.Encode([]rune(a)), utf16.Encode([]rune(c)))
+			// Distinct keys can share UTF-16 units (invalid UTF-8 becomes
+			// U+FFFD), so break the tie on the bytes for a stable order.
+			return cmp.Or(slices.Compare(utf16.Encode([]rune(a)), utf16.Encode([]rune(c))), cmp.Compare(a, c))
 		})
 		b.WriteByte('{')
 		for i, k := range keys {
@@ -161,10 +172,15 @@ func writeJCS(b *strings.Builder, v any) {
 			}
 			writeJCSString(b, k)
 			b.WriteByte(':')
-			writeJCS(b, x[k])
+			if err := writeJCS(b, x[k]); err != nil {
+				return err
+			}
 		}
 		b.WriteByte('}')
+	default:
+		return fmt.Errorf("evaluations: canonical JSON: unsupported type %T", v)
 	}
+	return nil
 }
 
 // writeJCSString escapes only what JSON.stringify escapes: the quote, the
