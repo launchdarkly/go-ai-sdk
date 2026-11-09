@@ -75,7 +75,7 @@ type ShadowTask struct {
 	Meta            aiserver.VariationMeta `json:"meta"`
 	UserInput       string                 `json:"userInput"`
 	History         []aiserver.Message     `json:"history,omitempty"`
-	Variables       map[string]any         `json:"variables,omitempty"`
+	Variables       ShadowVariables        `json:"variables,omitempty"`
 	UserContext     ldcontext.Context      `json:"userContext"`
 	Timeout         time.Duration          `json:"timeout"`
 	TrackData       map[string]any         `json:"trackData"`
@@ -441,7 +441,7 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 		ExistingClient: true,
 		NoFlagEvent:    true,
 	}).(*aiserver.AIConfig)
-	vars, _ := deepCopy(task.Variables).(map[string]any)
+	vars, _ := deepCopy(map[string]any(task.Variables)).(map[string]any)
 	resp, err := run.Invoke(ctx, task.UserInput, task.UserContext,
 		aiserver.WithVariables(vars), aiserver.WithHistory(copyHistory(task.History)))
 	if err != nil {
@@ -569,9 +569,27 @@ func jsonCopy(m map[string]any) (map[string]any, error) {
 	return decodeVariables(b)
 }
 
-// decodeVariables decodes variables as a shadow sees them. A whole number is
-// an int64 (a uint64 above that range), so an id above 2^53 keeps its exact
-// value; any other number is a float64.
+// ShadowVariables are a ShadowTask's template variables. It decodes from
+// JSON as a background shadow sees its variables: a number is a float64,
+// except a whole number beyond ±2^53, which is an int64 (a uint64 above that
+// range) so it keeps its exact value. Experimental.
+type ShadowVariables map[string]any
+
+// UnmarshalJSON decodes v as a background shadow sees its variables.
+func (v *ShadowVariables) UnmarshalJSON(b []byte) error {
+	vars, err := decodeVariables(b)
+	if err != nil {
+		return err
+	}
+	*v = vars
+	return nil
+}
+
+// maxExactInt is the largest whole number every float64 at or below it can
+// hold exactly.
+const maxExactInt = 1 << 53
+
+// decodeVariables decodes variables as ShadowVariables documents.
 func decodeVariables(b []byte) (map[string]any, error) {
 	d := json.NewDecoder(bytes.NewReader(b))
 	d.UseNumber()
@@ -595,37 +613,16 @@ func fromNumbers(v any) any {
 			t[i] = fromNumbers(val)
 		}
 	case json.Number:
-		if i, err := strconv.ParseInt(string(t), 10, 64); err == nil {
+		if i, err := strconv.ParseInt(string(t), 10, 64); err == nil && (i > maxExactInt || i < -maxExactInt) {
 			return i
 		}
-		if u, err := strconv.ParseUint(string(t), 10, 64); err == nil {
+		if u, err := strconv.ParseUint(string(t), 10, 64); err == nil && u > maxExactInt {
 			return u
 		}
 		f, _ := t.Float64()
 		return f
 	}
 	return v
-}
-
-// UnmarshalJSON decodes Variables as decodeVariables does, so a queued task
-// renders its prompts as a background shadow would.
-func (t *ShadowTask) UnmarshalJSON(b []byte) error {
-	type plain ShadowTask
-	aux := struct {
-		*plain
-		Variables json.RawMessage `json:"variables,omitempty"`
-	}{plain: (*plain)(t)}
-	if err := json.Unmarshal(b, &aux); err != nil {
-		return err
-	}
-	if aux.Variables != nil {
-		vars, err := decodeVariables(aux.Variables)
-		if err != nil {
-			return err
-		}
-		t.Variables = vars
-	}
-	return nil
 }
 
 func copyHistory(history []aiserver.Message) []aiserver.Message {

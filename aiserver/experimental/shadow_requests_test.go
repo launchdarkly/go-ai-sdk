@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"iter"
 	"log/slog"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -1145,16 +1146,17 @@ func TestShadowVariablesAreDetachedFromTheCaller(t *testing.T) {
 
 func TestShadowVariablesKeepLargeIntegersExact(t *testing.T) {
 	const id = int64(1<<53 + 1) // 9007199254740993: the nearest float64 is 9007199254740992
-	const prompt = "{{id}} {{big}} {{ratio}} {{huge}} {{list}}"
-	served := map[string]any{"id": id, "big": uint64(1<<64 - 1), "ratio": 0.5, "huge": 1e21, "list": []any{id}}
+	const prompt = "{{id}} {{big}} {{limit}} {{ratio}} {{huge}} {{negZero}} {{list}}"
+	served := map[string]any{"id": id, "big": uint64(1<<64 - 1), "limit": 3, "ratio": 0.5, "huge": 1e21,
+		"negZero": math.Copysign(0, -1), "list": []any{id}}
 	want := aiserver.ParseTemplate(prompt, served)
-	if want != "9007199254740993 18446744073709551615 0.5 1000000000000000000000 [9007199254740993]" {
+	if want != "9007199254740993 18446744073709551615 3 0.5 1000000000000000000000 -0 [9007199254740993]" {
 		t.Fatalf("served call renders %q", want)
 	}
 	check := func(name string, vars map[string]any) {
 		t.Helper()
-		if vars["id"] != id {
-			t.Fatalf("%s: id %#v", name, vars["id"])
+		if vars["id"] != id || vars["limit"] != float64(3) {
+			t.Fatalf("%s: id %#v, limit %#v", name, vars["id"], vars["limit"])
 		}
 		if got := aiserver.ParseTemplate(prompt, vars); got != want {
 			t.Fatalf("%s renders %q, the served call %q", name, got, want)
@@ -1186,6 +1188,25 @@ func TestShadowVariablesKeepLargeIntegersExact(t *testing.T) {
 		t.Fatal(res.Error)
 	}
 	check("deferred shadow", p.b.last().Variables)
+}
+
+func TestTaskEmbeddedInAQueueEnvelopeSurvivesJSON(t *testing.T) {
+	type job struct {
+		ShadowTask
+		Attempts int `json:"attempts"`
+	}
+	const id = int64(1<<53 + 1)
+	b, err := json.Marshal(job{ShadowTask: ShadowTask{ConfigKey: "cfg", UserContext: shadowUser, Variables: map[string]any{"id": id}}, Attempts: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded job
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Attempts != 3 || decoded.ConfigKey != "cfg" || decoded.Variables["id"] != id {
+		t.Fatalf("decoded %+v", decoded)
+	}
 }
 
 func TestDeferredTaskKeepsUnmodeledVariationFields(t *testing.T) {
