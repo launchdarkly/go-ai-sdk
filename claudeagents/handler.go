@@ -37,8 +37,8 @@ const (
 	PackageName = "github.com/launchdarkly/go-ai-sdk/claudeagents"
 	// PackageVersion is this package's release version.
 	PackageVersion = "0.1.0" // x-release-please-version
-	// SpanName is the documented root span name.
-	SpanName = "claude.query"
+	// SpanName is the root span name for both the blocking and streaming paths.
+	SpanName = "invoke_agent"
 	// DefaultMaxSteps bounds the agent loop when neither Options.MaxSteps nor
 	// the config's max_turns parameter sets a bound.
 	DefaultMaxSteps = 10

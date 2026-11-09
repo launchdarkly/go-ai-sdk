@@ -28,7 +28,11 @@ var (
 	errAbandoned = errors.New("langchain: stream abandoned by consumer")
 )
 
-// ProviderName is the lowercased config provider for gen_ai.system. An
+// GenAISystem is gen_ai.system on every LangChain span. The provider that
+// serves the request goes in gen_ai.provider.name (ProviderName).
+const GenAISystem = "langchain"
+
+// ProviderName is the lowercased config provider for gen_ai.provider.name. An
 // empty name falls back to "openai", as in JavaScript.
 func ProviderName(cfg aiserver.AiConfig) string {
 	if cfg.Provider.Name == "" {

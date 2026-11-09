@@ -93,7 +93,7 @@ res, err := openaimessages.OpenAIMessages(ctx, "my-ai-config", "Hello", ldcontex
 ```go
 const PackageName = "github.com/launchdarkly/go-ai-sdk/openaimessages"
 const PackageVersion = "0.1.0"
-const SpanName = "openai.messages"
+const SpanName = "invoke_agent"
 var ProvidesFor = aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeMessages}
 var ErrMaxSteps error
 

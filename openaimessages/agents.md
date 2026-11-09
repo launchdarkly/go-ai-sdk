@@ -53,7 +53,7 @@ The handler receives `aiserver.HandlerRequest{Config, UserInput, ToolHandlers, V
 - **`History`**: spliced by `ComposePrompt`; `toInput` maps image blocks to `input_image`.
 
 Tool loop: each provider turn gets a `chat <model>` span, each tool call an `execute_tool <name>`
-span, all direct children of the `openai.messages` root. Follow-ups send only the
+span, all direct children of the `invoke_agent` root. Follow-ups send only the
 `function_call_output` items with `previous_response_id`. Blocking output is the final response's
 `output_text`; streaming `done.output` is the concatenation of every streamed delta.
 

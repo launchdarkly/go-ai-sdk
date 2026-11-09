@@ -256,16 +256,16 @@ func TestToolFilteringAndLoop(t *testing.T) {
 	var root sdktrace.ReadOnlySpan
 	for _, s := range exp.GetSpans().Snapshots() {
 		names[s.Name()]++
-		if s.Name() == "claude.messages" {
+		if s.Name() == "invoke_agent" {
 			root = s
 		}
 		for _, a := range s.Attributes() {
-			if s.Name() != "claude.messages" && strings.HasPrefix(string(a.Key), "launchdarkly.config") {
+			if s.Name() != SpanName && strings.HasPrefix(string(a.Key), "launchdarkly.config") {
 				t.Errorf("child %s carries %s", s.Name(), a.Key)
 			}
 		}
 	}
-	if names["claude.messages"] != 1 || names["chat test-model"] != 3 || names["execute_tool a"] != 1 || names["execute_tool b"] != 1 {
+	if names["invoke_agent"] != 1 || names["chat test-model"] != 3 || names["execute_tool a"] != 1 || names["execute_tool b"] != 1 {
 		t.Errorf("span tree = %v", names)
 	}
 	attrs := map[string]string{}
@@ -273,7 +273,7 @@ func TestToolFilteringAndLoop(t *testing.T) {
 		attrs[string(a.Key)] = a.Value.Emit()
 	}
 	for k, want := range map[string]string{
-		"gen_ai.operation.name": "chat", "gen_ai.system": "anthropic", "gen_ai.request.model": "test-model",
+		"gen_ai.operation.name": "invoke_agent", "gen_ai.system": "anthropic", "gen_ai.request.model": "test-model",
 		"gen_ai.response.model":     "test-model",
 		"gen_ai.usage.input_tokens": "4", "gen_ai.usage.prompt_tokens": "4", "gen_ai.usage.total_tokens": "9",
 		"gen_ai.usage.output_tokens": "5", "gen_ai.usage.completion_tokens": "5",
@@ -508,10 +508,10 @@ func TestThroughConfig(t *testing.T) {
 				keys = append(keys, string(a.Key))
 			}
 		}
-		if (s.Name() == "claude.messages") != (len(keys) == 2) {
+		if (s.Name() == SpanName) != (len(keys) == 2) {
 			t.Errorf("%s context keys = %v", s.Name(), keys)
 		}
-		if s.Name() == "claude.messages" {
+		if s.Name() == SpanName {
 			got := map[string]string{}
 			for _, e := range s.Events() {
 				for _, a := range e.Attributes {

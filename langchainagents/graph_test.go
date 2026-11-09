@@ -598,7 +598,7 @@ func TestToLangGraphHandoffFailure(t *testing.T) {
 }
 
 // Graph events carry the graph's track data, node events the node's; each
-// node run has a langchain.agent span under the graph span with the node's
+// node run has a invoke_agent span under the graph span with the node's
 // association and the context identity, and its chat / execute_tool children
 // carry neither.
 func TestToLangGraphNodeSpansAndPayloads(t *testing.T) {
