@@ -116,6 +116,22 @@ func TestRowToolsRecordTheFailedCall(t *testing.T) {
 	}
 }
 
+// A failing handoff-prefixed tool is answered too, as in the JavaScript and
+// Python SDKs, though the recorder does not record it.
+func TestRowToolsAnswerAFailingHandoffTool(t *testing.T) {
+	r := &runState{tools: []runTool{{key: trajectory.HandoffPrefix + "x", impl: aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) {
+		return nil, errors.New("handoff failed")
+	})}}}
+	rec := trajectory.NewRecorder()
+	got, err := r.rowTools(rec)[trajectory.HandoffPrefix+"x"].(aiserver.ToolFunc)(context.Background(), nil)
+	if got != "Error: Error: handoff failed" || err != nil {
+		t.Fatalf("got (%v, %v)", got, err)
+	}
+	if invs := rec.Invocations(); len(invs) != 0 {
+		t.Fatalf("a handoff tool must not be recorded: %+v", invs)
+	}
+}
+
 // A tool name the config did not offer never reaches a tool wrapper: the
 // handler's own error fails the row.
 func TestUnofferedToolStaysAHandlerError(t *testing.T) {
