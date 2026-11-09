@@ -1,12 +1,9 @@
-# experimental
+# shadowrequests
 
-Experimental entry point of the LaunchDarkly AI SDK for Go
-(`github.com/launchdarkly/go-ai-sdk/aiserver/experimental`). Every name here is published
-but may change in a minor release; none is exported from `aiserver`. Agent Skills and Evaluations
-from Code are core, each in its own package: see [`skills`](../../skills) and
-[`evaluations`](../../evaluations).
-
-<!-- Each feature owns one section below. Append; do not rewrite another feature's section. -->
+Shadow requests for the LaunchDarkly AI SDK for Go
+(`github.com/launchdarkly/go-ai-sdk/experimental/shadowrequests`). This feature is experimental:
+every name here is published but may change in a minor release, and none is exported from
+`aiserver`.
 
 ## Shadow requests
 
@@ -21,25 +18,25 @@ usual AI metrics. A shadow never delays or changes the served response, and its 
 tracked.
 
 ```go
-shadowed, err := experimental.ShadowConfig(
+shadowed, err := shadowrequests.ShadowConfig(
 	aiserver.ConfigArgs{Key: "my-ai-config", Handlers: []*aiserver.ProviderHandler{openai, anthropic}},
-	experimental.ShadowOptions{},
+	shadowrequests.ShadowOptions{},
 )
 if err != nil { log.Fatal(err) }
 resp, err := shadowed.Invoke(ctx, "Summarize this document", userCtx)
 
 // Or hand each shadow to your own queue, and run it from a worker.
 // OnTask runs before Invoke returns, so it must never block.
-queue := make(chan experimental.ShadowTask, 100)
-shadowed, err = experimental.ShadowConfig(args, experimental.ShadowOptions{
-	OnTask: func(task experimental.ShadowTask) {
+queue := make(chan shadowrequests.ShadowTask, 100)
+shadowed, err = shadowrequests.ShadowConfig(args, shadowrequests.ShadowOptions{
+	OnTask: func(task shadowrequests.ShadowTask) {
 		select {
 		case queue <- task:
 		default: // queue full: drop this shadow
 		}
 	},
 })
-result := experimental.RunShadow(ctx, <-queue, handlers) // never fails; see result.Error
+result := shadowrequests.RunShadow(ctx, <-queue, handlers) // never fails; see result.Error
 ```
 
 | Option | Meaning |
