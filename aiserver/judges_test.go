@@ -297,8 +297,11 @@ func TestJudgesAlwaysReceiveInput(t *testing.T) {
 			return err
 		},
 		"graph node": func(input string) error {
-			def := ResolveGraph(bg, "g", userCtx, GraphOptions{Handlers: []*ProviderHandler{agent, h}})
-			_, err := def.RunNode(bg, def.Root, input, RunNodeOptions{})
+			def, err := ResolveGraph(bg, "g", userCtx, GraphOptions{Handlers: []*ProviderHandler{agent, h}})
+			if err != nil {
+				return err
+			}
+			_, err = def.RunNode(bg, def.Root, input, RunNodeOptions{})
 			return err
 		},
 	}
