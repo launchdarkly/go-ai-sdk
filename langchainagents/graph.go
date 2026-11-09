@@ -45,6 +45,8 @@ type NativeGraphOptions struct {
 	Context ldcontext.Context
 }
 
+var _ aiserver.NativeGraphRunner = (*LangGraph)(nil)
+
 // LangGraph runs a resolved graph as one stategraph.Graph: one node
 // per GraphNode, each a ReAct agent with its tools and a transfer_to_<key>
 // handoff tool per outgoing edge.

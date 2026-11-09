@@ -37,6 +37,8 @@ type AdapterOptions struct {
 	Handler Options
 }
 
+var _ aiserver.NativeGraphRunner = (*GraphRunner)(nil)
+
 // GraphRunner runs a GraphDefinition as nested agents: every child node is a
 // sub-agent tool of its parent, so the root drives the whole run.
 type GraphRunner struct {
