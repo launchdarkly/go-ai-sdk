@@ -773,8 +773,8 @@ func TestHelperUsagePerPublicFunction(t *testing.T) {
 	}{
 		{"client.graph.invoke", func() { _, _ = Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}}).Invoke(bg, "q", userCtx) }},
 		{"client.graph.stream", func() { _ = Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}}).Stream(bg, "q", userCtx) }},
-		{"client.resolveGraph", func() { _ = ResolveGraph(bg, "g", userCtx, GraphOptions{}) }},
-		{"client.inspectConfig", func() { _ = InspectConfig(bg, "root-node", userCtx) }},
+		{"client.resolveGraph", func() { _, _ = ResolveGraph(bg, "g", userCtx, GraphOptions{}) }},
+		{"client.inspectConfig", func() { _, _ = InspectConfig(bg, "root-node", userCtx) }},
 		{"client.runJudge", func() { _, _ = RunJudge(bg, JudgeTask{}, nil) }},
 		{"client.buildJudgeTasks", func() { _, _ = BuildJudgeTasks(bg, BuildJudgeTasksArgs{}) }},
 	}
@@ -802,12 +802,12 @@ func TestHelperUsagePerPublicFunction(t *testing.T) {
 	_ = Shutdown(bg)
 	first := &fakeLD{variations: twoNode(nil)}
 	setClientForTest(first)
-	_ = InspectConfig(bg, "root-node", userCtx)
-	_ = InspectConfig(bg, "root-node", userCtx)
+	_, _ = InspectConfig(bg, "root-node", userCtx)
+	_, _ = InspectConfig(bg, "root-node", userCtx)
 	_ = Shutdown(bg)
 	second := &fakeLD{variations: twoNode(nil)}
 	setClientForTest(second)
-	_ = InspectConfig(bg, "root-node", userCtx)
+	_, _ = InspectConfig(bg, "root-node", userCtx)
 	if len(first.events("$ld:ai:sdk:usage")) != 1 || len(second.events("$ld:ai:sdk:usage")) != 1 {
 		t.Errorf("usage across shutdown: first=%d second=%d", len(first.events("$ld:ai:sdk:usage")), len(second.events("$ld:ai:sdk:usage")))
 	}

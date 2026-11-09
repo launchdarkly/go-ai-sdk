@@ -252,17 +252,17 @@ func TestInspectConfig(t *testing.T) {
 		"off": map[string]any{"_ldMeta": map[string]any{"enabled": false}},
 		"bad": map[string]any{"_ldMeta": map[string]any{"enabled": true}},
 	})
-	if r := InspectConfig(bg, "on", userCtx); !r.Enabled || r.Config == nil || r.Meta.VariationKey != "v1" {
-		t.Errorf("on = %+v", r)
+	if r, err := InspectConfig(bg, "on", userCtx); err != nil || !r.Enabled || r.Config == nil || r.Meta.VariationKey != "v1" {
+		t.Errorf("on = %+v err = %v", r, err)
 	}
-	if r := InspectConfig(bg, "off", userCtx); r.Enabled || r.Config != nil || r.Meta == nil {
-		t.Errorf("off = %+v", r)
+	if r, err := InspectConfig(bg, "off", userCtx); err != nil || r.Enabled || r.Config != nil || r.Meta == nil {
+		t.Errorf("off = %+v err = %v", r, err)
 	}
-	if r := InspectConfig(bg, "bad", userCtx); !r.Enabled || r.Config != nil {
-		t.Errorf("bad = %+v", r)
+	if r, err := InspectConfig(bg, "bad", userCtx); err == nil || r != (InspectResult{}) {
+		t.Errorf("bad = %+v err = %v", r, err)
 	}
-	if r := InspectConfig(bg, "missing", userCtx); r.Enabled || r.Meta != nil {
-		t.Errorf("missing = %+v", r)
+	if r, err := InspectConfig(bg, "missing", userCtx); !errors.Is(err, ErrConfigNotFound) || r != (InspectResult{}) {
+		t.Errorf("missing = %+v err = %v", r, err)
 	}
 }
 
@@ -362,14 +362,14 @@ func TestSentinelErrors(t *testing.T) {
 			t.Errorf("%s: err = %v, want %v", c.key, err, c.want)
 		}
 	}
-	// The SDK's evaluation error is kept, so the message names the real cause.
-	f.evalErr = errors.New("feature flag evaluation called before LaunchDarkly client initialization completed")
+	// The SDK's evaluation error is wrapped, so errors.Is matches the cause.
+	f.evalErr = ld.ErrClientNotInitialized
 	_, err := Config(ConfigArgs{Key: "missing", Handlers: []*ProviderHandler{anth}}).Invoke(bg, "", userCtx)
-	if !errors.Is(err, ErrConfigNotFound) || !strings.Contains(err.Error(), "before LaunchDarkly client initialization") {
+	if !errors.Is(err, ErrConfigNotFound) || !errors.Is(err, ld.ErrClientNotInitialized) {
 		t.Errorf("evaluation error lost: %v", err)
 	}
-	if _, err := Graph("missing-graph", GraphOptions{Handlers: []*ProviderHandler{anth}}).Invoke(bg, "", userCtx); !errors.Is(err, ErrGraphDisabled) {
-		t.Errorf("graph err = %v", err)
+	if _, err := Graph("missing-graph", GraphOptions{Handlers: []*ProviderHandler{anth}}).Invoke(bg, "", userCtx); !errors.Is(err, ld.ErrClientNotInitialized) {
+		t.Errorf("graph evaluation error lost: %v", err)
 	}
 }
 
