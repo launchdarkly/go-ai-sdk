@@ -19,7 +19,7 @@ handler packages they use.
 | `config.go` | `Config().Invoke/Stream`, handler selection, `InspectConfig`, variation reading |
 | `tracking.go` | Tracked execution, `$ld:ai:*` events, tool-call tracking wrapper, trajectory capture |
 | `judges.go` | Inline judges, `BuildJudgeTasks`, `RunJudge`, judge handler selection |
-| `judgeeval.go` | Holds a judge's root span open to write `gen_ai.evaluation.result` |
+| `judgeeval.go` | Holds a judge's root span open to write `gen_ai.evaluation.result`; binds the graded run's `launchdarkly.judge.target.run.id` / `.config.key` / `.variation.key` (non-empty only) so `ConversationIDSpanProcessor` stamps them on every SDK span the judge starts |
 | `graph.go` | `ResolveGraph`, `GraphDefinition`, `Graph().Invoke/Stream`, handoff routing |
 | `telemetry.go` | Conversation-id processor, context identity, `SetLDSpanAttributes` |
 | `handlerkit.go` | Shared handler building blocks: `ComposePrompt`, span tree (`HandlerRun`), usage attributes |

@@ -119,7 +119,7 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 			effective = collapseMessages(jcfg)
 		}
 		history := judging.BuildMessageHistory(a.userInput, a.trajectory, a.output)
-		err := withJudgeEvaluation(ctx, j.Key, func(ctx context.Context, record func(float64, string)) error {
+		err := withJudgeEvaluation(ctx, j.Key, a.parentTD, func(ctx context.Context, record func(float64, string)) error {
 			res, err := executeAndTrack(ctx, execArgs{
 				configKey: j.Key, config: effective, meta: jmeta, userCtx: a.userCtx, handler: h,
 				userInput: a.output, graphKey: a.graphKey,
@@ -240,7 +240,7 @@ func RunJudge(ctx context.Context, task JudgeTask, handlers []*ProviderHandler) 
 	vars["response_to_evaluate"] = task.ActualOutput
 
 	var out *JudgeRunResult
-	err := withJudgeEvaluation(ctx, task.ConfigKey, func(ctx context.Context, record func(float64, string)) error {
+	err := withJudgeEvaluation(ctx, task.ConfigKey, task.ParentTrackData, func(ctx context.Context, record func(float64, string)) error {
 		res, err := executeAndTrack(ctx, execArgs{
 			configKey: task.ConfigKey, config: cfg, meta: task.JudgeMeta, userCtx: task.UserContext,
 			handler: h, userInput: task.ActualOutput, variables: vars,
