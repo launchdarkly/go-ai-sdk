@@ -363,7 +363,9 @@ func TestBYOCNeverBuildsAClient(t *testing.T) {
 }
 
 func TestConfigInvokeForwardsContextAndRequest(t *testing.T) {
-	f := withFake(t, map[string]any{"cfg": enabledConfig("P", "", nil)})
+	f := withFake(t, map[string]any{"cfg": enabledConfig("P", "", map[string]any{
+		"tools": map[string]any{"lookup": map[string]any{"name": "lookup", "type": "function", "parameters": map[string]any{}}},
+	})})
 	orgCtx := ldcontext.NewBuilder("org-1").Kind("org").SetString("plan", "pro").Build()
 	var seen HandlerRequest
 	h := stubHandler("P", ModeMessages, "ok", nil, &seen)

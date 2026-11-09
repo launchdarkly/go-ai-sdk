@@ -146,6 +146,11 @@ func (a execArgs) prepare() (TrackData, HandlerRequest, *trajectory.Recorder) {
 	recorded := make(map[string]ToolHandler, len(a.tools))
 	// Sorted, so the trajectory's "Tools available" line is byte-stable.
 	for _, name := range slices.Sorted(maps.Keys(a.tools)) {
+		// a.tools holds every registered tool, across all variations; the handler gets
+		// only the ones this config attaches. No Tools means no tools.
+		if _, attached := a.config.Tools[name]; !attached {
+			continue
+		}
 		h := a.tools[name]
 		if fn, ok := h.(ToolFunc); ok && trajectory.ShouldObserve(name, exposed) {
 			recorded[name] = ToolFunc(rec.Observe(name, fn))

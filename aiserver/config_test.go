@@ -59,7 +59,10 @@ func TestRegistry(t *testing.T) {
 }
 
 func TestConfigInvokeRoutingAndTracking(t *testing.T) {
-	f := withFake(t, map[string]any{"cfg": enabledConfig("Anthropic", "completion", nil)})
+	// The variation attaches web-search; a handler only receives attached tools.
+	f := withFake(t, map[string]any{"cfg": enabledConfig("Anthropic", "completion", map[string]any{
+		"tools": map[string]any{"web-search": map[string]any{"name": "web-search", "type": "function", "parameters": map[string]any{}}},
+	})})
 	var seen HandlerRequest
 	anth := stubHandler("Anthropic", ModeMessages, "hi", map[string]any{"input_tokens": 3.0, "output_tokens": 2.0}, &seen)
 	other := stubHandler("OpenAI", ModeMessages, "wrong", nil, nil)
