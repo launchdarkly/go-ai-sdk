@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
@@ -97,7 +98,7 @@ func TestToClaudeAgentsRun(t *testing.T) {
 		t.Errorf("total tokens = %+v", tt)
 	}
 
-	g := e.spans(aiserver.GraphSpanName)
+	g := e.spans(kitbase.GraphSpanName)
 	if len(g) != 1 || g[0].Status().Code != codes.Ok || g[0].EndTime().IsZero() {
 		t.Fatal("graph span not ended OK")
 	}
@@ -137,7 +138,7 @@ func TestToClaudeAgentsRun(t *testing.T) {
 		}
 	}
 	for _, s := range e.exp.GetSpans().Snapshots() {
-		if s.Name() == SpanName || s.Name() == aiserver.GraphSpanName {
+		if s.Name() == SpanName || s.Name() == kitbase.GraphSpanName {
 			continue
 		}
 		for k := range attrs(s) {
@@ -228,7 +229,7 @@ func TestToClaudeAgentsFailure(t *testing.T) {
 	if len(e.ld.events("$ld:ai:graph:invocation_failure")) != 1 || len(e.ld.events("$ld:ai:graph:invocation_success")) != 0 {
 		t.Error("failure not tracked")
 	}
-	g := e.spans(aiserver.GraphSpanName)
+	g := e.spans(kitbase.GraphSpanName)
 	if len(g) != 1 || g[0].Status().Code != codes.Error || g[0].EndTime().IsZero() {
 		t.Error("graph span not ended ERROR")
 	}
@@ -273,7 +274,7 @@ func TestClaudeGraph(t *testing.T) {
 	}
 	e := setup(t, flags, sse(nil, "lookup", 1, 1), sse([]string{"ok"}, "", 1, 1)) // graph() streams each node
 	stubCalled := false
-	stub := sdkapi.CreateHandler(ProvidesFor, func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
+	stub := sdkapi.CreateHandler(providesFor, func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
 		stubCalled = true
 		return aiserver.HandlerResult{Output: "stub"}, nil
 	}, nil, aiserver.CaptureDefault)

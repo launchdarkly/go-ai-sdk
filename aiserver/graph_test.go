@@ -16,6 +16,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 func nodeCfg(instructions string) map[string]any {
@@ -55,8 +57,8 @@ type recordingHandler struct {
 
 func (r *recordingHandler) handler() *ProviderHandler {
 	invoke := func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
-		key := req.Variables[VarLD].(TrackData).ConfigKey
-		_, span := otel.Tracer(TracerPrefix+"/test").Start(ctx, "handler "+key)
+		key := req.Variables[kitbase.VarLD].(TrackData).ConfigKey
+		_, span := otel.Tracer(kitbase.TracerPrefix+"/test").Start(ctx, "handler "+key)
 		defer span.End()
 		r.mu.Lock()
 		r.calls = append(r.calls, nodeCall{Key: key, Req: req})
@@ -552,7 +554,7 @@ func TestGraphStream(t *testing.T) {
 	var graphSpanID string
 	spans := exp.GetSpans().Snapshots()
 	for _, s := range spans {
-		if s.Name() == GraphSpanName {
+		if s.Name() == kitbase.GraphSpanName {
 			graphSpanID = s.SpanContext().SpanID().String()
 			if s.Status().Code != codes.Ok {
 				t.Error("graph span not OK")
@@ -570,7 +572,7 @@ func TestGraphStream(t *testing.T) {
 		}
 	}
 	for _, s := range spans {
-		if s.Name() != GraphSpanName && (s.Parent().SpanID().String() != graphSpanID || s.SpanContext().TraceID() != spans[len(spans)-1].SpanContext().TraceID()) {
+		if s.Name() != kitbase.GraphSpanName && (s.Parent().SpanID().String() != graphSpanID || s.SpanContext().TraceID() != spans[len(spans)-1].SpanContext().TraceID()) {
 			t.Errorf("%s not parented under the graph span", s.Name())
 		}
 	}
@@ -590,7 +592,7 @@ func TestGraphStreamAbandonAndErrors(t *testing.T) {
 		t.Error("abandoned run tracked success or lost the entered node")
 	}
 	for _, s := range exp.GetSpans().Snapshots() {
-		if s.Name() != GraphSpanName {
+		if s.Name() != kitbase.GraphSpanName {
 			continue
 		}
 		abandoned := false
@@ -727,13 +729,13 @@ func TestGraphNodeTrackData(t *testing.T) {
 	v := 4
 	n := &GraphNode{Key: "leaf", Config: AiConfig{Model: Model{Name: "m"}}, Meta: VariationMeta{VariationKey: "var", ModelKey: "mk", ModelVersion: &v}}
 	n.Config.Provider.Name = "P"
-	td := n.TrackData("g", "run-1")
+	td := n.trackData("g", "run-1")
 	want := TrackData{RunID: "run-1", ConfigKey: "leaf", VariationKey: "var", Version: 1, ModelName: "m", ProviderName: "P", GraphKey: "g", ModelKey: "mk", ModelVersion: &v}
 	if !reflect.DeepEqual(td, want) {
 		t.Errorf("TrackData = %+v, want %+v", td, want)
 	}
 	n.Meta.Version = 7
-	if n.TrackData("g", "r").Version != 7 {
+	if n.trackData("g", "r").Version != 7 {
 		t.Error("an explicit version must be kept")
 	}
 }
@@ -741,7 +743,7 @@ func TestGraphNodeTrackData(t *testing.T) {
 func graphSpan(t *testing.T, exp *tracetest.InMemoryExporter) tracetest.SpanStub {
 	t.Helper()
 	for _, s := range exp.GetSpans() {
-		if s.Name == GraphSpanName {
+		if s.Name == kitbase.GraphSpanName {
 			return s
 		}
 	}
@@ -848,7 +850,7 @@ func TestGraphSpanPathAcrossHops(t *testing.T) {
 	path := "<missing>"
 	for _, s := range exp.GetSpans().Snapshots() {
 		for _, kv := range s.Attributes() {
-			if s.Name() == GraphSpanName && kv.Key == "launchdarkly.graph.path" {
+			if s.Name() == kitbase.GraphSpanName && kv.Key == "launchdarkly.graph.path" {
 				path = kv.Value.AsString()
 			}
 		}
@@ -870,7 +872,7 @@ func TestGraphRoutingNormalizesHandlerMode(t *testing.T) {
 	var served []string
 	mk := func(mode Mode, tag string) *ProviderHandler {
 		return createHandler(ProvidesFor{"P", mode}, func(_ context.Context, req HandlerRequest) (HandlerResult, error) {
-			served = append(served, tag+":"+req.Variables[VarLD].(TrackData).ConfigKey)
+			served = append(served, tag+":"+req.Variables[kitbase.VarLD].(TrackData).ConfigKey)
 			return HandlerResult{Output: "out"}, nil
 		}, nil, CaptureDefault)
 	}

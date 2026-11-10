@@ -7,8 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/launchdarkly/go-ai-sdk/internal/judging"
 )
 
 var placeholderRE = regexp.MustCompile(`\{\{([\w.]+)\}\}`)
@@ -53,12 +51,6 @@ func stringify(v any) string {
 	}
 }
 
-// ParseJSONWithPossibleFences parses JSON optionally wrapped in markdown
-// fences. ok is false when the text is not JSON; it never logs.
-func ParseJSONWithPossibleFences(text string) (value any, ok bool) {
-	return judging.ParseJSONWithPossibleFences(text)
-}
-
 var usageKeyPairs = []struct {
 	in, out                 string
 	cacheRead, cacheCreated []string
@@ -86,10 +78,10 @@ func numberOrZero(v any) float64 {
 	return f
 }
 
-// ParseUsage normalises provider token counts. The first key pair with
+// kitParseUsage normalises provider token counts. The first key pair with
 // both keys present wins; total is always computed. Cache fields are folded
 // into input as the TypeScript implementation does.
-func ParseUsage(usage map[string]any) TokenUsage {
+func kitParseUsage(usage map[string]any) TokenUsage {
 	for _, p := range usageKeyPairs {
 		inV, hasIn := usage[p.in]
 		outV, hasOut := usage[p.out]
@@ -122,10 +114,10 @@ func ParseUsage(usage map[string]any) TokenUsage {
 
 // handlerMode is a handler's declared mode, normalized like a config's, so a
 // handler declared with "completion" serves messages configs everywhere.
-func handlerMode(h *ProviderHandler) Mode { return NormalizeMode(string(h.ProvidesFor.Mode)) }
+func handlerMode(h *ProviderHandler) Mode { return kitNormalizeMode(string(h.ProvidesFor.Mode)) }
 
-// NormalizeMode maps a variation mode to a handler mode.
-func NormalizeMode(mode string) Mode {
+// kitNormalizeMode maps a variation mode to a handler mode.
+func kitNormalizeMode(mode string) Mode {
 	if mode == "agent" {
 		return ModeAgent
 	}

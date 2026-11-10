@@ -66,7 +66,8 @@ result events is resolved when `Run` starts, before its first management API req
 
 | Dependency | Why |
 | --- | --- |
-| `aiserver` | `ProviderHandler`, `ToolHandler`, `ReportUsage`, client lifecycle (`LDClient.TrackMetric` / `Flush` emit results). |
+| `aiserver` | `ProviderHandler`, `ToolHandler`, client lifecycle (`LDClient.TrackMetric` / `Flush` emit results). |
+| `internal/handlerkit`, `internal/kitbase` | The handler kit: `ReportUsage`, `ParseAiConfig`, `NormalizeMode`, `SelectHandler`, `ParseUsage`, span usage attributes. |
 | `internal/bridge` | Flag delivery for judge configs (`ExtractVariationRaw`) and the shared logger. |
 | `internal/judging` | `BuildMessageHistory` and judge prompt helpers shared with core judges. |
 | `internal/trajectory` | Per-row trajectory recorder fed to judges. |

@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
 	"github.com/launchdarkly/go-ai-sdk/llms"
 )
@@ -309,7 +310,7 @@ func TestTelemetry(t *testing.T) {
 	h, _, exp := setup(t, toolTurn("a", nil), textTurn("answer", 3, 4))
 	_, err := h.Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "hello",
 		ToolHandlers: map[string]aiserver.ToolHandler{"a": fn(func(map[string]any) (any, error) { return "r", nil })},
-		Variables:    map[string]any{aiserver.VarLD: ldFixture}})
+		Variables:    map[string]any{kitbase.VarLD: ldFixture}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +422,7 @@ func TestStreaming(t *testing.T) {
 	h, _, exp := setup(t,
 		streamTurn([]string{"Let me ", "check. "}, 1, 1, toolCall("a", map[string]any{"a": "v"})),
 		streamTurn([]string{"Done", "!"}, 2, 3))
-	evs, err := collect(t, h, aiserver.HandlerRequest{Config: c, UserInput: "q", Variables: map[string]any{aiserver.VarLD: ldFixture},
+	evs, err := collect(t, h, aiserver.HandlerRequest{Config: c, UserInput: "q", Variables: map[string]any{kitbase.VarLD: ldFixture},
 		ToolHandlers: map[string]aiserver.ToolHandler{"a": fn(func(a map[string]any) (any, error) { got = a; return "r", nil })}})
 	if err != nil {
 		t.Fatal(err)

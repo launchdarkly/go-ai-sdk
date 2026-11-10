@@ -37,15 +37,6 @@ type MessageContent struct {
 	Parts []ContentPart
 }
 
-// TextParts is a message of role with one text part per string.
-func TextParts(role ChatMessageType, parts ...string) MessageContent {
-	m := MessageContent{Role: role, Parts: make([]ContentPart, 0, len(parts))}
-	for _, p := range parts {
-		m.Parts = append(m.Parts, TextContent{Text: p})
-	}
-	return m
-}
-
 // ContentPart is one piece of a message: TextContent, ImageURLContent,
 // BinaryContent, ToolCall or ToolCallResponse.
 type ContentPart interface{ isPart() }
@@ -117,34 +108,9 @@ type ContentChoice struct {
 	GenerationInfo map[string]any
 	ToolCalls      []ToolCall
 	// Parts, when set, is the choice's content in order (text and tool
-	// calls); AssistantMessage prefers it over Content and ToolCalls.
+	// calls); the conversation's AI message prefers it over Content and
+	// ToolCalls.
 	Parts []ContentPart
-}
-
-// AssistantMessage is the reply as an AI message for the conversation:
-// every choice's Parts in order, or else the first choice's text and tool
-// calls.
-func (r *ContentResponse) AssistantMessage() MessageContent {
-	msg := MessageContent{Role: ChatMessageTypeAI}
-	if r == nil {
-		return msg
-	}
-	for _, c := range r.Choices {
-		if c != nil {
-			msg.Parts = append(msg.Parts, c.Parts...)
-		}
-	}
-	if len(msg.Parts) > 0 || len(r.Choices) == 0 || r.Choices[0] == nil {
-		return msg
-	}
-	c := r.Choices[0]
-	if c.Content != "" {
-		msg.Parts = append(msg.Parts, TextContent{Text: c.Content})
-	}
-	for _, tc := range c.ToolCalls {
-		msg.Parts = append(msg.Parts, tc)
-	}
-	return msg
 }
 
 // CallOptions are the per-call settings. A nil pointer is unset; a set

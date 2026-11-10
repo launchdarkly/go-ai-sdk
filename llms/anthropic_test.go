@@ -25,12 +25,12 @@ func newTestAnthropic(t *testing.T, url string) *Anthropic {
 func TestAnthropicRequest(t *testing.T) {
 	f, url := newFake(t, "application/json", anthropicReply)
 	msgs := []MessageContent{
-		TextParts(ChatMessageTypeSystem, "be ", "brief"),
+		textParts(ChatMessageTypeSystem, "be ", "brief"),
 		{Role: ChatMessageTypeHuman, Parts: []ContentPart{TextContent{Text: "look"}, BinaryContent{MIMEType: "image/png", Data: []byte{1, 2}},
 			ImageURLContent{URL: "data:image/jpeg;base64,AAA="}, ImageURLContent{URL: "https://example.com/a.png"}}},
 		{Role: ChatMessageTypeAI, Parts: []ContentPart{ToolCall{ID: "tu_1", FunctionCall: &FunctionCall{Name: "lookup", Arguments: ""}}}},
 		{Role: ChatMessageTypeTool, Parts: []ContentPart{ToolCallResponse{ToolCallID: "tu_1", Content: "found"}}},
-		TextParts(ChatMessageTypeHuman, "thanks"),
+		textParts(ChatMessageTypeHuman, "thanks"),
 	}
 	_, err := newTestAnthropic(t, url).GenerateContent(bg, msgs, WithTemperature(0), WithTopK(5), WithStopWords([]string{"END"}),
 		WithTools([]Tool{{Type: "function", Function: &FunctionDefinition{Name: "lookup", Description: "d",
@@ -89,7 +89,7 @@ func TestAnthropicRequest(t *testing.T) {
 func TestAnthropicMergesParallelToolResults(t *testing.T) {
 	f, url := newFake(t, "application/json", anthropicReply)
 	msgs := []MessageContent{
-		TextParts(ChatMessageTypeHuman, "weather in Paris and Rome?"),
+		textParts(ChatMessageTypeHuman, "weather in Paris and Rome?"),
 		{Role: ChatMessageTypeAI, Parts: []ContentPart{
 			ToolCall{ID: "tu_1", FunctionCall: &FunctionCall{Name: "w", Arguments: `{"c":"Paris"}`}},
 			ToolCall{ID: "tu_2", FunctionCall: &FunctionCall{Name: "w", Arguments: `{"c":"Rome"}`}},
@@ -138,7 +138,7 @@ func TestAnthropicDropsBlankText(t *testing.T) {
 
 	// A blank system prompt is dropped too, as Bedrock does.
 	if _, err := newTestAnthropic(t, url).GenerateContent(bg, []MessageContent{
-		TextParts(ChatMessageTypeSystem, " "), TextParts(ChatMessageTypeHuman, "q"),
+		textParts(ChatMessageTypeSystem, " "), textParts(ChatMessageTypeHuman, "q"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestAnthropicDropsBlankText(t *testing.T) {
 
 func TestAnthropicResponse(t *testing.T) {
 	_, url := newFake(t, "application/json", anthropicReply)
-	resp, err := newTestAnthropic(t, url).GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")})
+	resp, err := newTestAnthropic(t, url).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,15 +170,15 @@ func TestAnthropicResponse(t *testing.T) {
 			t.Errorf("usage = %v", c.GenerationInfo)
 		}
 	}
-	am := resp.AssistantMessage()
-	if len(am.Parts) != 2 {
-		t.Errorf("assistant message = %+v", am)
+	// Each choice carries its block as Parts, so the AI message keeps both in order.
+	if n := len(text.Parts) + len(tool.Parts); n != 2 {
+		t.Errorf("choice parts = %v, %v", text.Parts, tool.Parts)
 	}
 }
 
 func TestAnthropicEmptyContent(t *testing.T) {
 	_, url := newFake(t, "application/json", `{"id":"m","type":"message","role":"assistant","content":[],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":0}}`)
-	if _, err := newTestAnthropic(t, url).GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")}); !errors.Is(err, ErrEmptyResponse) {
+	if _, err := newTestAnthropic(t, url).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")}); !errors.Is(err, ErrEmptyResponse) {
 		t.Fatalf("err = %v, want ErrEmptyResponse", err)
 	}
 }
@@ -209,7 +209,7 @@ func TestAnthropicStreaming(t *testing.T) {
 	)
 	f, url := newFake(t, "text/event-stream", body)
 	var chunks []string
-	resp, err := newTestAnthropic(t, url).GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")},
+	resp, err := newTestAnthropic(t, url).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")},
 		WithStreamingFunc(func(_ context.Context, c []byte) error { chunks = append(chunks, string(c)); return nil }))
 	if err != nil {
 		t.Fatal(err)

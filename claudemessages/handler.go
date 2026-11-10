@@ -16,6 +16,8 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/anthropicwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
@@ -29,8 +31,8 @@ const (
 	maxSteps = 10
 )
 
-// ProvidesFor is the variation provider/mode this handler serves.
-var ProvidesFor = aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeMessages}
+// providesFor is the variation provider/mode this handler serves.
+var providesFor = aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeMessages}
 
 // ErrToolNotFound is returned when the model calls a tool the handler did not
 // offer (no config tool with a ToolFunc under that name). The error message
@@ -41,7 +43,7 @@ var ErrToolNotFound = errors.New("claudemessages: no handler registered for tool
 // tool-loop bound (10 turns, as in the JavaScript and Python handlers).
 var ErrMaxSteps = errors.New("claudemessages: tool loop exceeded the maximum number of steps")
 
-func init() { aiserver.RegisterAiSdkPackage(PackageName, PackageVersion) }
+func init() { handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion) }
 
 // Options configure NewHandler.
 type Options struct {
@@ -56,7 +58,7 @@ type Options struct {
 
 // NewHandler returns the Anthropic messages handler (createClaudeMessagesHandler).
 func NewHandler(opts Options) *aiserver.ProviderHandler {
-	aiserver.ReportUsage("claude-messages.createClaudeMessagesHandler", PackageName, PackageVersion)
+	handlerkit.ReportUsage("claude-messages.createClaudeMessagesHandler", PackageName, PackageVersion)
 	return newHandler(opts)
 }
 
@@ -71,7 +73,7 @@ func newHandler(opts Options) *aiserver.ProviderHandler {
 		c = &nc
 	}
 	h := &handler{client: c}
-	return sdkapi.CreateHandler(ProvidesFor, h.invoke, h.stream, opts.CaptureContent)
+	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent)
 }
 
 // InvokeOptions are the optional arguments to ClaudeMessages.
@@ -86,7 +88,7 @@ type InvokeOptions struct {
 // ClaudeMessages invokes configKey through a fresh Anthropic messages handler.
 // opts may be nil.
 func ClaudeMessages(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error) {
-	aiserver.ReportUsage("claude-messages.claudeMessages", PackageName, PackageVersion)
+	handlerkit.ReportUsage("claude-messages.claudeMessages", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}
@@ -188,11 +190,11 @@ type handler struct{ client *anthropic.Client }
 // streaming.
 func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText func(string) bool) (out string, usage anthropicwire.Usage, abandoned bool, err error) {
 	model := req.Config.Model.Name
-	p := aiserver.ComposePrompt(req, aiserver.ModeMessages)
+	p := handlerkit.ComposePrompt(req, aiserver.ModeMessages)
 	if onText == nil { // streaming ignores outputFormat
-		p.System = aiserver.WithOutputFormat(p.System, req.Config.OutputFormat)
+		p.System = kitbase.WithOutputFormat(p.System, req.Config.OutputFormat)
 	}
-	r := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{
+	r := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
 		Tracer: PackageName, Name: SpanName, System: "anthropic", RequestModel: model,
 	}, req, p)
 	defer r.EndOnPanic()

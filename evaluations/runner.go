@@ -16,6 +16,7 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/judging"
 	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 	"github.com/launchdarkly/go-ai-sdk/internal/trajectory"
@@ -522,7 +523,7 @@ func (r *runState) resolveJudges(ctx context.Context) error {
 		}
 		var cfg aiserver.AiConfig
 		if err == nil {
-			cfg, err = aiserver.ParseAiConfig(raw)
+			cfg, err = handlerkit.ParseAiConfig(raw)
 		}
 		if err != nil {
 			return fmt.Errorf("evaluations: %w: failed to resolve LaunchDarkly judge %q: %w; if the judge does not exist in project %q, create it in the LaunchDarkly UI and try again",
@@ -535,7 +536,7 @@ func (r *runState) resolveJudges(ctx context.Context) error {
 			rj.version = &v
 		}
 		modeStr, _ := meta["mode"].(string)
-		mode := aiserver.NormalizeMode(modeStr)
+		mode := handlerkit.NormalizeMode(modeStr)
 		// Judges cannot use tools, even when their AI Config defines some.
 		cfg.Tools = nil
 		cfg.Raw = maps.Clone(cfg.Raw)

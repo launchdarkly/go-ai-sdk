@@ -17,6 +17,8 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 // ErrNoFinalResponse is returned when a stream ends without a terminal
@@ -31,7 +33,7 @@ func Turns(turns []aiserver.Message) responses.ResponseInputParam {
 	for _, t := range turns {
 		switch {
 		case t.Role == "assistant":
-			out = append(out, responses.ResponseInputItemParamOfMessage(aiserver.ContentText(t), responses.EasyInputMessageRoleAssistant))
+			out = append(out, responses.ResponseInputItemParamOfMessage(handlerkit.ContentText(t), responses.EasyInputMessageRoleAssistant))
 		case t.Blocks == nil:
 			out = append(out, responses.ResponseInputItemParamOfMessage(t.Text, responses.EasyInputMessageRoleUser))
 		default:
@@ -42,7 +44,7 @@ func Turns(turns []aiserver.Message) responses.ResponseInputParam {
 					parts = append(parts, responses.ResponseInputContentParamOfInputText(b.Text))
 				case b.Type == "image" && b.Source != nil:
 					img := responses.ResponseInputContentParamOfInputImage(responses.ResponseInputImageDetailAuto)
-					img.OfInputImage.ImageURL = param.NewOpt(aiserver.ImageURL(*b.Source))
+					img.OfInputImage.ImageURL = param.NewOpt(handlerkit.ImageURL(*b.Source))
 					parts = append(parts, img)
 				}
 			}
@@ -136,8 +138,8 @@ func reasoning(v any) map[string]any {
 
 // Usage reports one response's usage for a span. input_tokens already
 // includes cached tokens, so cache reads are detail and are not added again.
-func Usage(u responses.ResponseUsage) aiserver.SpanUsage {
-	return aiserver.SpanUsage{
+func Usage(u responses.ResponseUsage) kitbase.SpanUsage {
+	return kitbase.SpanUsage{
 		Input: float64(u.InputTokens), Output: float64(u.OutputTokens),
 		CacheRead: float64(u.InputTokensDetails.CachedTokens),
 	}
@@ -153,7 +155,7 @@ func (u *RunUsage) Add(x responses.ResponseUsage) {
 }
 
 // Raw is the handler-result usage. It omits cache keys: OpenAI input already
-// includes them and aiserver.ParseUsage would fold them in a second time.
+// includes them and handlerkit.ParseUsage would fold them in a second time.
 func (u RunUsage) Raw() map[string]any {
 	return map[string]any{"input_tokens": float64(u.Input), "output_tokens": float64(u.Output)}
 }

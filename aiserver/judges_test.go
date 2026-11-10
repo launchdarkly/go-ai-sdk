@@ -14,6 +14,9 @@ import (
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/judging"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 func judgedConfig(extra map[string]any) map[string]any {
@@ -25,7 +28,7 @@ func judgedConfig(extra map[string]any) map[string]any {
 }
 
 // spanJudgeHandler answers like a model that calls tool "lookup" when it has
-// one, and returns a fixed verdict for judge calls, opening a real HandlerRun.
+// one, and returns a fixed verdict for judge calls, opening a real kitHandlerRun.
 func spanJudgeHandler(verdict string, capture bool, judgeErr error, judgeReqs *[]HandlerRequest) *ProviderHandler {
 	cc := CaptureOff
 	if capture {
@@ -41,7 +44,7 @@ func spanJudgeHandler(verdict string, capture bool, judgeErr error, judgeReqs *[
 			return HandlerResult{Output: "answer"}, nil
 		}
 		*judgeReqs = append(*judgeReqs, req)
-		run := StartHandlerRun(ctx, HandlerSpanOptions{Tracer: TracerPrefix + "/test", Name: "judge.span", System: "p", RequestModel: "m"}, req, Prompt{})
+		run := kitStartHandlerRun(ctx, kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/test", Name: "judge.span", System: "p", RequestModel: "m"}, req, prompt{})
 		if judgeErr != nil {
 			run.Fail(judgeErr)
 			return HandlerResult{}, judgeErr
@@ -119,7 +122,7 @@ func TestNoToolsNoTrajectoryBlock(t *testing.T) {
 	if _, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}).Invoke(bg, "q", userCtx); err != nil {
 		t.Fatal(err)
 	}
-	if got := reqs[0].Variables["message_history"]; got != "q\n\nanswer\n\n"+FormattingInstructions {
+	if got := reqs[0].Variables["message_history"]; got != "q\n\nanswer\n\n"+judging.FormattingInstructions {
 		t.Errorf("history = %q", got)
 	}
 }

@@ -12,7 +12,7 @@ const module = "github.com/launchdarkly/go-ai-sdk"
 
 // minPackages is the number of packages in the module. Raise it in the same
 // change that adds a package, so a listing that silently drops packages fails.
-const minPackages = 26
+const minPackages = 28
 
 // Stable packages never depend on experimental code, directly or through
 // another package.
@@ -40,6 +40,17 @@ func TestNoExperimentalImports(t *testing.T) {
 	for _, v := range experimentalViolations(lines) {
 		t.Error(v)
 	}
+
+	// The handler kit: aiserver never reaches internal/handlerkit (which imports
+	// it), and internal/kitbase never reaches aiserver.
+	for _, r := range kitRules {
+		if !slices.Contains(listed, r.pkg) {
+			t.Fatalf("go list scope wrong: %s not listed", r.pkg)
+		}
+		for _, v := range depViolations(lines, r.pkg, r.dep) {
+			t.Error(v)
+		}
+	}
 }
 
 // experimentalViolations reads `go list` lines ("pkg dep dep ...") and reports
@@ -56,6 +67,25 @@ func experimentalViolations(lines []string) []string {
 			if strings.HasPrefix(dep, module+"/") && hasExperimentalElem(dep) {
 				out = append(out, f[0]+" depends on "+dep)
 			}
+		}
+	}
+	return out
+}
+
+// kitRules are the handler-kit import rules: pkg never depends on dep.
+var kitRules = []struct{ pkg, dep string }{
+	{module + "/aiserver", module + "/internal/handlerkit"},
+	{module + "/internal/kitbase", module + "/aiserver"},
+}
+
+// depViolations reads `go list` lines ("pkg dep dep ...") and reports pkg when
+// dep is among its deps, directly or through another package.
+func depViolations(lines []string, pkg, dep string) []string {
+	var out []string
+	for _, l := range lines {
+		f := strings.Fields(l)
+		if len(f) > 0 && f[0] == pkg && slices.Contains(f[1:], dep) {
+			out = append(out, pkg+" depends on "+dep)
 		}
 	}
 	return out
@@ -92,6 +122,34 @@ func TestExperimentalViolationsFires(t *testing.T) {
 	}
 	for _, c := range cases {
 		if got := experimentalViolations(c.lines); len(got) != c.want {
+			t.Errorf("%s: got %d violations %v, want %d", c.name, len(got), got, c.want)
+		}
+	}
+}
+
+func TestDepViolationsFires(t *testing.T) {
+	const (
+		ai   = module + "/aiserver"
+		kit  = module + "/internal/handlerkit"
+		base = module + "/internal/kitbase"
+		x    = module + "/internal/x"
+	)
+	cases := []struct {
+		name     string
+		lines    []string
+		pkg, dep string
+		want     int
+	}{
+		{"aiserver imports handlerkit", []string{ai + " " + kit}, ai, kit, 1},
+		{"aiserver reaches handlerkit indirectly", []string{ai + " " + x + " " + kit, x + " " + kit}, ai, kit, 1},
+		{"kitbase imports aiserver", []string{base + " " + ai}, base, ai, 1},
+		{"kitbase reaches aiserver indirectly", []string{base + " " + x + " " + ai, x + " " + ai}, base, ai, 1},
+		{"handlerkit may import aiserver", []string{kit + " " + ai + " " + base, ai + " " + base}, ai, kit, 0},
+		{"aiserver may import kitbase", []string{ai + " " + base}, base, ai, 0},
+		{"prefix is not the package", []string{base + " " + ai + "/sub"}, base, ai, 0},
+	}
+	for _, c := range cases {
+		if got := depViolations(c.lines, c.pkg, c.dep); len(got) != c.want {
 			t.Errorf("%s: got %d violations %v, want %d", c.name, len(got), got, c.want)
 		}
 	}

@@ -21,6 +21,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/bedrockwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 var bg = context.Background()
@@ -401,7 +402,7 @@ func TestTelemetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u := aiserver.ParseUsage(res.Usage); u.Input != 16 || u.Output != 6 || u.Total != 22 || u.InputDetails == nil || u.InputDetails.CacheRead != 3 || u.InputDetails.CacheCreation != 2 {
+	if u := handlerkit.ParseUsage(res.Usage); u.Input != 16 || u.Output != 6 || u.Total != 22 || u.InputDetails == nil || u.InputDetails.CacheRead != 3 || u.InputDetails.CacheCreation != 2 {
 		t.Errorf("usage = %+v %+v", u, u.InputDetails)
 	}
 	const id = "us.anthropic.claude-sonnet-4-5"
@@ -811,7 +812,7 @@ func TestStream(t *testing.T) {
 	if !reflect.DeepEqual(chunks, []string{"Let me ", "check. ", "Sun", "ny"}) || done.Type != "done" || *done.Output != "Let me check. Sunny" {
 		t.Fatalf("events = %+v", events)
 	}
-	if u := aiserver.ParseUsage(done.Usage); u.Input != 8 || u.Output != 4 {
+	if u := handlerkit.ParseUsage(done.Usage); u.Input != 8 || u.Output != 4 {
 		t.Errorf("usage = %+v", u)
 	}
 	if gotArgs["city"] != "Paris" {
@@ -1043,7 +1044,7 @@ func TestBedrockGraphWrapper(t *testing.T) {
 	f := newFakeBedrock(t)
 	reg := &aiserver.Registry{}
 	tools := map[string]aiserver.ToolHandler{"a": aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) { return nil, nil })}
-	impostor := &aiserver.ProviderHandler{ProvidesFor: ProvidesFor}
+	impostor := &aiserver.ProviderHandler{ProvidesFor: providesFor}
 	g, err := BedrockGraph("my-graph", aiserver.GraphOptions{
 		Handlers: []*aiserver.ProviderHandler{impostor, impostor}, ToolHandlers: tools, Registry: reg, GraphJudge: "judge",
 	}, Options{Client: f.client()})
@@ -1053,7 +1054,7 @@ func TestBedrockGraphWrapper(t *testing.T) {
 	if gotKey != "my-graph" || gotOpts.Registry != reg || gotOpts.GraphJudge != "judge" || len(gotOpts.ToolHandlers) != 1 {
 		t.Errorf("forwarded key=%q opts=%+v", gotKey, gotOpts)
 	}
-	if len(gotOpts.Handlers) != 1 || gotOpts.Handlers[0] == impostor || gotOpts.Handlers[0].ProvidesFor != ProvidesFor {
+	if len(gotOpts.Handlers) != 1 || gotOpts.Handlers[0] == impostor || gotOpts.Handlers[0].ProvidesFor != providesFor {
 		t.Errorf("handlers = %+v", gotOpts.Handlers)
 	}
 }
@@ -1085,7 +1086,7 @@ func TestBedrockGraphRuns(t *testing.T) {
 	tracer(t)
 	var looked atomic.Int32
 	impostorCalled := false
-	impostor := &aiserver.ProviderHandler{ProvidesFor: ProvidesFor, Invoke: func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
+	impostor := &aiserver.ProviderHandler{ProvidesFor: providesFor, Invoke: func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
 		impostorCalled = true
 		return aiserver.HandlerResult{Output: "wrong"}, nil
 	}}

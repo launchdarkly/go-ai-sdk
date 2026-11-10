@@ -28,7 +28,6 @@ lives in `internal/openaiwire`, also used by `openaimessages`.
 
 ```go
 const PackageName, PackageVersion, SpanName
-var ProvidesFor aiserver.ProvidesFor
 var ErrMaxTurns, ErrToolNotOffered, ErrNoRoot, ErrNilGraph error
 type Options struct{ Client *openai.Client; APIKey string; CaptureContent aiserver.ContentCapture; MaxTurns int }
 func NewHandler(Options) *aiserver.ProviderHandler
@@ -46,7 +45,7 @@ func (*NativeGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
 `aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
 `gen_ai.tool.name` are written either way.
 
-`init()` calls `aiserver.RegisterAiSdkPackage(PackageName, PackageVersion)`. Usage helpers:
+`init()` calls `handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion)`. Usage helpers:
 `openai-agents.createOpenAIAgentsHandler` (`NewHandler`), `openai-agents.openaiAgents`,
 `openai-agents.openaiGraph`, `openai-agents.toOpenAIAgents`. Internal paths (`newHandler`,
 `internal/sdkapi.Config`, `internal/sdkapi.Graph`) never report.
@@ -55,18 +54,18 @@ func (*NativeGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
 
 The handler receives `aiserver.HandlerRequest{Config, UserInput, ToolHandlers, Variables, History}`.
 
-- **`Config`**: `aiserver.ComposePrompt(req, ModeAgent)` gives the system prompt (instructions win
+- **`Config`**: `handlerkit.ComposePrompt(req, ModeAgent)` gives the system prompt (instructions win
   over `messages` system entries) and the turns. The system prompt is the Responses
-  `instructions`. `Tools` are filtered by `aiserver.CallableTools`; tools whose handler is a
+  `instructions`. `Tools` are filtered by `handlerkit.CallableTools`; tools whose handler is a
   `NativeTool` become hosted tools. `OutputFormat` becomes `buildOutputType` on the blocking path.
   Allowlisted `Model.Parameters` go out as extra JSON fields (camelCase keys are read as their
   snake_case names; snake_case wins); `max_turns` caps the run.
-- **`UserInput`**: appended by `ComposePrompt`; `""` when empty, never absent.
+- **`UserInput`**: appended by `handlerkit.ComposePrompt`; `""` when empty, never absent.
 - **`ToolHandlers`**: only offered `ToolFunc` values run; a call for anything else fails with
   `ErrToolNotOffered`. A tool error fails the run (it is not returned to the model).
 - **`Variables`**: template values, plus the `__ld` / `ldContext` entries that
-  `aiserver.StartHandlerRun` writes onto the root span.
-- **`History`**: spliced by `ComposePrompt` into input items before `userInput`.
+  `handlerkit.StartHandlerRun` writes onto the root span.
+- **`History`**: spliced by `handlerkit.ComposePrompt` into input items before `userInput`.
 
 Run loop (`runner.run`): each turn sends the active agent's instructions, tools, handoff tools and
 `text.format`; follow-up turns chain with `previous_response_id` and send only the
@@ -89,7 +88,7 @@ its target's node run ends: `$ld:ai:graph:handoff_success`, or `:handoff_failure
 (`sourceKey` / `targetKey`). `$ld:ai:graph:duration:total` on every path; success adds
 `total_tokens` (> 0) and `invocation_success`, failure `invocation_failure`. `$ld:ai:graph:*`
 events carry the graph's `TrackData` (as `aiserver.Graph`). Function tools are wrapped with
-`aiserver.WrapToolHandlers` for `$ld:ai:tool_call`. The `ld.ai.graph` span has `ld.ai.graph.key`,
+`handlerkit.WrapToolHandlers` for `$ld:ai:tool_call`. The `ld.ai.graph` span has `ld.ai.graph.key`,
 `launchdarkly.graph.path` and usage; it is ended on every path.
 
 ## OTel setup

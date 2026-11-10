@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 var ldVars = map[string]any{"__ld": aiserver.TrackData{ConfigKey: "test-config", VariationKey: "variation-a", RunID: "run-123", Version: 1, ModelName: "test-model", ProviderName: "TestProvider"}}
@@ -132,7 +133,7 @@ func TestToolsAndLoop(t *testing.T) {
 	if !reflect.DeepEqual(calls, []string{"a", "b"}) || gotArgs["city"] != "Paris" || res.Output != "final" {
 		t.Errorf("calls=%v args=%v out=%v", calls, gotArgs, res.Output)
 	}
-	if u := aiserver.ParseUsage(res.Usage); u.Input != 4 || u.Output != 5 {
+	if u := handlerkit.ParseUsage(res.Usage); u.Input != 4 || u.Output != 5 {
 		t.Errorf("usage = %+v", u)
 	}
 	// tool results are fed back on the follow-up turn
@@ -295,7 +296,7 @@ func TestStream(t *testing.T) {
 	if !reflect.DeepEqual(chunks, []string{"Hel", "lo ", "wor", "ld"}) || done == nil || *done.Output != "Hello world" || gotArgs["city"] != "Paris" {
 		t.Fatalf("chunks=%v done=%+v args=%v", chunks, done, gotArgs)
 	}
-	if u := aiserver.ParseUsage(done.Usage); u.Input != 5 || u.Output != 3 {
+	if u := handlerkit.ParseUsage(done.Usage); u.Input != 5 || u.Output != 3 {
 		t.Errorf("usage = %+v", u)
 	}
 	root := attrs(e.spans("invoke_agent")[0])

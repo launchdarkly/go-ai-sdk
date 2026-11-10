@@ -115,7 +115,7 @@ empty; a blank value counts as unset.
 | `LD_BASE_URI` | no | LaunchDarkly polling/base URI (`InitOptions.BaseURI`) for non-production environments |
 | `LD_STREAM_URI` | no | LaunchDarkly streaming URI (`InitOptions.StreamURI`) |
 | `LD_EVENTS_URI` | no | LaunchDarkly events URI (`InitOptions.EventsURI`) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | no | OTLP/HTTP trace endpoint (`InitOptions.OTLPEndpoint`; `/v1/traces` is appended); default `https://otel.observability.app.launchdarkly.com` (`DefaultOTLPEndpoint`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | no | OTLP/HTTP trace endpoint (`InitOptions.OTLPEndpoint`; `/v1/traces` is appended); default `https://otel.observability.app.launchdarkly.com` |
 | `LD_SERVICE_NAME` | no | `service.name` resource attribute (`InitOptions.ServiceName`); default `go-sdk` |
 | `LD_ENVIRONMENT` | no | `deployment.environment` resource attribute (`InitOptions.Environment`); omitted when unset |
 | `LD_ENVIRONMENT_ID` | no | LaunchDarkly environment ID, sent as `environmentId` on every `$ld:ai:*` event and as `feature_flag.set.id` on handler spans for AI Config Monitoring; omitted when unset (the Go server SDK does not expose it) |
@@ -189,9 +189,9 @@ if errors.Is(err, aiserver.ErrConfigDisabled) {
 | `InspectConfig(ctx, key, ldctx) (InspectResult, error)` | Read a variation without invoking a model. A turned-off variation is `Enabled == false` and a nil error |
 | `CreateHandler(ProvidesFor, invoke, stream, ContentCapture) *ProviderHandler` | Build a custom handler |
 | `Configure(SDKOptions) error` | Set the process-wide content-capture default |
-| `BuildJudgeTasks` / `RunJudge` | Deferred judge evaluation on your own goroutine |
+| `RunJudge` | Run a deferred judge task (`ProviderResponse.JudgeTasks`) on your own goroutine |
 | `InitClient` / `InitWithClient` / `GetClient` / `Shutdown` | Lifecycle |
-| `ParseTemplate`, `ParseUsage`, `ParseAiConfig`, `NormalizeMode`, `ParseJSONWithPossibleFences` | Utilities |
+| `ParseTemplate` | Utilities |
 
 Optional per-call inputs are functional options:
 `Invoke(ctx, input, user, aiserver.WithVariables(vars), aiserver.WithHistory(history))`.

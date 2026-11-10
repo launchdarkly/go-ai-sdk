@@ -2,7 +2,6 @@ package aiserver
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -11,18 +10,19 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
-// Prompt is a handler's provider-neutral request: a system prompt plus the
+// prompt is a handler's provider-neutral request: a system prompt plus the
 // ordered user/assistant turns. Handlers map it to their
 // provider's wire format.
-type Prompt struct {
+type prompt struct {
 	System string
 	Turns  []Message
 }
 
-// ComposePrompt applies the shared prompt-construction rules so every handler
+// kitComposePrompt applies the shared prompt-construction rules so every handler
 // builds the same conversation:
 //
 //	[system from config] → [config conversation messages] → [history] → [userInput?]
@@ -32,9 +32,9 @@ type Prompt struct {
 // last config turn is already a user turn. With history, a
 // non-empty userInput is always appended and an empty one never is.
 // An appended empty userInput is "" — never absent.
-func ComposePrompt(req HandlerRequest, mode Mode) Prompt {
+func kitComposePrompt(req HandlerRequest, mode Mode) prompt {
 	cfg := req.Config
-	var p Prompt
+	var p prompt
 	var systemParts []string
 	for _, m := range cfg.Messages {
 		if m.Blocks == nil {
@@ -73,26 +73,8 @@ func ComposePrompt(req HandlerRequest, mode Mode) Prompt {
 	return p
 }
 
-// OutputFormatInstruction is the best-effort structured-output suffix
-// appended to a system prompt by handlers without native structured output.
-func OutputFormatInstruction(schema map[string]any) string {
-	b, _ := json.Marshal(schema)
-	return "Respond with valid JSON matching this schema:\n" + string(b)
-}
-
-// WithOutputFormat appends OutputFormatInstruction to system when schema is set.
-func WithOutputFormat(system string, schema map[string]any) string {
-	if schema == nil {
-		return system
-	}
-	if system == "" {
-		return OutputFormatInstruction(schema)
-	}
-	return system + "\n\n" + OutputFormatInstruction(schema)
-}
-
-// ContentText flattens a message to text: Text, or the joined text blocks.
-func ContentText(m Message) string {
+// kitContentText flattens a message to text: Text, or the joined text blocks.
+func kitContentText(m Message) string {
 	if m.Blocks == nil {
 		return m.Text
 	}
@@ -105,41 +87,13 @@ func ContentText(m Message) string {
 	return strings.Join(parts, "")
 }
 
-// ImageURL returns a URL-sourced image's URL, or a data: URL for base64 data
+// kitImageURL returns a URL-sourced image's URL, or a data: URL for base64 data
 // (the OpenAI / LangChain `image_url` form).
-func ImageURL(s ImageSource) string {
+func kitImageURL(s ImageSource) string {
 	if s.Type == "url" {
 		return s.URL
 	}
 	return "data:" + s.MediaType + ";base64," + s.Data
-}
-
-// SpanUsage is the token counts a span reports. Input is cache-inclusive: the
-// caller folds provider cache buckets in before calling SetUsageSpanAttributes.
-type SpanUsage struct {
-	Input, Output, CacheRead, CacheCreation float64
-}
-
-func (u *SpanUsage) Add(o SpanUsage) {
-	u.Input += o.Input
-	u.Output += o.Output
-	u.CacheRead += o.CacheRead
-	u.CacheCreation += o.CacheCreation
-}
-
-// SetUsageSpanAttributes writes the token usage span attributes and their
-// OpenLLMetry aliases. Total is always input + output.
-func SetUsageSpanAttributes(span trace.Span, u SpanUsage) {
-	in, out := int64(u.Input), int64(u.Output)
-	span.SetAttributes(
-		attribute.Int64("gen_ai.usage.input_tokens", in),
-		attribute.Int64("gen_ai.usage.output_tokens", out),
-		attribute.Int64("gen_ai.usage.total_tokens", in+out),
-		attribute.Int64("gen_ai.usage.prompt_tokens", in),
-		attribute.Int64("gen_ai.usage.completion_tokens", out),
-		attribute.Int64("gen_ai.usage.cache_read.input_tokens", int64(u.CacheRead)),
-		attribute.Int64("gen_ai.usage.cache_creation.input_tokens", int64(u.CacheCreation)),
-	)
 }
 
 // trackedSpan gives every span the kit opens a pointer identity. Span values
@@ -150,35 +104,25 @@ type trackedSpan struct{ trace.Span }
 
 func trackSpan(s trace.Span) trace.Span { return &trackedSpan{s} }
 
-// HandlerSpanOptions describe a handler's root span.
-type HandlerSpanOptions struct {
-	Tracer       string // instrumentation scope; must start with TracerPrefix
-	Name         string // root span name: "invoke_agent" for every handler
-	System       string // gen_ai.system, e.g. "anthropic"
-	Operation    string // gen_ai.operation.name; "" means "invoke_agent"
-	RequestModel string
-	ProviderName string // gen_ai.provider.name; "" means System
-}
-
-// HandlerRun is one handler call's span tree: a root plus sibling child spans
+// kitHandlerRun is one handler call's span tree: a root plus sibling child spans
 // for each model turn and tool call.
-type HandlerRun struct {
-	opts    HandlerSpanOptions
+type kitHandlerRun struct {
+	opts    kitbase.HandlerSpanOptions
 	ctx     context.Context
 	Root    trace.Span
 	tracer  trace.Tracer
 	open    map[trace.Span]bool
-	usage   SpanUsage
+	usage   kitbase.SpanUsage
 	usageOK bool
 	model   string      // last response model a chat turn reported
 	judge   *judgeScope // non-nil when this run is a judge call
 }
 
-// StartHandlerRun opens the root span, writes model identity, the LD
+// kitStartHandlerRun opens the root span, writes model identity, the LD
 // config-association and context-identity attributes (from req.Variables),
 // and, when capture is enabled for ctx, the prompt content (OpenLLMetry
 // attributes + gen_ai.content.prompt).
-func StartHandlerRun(ctx context.Context, opts HandlerSpanOptions, req HandlerRequest, p Prompt) *HandlerRun {
+func kitStartHandlerRun(ctx context.Context, opts kitbase.HandlerSpanOptions, req HandlerRequest, p prompt) *kitHandlerRun {
 	if opts.Operation == "" {
 		opts.Operation = "invoke_agent"
 	}
@@ -188,17 +132,17 @@ func StartHandlerRun(ctx context.Context, opts HandlerSpanOptions, req HandlerRe
 	tracer := otel.Tracer(opts.Tracer)
 	rctx, rawRoot := tracer.Start(ctx, opts.Name)
 	root := trackSpan(rawRoot)
-	r := &HandlerRun{opts: opts, ctx: rctx, Root: root, tracer: tracer, open: map[trace.Span]bool{root: true}, judge: judgeScopeFrom(ctx)}
+	r := &kitHandlerRun{opts: opts, ctx: rctx, Root: root, tracer: tracer, open: map[trace.Span]bool{root: true}, judge: judgeScopeFrom(ctx)}
 	root.SetAttributes(attribute.String("gen_ai.operation.name", opts.Operation))
 	root.SetAttributes(r.identity()...)
-	SetLDSpanAttributes(root, req.Variables)
+	setLDSpanAttributesFromVars(root, req.Variables)
 	if telemetry.Enabled(ctx) {
 		writePromptContent(root, p)
 	}
 	return r
 }
 
-func (r *HandlerRun) identity() []attribute.KeyValue {
+func (r *kitHandlerRun) identity() []attribute.KeyValue {
 	return []attribute.KeyValue{
 		attribute.String("gen_ai.system", r.opts.System),
 		attribute.String("gen_ai.provider.name", r.opts.ProviderName),
@@ -207,9 +151,9 @@ func (r *HandlerRun) identity() []attribute.KeyValue {
 }
 
 // Context is the root span's context; child spans and provider calls use it.
-func (r *HandlerRun) Context() context.Context { return r.ctx }
+func (r *kitHandlerRun) Context() context.Context { return r.ctx }
 
-func writePromptContent(span trace.Span, p Prompt) {
+func writePromptContent(span trace.Span, p prompt) {
 	i := 0
 	var lines []string
 	add := func(role, text string) {
@@ -223,13 +167,13 @@ func writePromptContent(span trace.Span, p Prompt) {
 		add("system", p.System)
 	}
 	for _, t := range p.Turns {
-		add(t.Role, ContentText(t))
+		add(t.Role, kitContentText(t))
 	}
 	span.AddEvent("gen_ai.content.prompt", trace.WithAttributes(attribute.String("gen_ai.prompt", strings.Join(lines, "\n"))))
 }
 
 // StartChat opens a `chat <model>` span for one provider turn.
-func (r *HandlerRun) StartChat(model string) trace.Span {
+func (r *kitHandlerRun) StartChat(model string) trace.Span {
 	if model == "" {
 		model = r.opts.RequestModel
 	}
@@ -243,13 +187,13 @@ func (r *HandlerRun) StartChat(model string) trace.Span {
 
 // EndChat records one turn's usage on its chat span (always, zeros included)
 // and accumulates it for the root.
-func (r *HandlerRun) EndChat(s trace.Span, responseModel string, u SpanUsage, finishReason string) {
+func (r *kitHandlerRun) EndChat(s trace.Span, responseModel string, u kitbase.SpanUsage, finishReason string) {
 	if responseModel == "" {
 		responseModel = r.opts.RequestModel
 	}
 	s.SetAttributes(attribute.String("gen_ai.response.model", responseModel))
 	r.model = responseModel
-	SetUsageSpanAttributes(s, u)
+	kitbase.SetUsageSpanAttributes(s, u)
 	if finishReason != "" {
 		s.SetAttributes(attribute.StringSlice("gen_ai.response.finish_reasons", []string{finishReason}))
 	}
@@ -259,7 +203,7 @@ func (r *HandlerRun) EndChat(s trace.Span, responseModel string, u SpanUsage, fi
 }
 
 // StartTool opens an `execute_tool <name>` span, a sibling of the chat spans.
-func (r *HandlerRun) StartTool(name, callID string) trace.Span {
+func (r *kitHandlerRun) StartTool(name, callID string) trace.Span {
 	_, raw := r.tracer.Start(r.ctx, "execute_tool "+name)
 	s := trackSpan(raw)
 	s.SetAttributes(attribute.String("gen_ai.operation.name", "execute_tool"),
@@ -269,21 +213,21 @@ func (r *HandlerRun) StartTool(name, callID string) trace.Span {
 }
 
 // EndTool ends a tool span; a non-nil err marks it ERROR.
-func (r *HandlerRun) EndTool(s trace.Span, err error) { r.end(s, err) }
+func (r *kitHandlerRun) EndTool(s trace.Span, err error) { r.end(s, err) }
 
 // ToolArguments records a tool call's arguments on its execute_tool span,
 // subject to the content gate.
-func (r *HandlerRun) ToolArguments(s trace.Span, arguments any) {
+func (r *kitHandlerRun) ToolArguments(s trace.Span, arguments any) {
 	telemetry.SetToolCallArguments(r.ctx, s, arguments)
 }
 
 // ToolResult records a tool call's result on its execute_tool span, subject
 // to the content gate.
-func (r *HandlerRun) ToolResult(s trace.Span, result any) {
+func (r *kitHandlerRun) ToolResult(s trace.Span, result any) {
 	telemetry.SetToolCallResult(r.ctx, s, result)
 }
 
-func (r *HandlerRun) end(s trace.Span, err error) {
+func (r *kitHandlerRun) end(s trace.Span, err error) {
 	if !r.open[s] {
 		return
 	}
@@ -301,7 +245,7 @@ func (r *HandlerRun) end(s trace.Span, err error) {
 }
 
 // AddUsage accumulates usage that has no chat span of its own.
-func (r *HandlerRun) AddUsage(u SpanUsage) {
+func (r *kitHandlerRun) AddUsage(u kitbase.SpanUsage) {
 	r.usage.Add(u)
 	r.usageOK = true
 }
@@ -309,12 +253,12 @@ func (r *HandlerRun) AddUsage(u SpanUsage) {
 // Finish ends the root on success: response model, run usage, completion
 // content (gen_ai.completion.0.* + gen_ai.content.completion) when
 // capture is enabled, status OK.
-func (r *HandlerRun) Finish(responseModel, output string) {
+func (r *kitHandlerRun) Finish(responseModel, output string) {
 	if responseModel == "" {
 		responseModel = r.opts.RequestModel
 	}
 	r.Root.SetAttributes(attribute.String("gen_ai.response.model", responseModel))
-	SetUsageSpanAttributes(r.Root, r.usage)
+	kitbase.SetUsageSpanAttributes(r.Root, r.usage)
 	if telemetry.Enabled(r.ctx) {
 		r.Root.SetAttributes(attribute.String("gen_ai.completion.0.role", "assistant"),
 			attribute.String("gen_ai.completion.0.content", output))
@@ -324,7 +268,7 @@ func (r *HandlerRun) Finish(responseModel, output string) {
 }
 
 // responseModel is the last model a turn reported, else the request model.
-func (r *HandlerRun) responseModel() string {
+func (r *kitHandlerRun) responseModel() string {
 	if r.model != "" {
 		return r.model
 	}
@@ -333,7 +277,7 @@ func (r *HandlerRun) responseModel() string {
 
 // Fail records err on every open span and the root, writing the response
 // model and any usage already reported so partial spend survives.
-func (r *HandlerRun) Fail(err error) {
+func (r *kitHandlerRun) Fail(err error) {
 	for s := range r.open {
 		if s != r.Root {
 			r.end(s, err)
@@ -342,16 +286,16 @@ func (r *HandlerRun) Fail(err error) {
 	if r.open[r.Root] {
 		r.Root.SetAttributes(attribute.String("gen_ai.response.model", r.responseModel()))
 		if r.usageOK {
-			SetUsageSpanAttributes(r.Root, r.usage)
+			kitbase.SetUsageSpanAttributes(r.Root, r.usage)
 		}
 	}
 	r.end(r.Root, err)
 }
 
-// EndOnPanic, deferred right after StartHandlerRun, ends every open span
+// EndOnPanic, deferred right after kitStartHandlerRun, ends every open span
 // ERROR when the handler, a provider call or a tool panics, then re-panics.
 // Spans already ended are untouched.
-func (r *HandlerRun) EndOnPanic() {
+func (r *kitHandlerRun) EndOnPanic() {
 	if p := recover(); p != nil {
 		r.Fail(fmt.Errorf("panic: %v", p))
 		panic(p)
@@ -360,11 +304,11 @@ func (r *HandlerRun) EndOnPanic() {
 
 // Abandon ends every open span with launchdarkly.stream.abandoned=true and
 // UNSET status: an early consumer exit is neither success nor error.
-func (r *HandlerRun) Abandon() {
+func (r *kitHandlerRun) Abandon() {
 	if r.open[r.Root] {
 		r.Root.SetAttributes(attribute.String("gen_ai.response.model", r.responseModel()))
 		if r.usageOK {
-			SetUsageSpanAttributes(r.Root, r.usage)
+			kitbase.SetUsageSpanAttributes(r.Root, r.usage)
 		}
 	}
 	for s := range r.open {
@@ -378,9 +322,9 @@ func (r *HandlerRun) Abandon() {
 // through, anything else is JSON.
 func ToolResultString(v any) string { return telemetry.ValueString(v) }
 
-// CallableTools returns the config tools that have a local ToolFunc,
+// kitCallableTools returns the config tools that have a local ToolFunc,
 // keyed by the config map key — the name the model sees.
-func CallableTools(cfg AiConfig, handlers map[string]ToolHandler) map[string]Tool {
+func kitCallableTools(cfg AiConfig, handlers map[string]ToolHandler) map[string]Tool {
 	out := map[string]Tool{}
 	for key, t := range cfg.Tools {
 		if _, ok := handlers[key].(ToolFunc); ok {

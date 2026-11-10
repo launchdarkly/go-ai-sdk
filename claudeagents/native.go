@@ -19,12 +19,14 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/anthropicwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
-// SubAgentToolPrefix prefixes each sub-agent tool name, matching the
+// subAgentToolPrefix prefixes each sub-agent tool name, matching the
 // `mcp__subagents__` names the Claude Agent SDK adapter exposes.
-const SubAgentToolPrefix = "mcp__subagents__"
+const subAgentToolPrefix = "mcp__subagents__"
 
 var unsafeToolChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
@@ -52,7 +54,7 @@ type GraphRunner struct {
 // (toClaudeAgents). opts may be nil. The definition's user context is the
 // context every tracking event is sent for.
 func ToClaudeAgents(def *aiserver.GraphDefinition, opts *AdapterOptions) *GraphRunner {
-	aiserver.ReportUsage("claude-agents.toClaudeAgents", PackageName, PackageVersion)
+	handlerkit.ReportUsage("claude-agents.toClaudeAgents", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &AdapterOptions{}
 	}
@@ -91,17 +93,17 @@ func (g *GraphRunner) Invoke(ctx context.Context, input string, opts ...aiserver
 		}
 		return aiserver.GraphResponse{}, fmt.Errorf("%w: %s", aiserver.ErrGraphDisabled, key)
 	}
-	userCtx := g.def.UserContext()
-	run := &graphRun{GraphRunner: g, userCtx: userCtx, tracking: userCtx.IsDefined(), runTD: g.def.TrackData(), variables: variables}
+	userCtx := handlerkit.GraphUserContext(g.def)
+	run := &graphRun{GraphRunner: g, userCtx: userCtx, tracking: userCtx.IsDefined(), runTD: handlerkit.GraphTrackData(g.def), variables: variables}
 	run.runTD.RunID = uuid.NewString()
 
 	// Anthropic nodes run the agent loop directly, not through a handler, so
 	// the run binds Handler.CaptureContent itself.
 	ctx = sdkapi.StartInvocation(ctx, g.capture)
-	ctx, span := otel.Tracer(PackageName).Start(ctx, aiserver.GraphSpanName)
+	ctx, span := otel.Tracer(PackageName).Start(ctx, kitbase.GraphSpanName)
 	defer span.End()
 	span.SetAttributes(attribute.String("ld.ai.graph.key", g.def.Key))
-	aiserver.SetLDSpanAttributesFor(span, run.runTD, ldcontext.Context{}) // identity belongs on handler root spans only
+	handlerkit.SetLDSpanAttributesFor(span, run.runTD, ldcontext.Context{}) // identity belongs on handler root spans only
 	start := time.Now()
 
 	out, err := run.execute(ctx, input, history)
@@ -120,7 +122,7 @@ func (g *GraphRunner) Invoke(ctx context.Context, input string, opts ...aiserver
 	}
 	run.graphEvent("$ld:ai:graph:invocation_success", nil, 1)
 	span.SetAttributes(attribute.String("launchdarkly.graph.path", path))
-	aiserver.SetUsageSpanAttributes(span, aiserver.SpanUsage{Input: usage.Input, Output: usage.Output})
+	kitbase.SetUsageSpanAttributes(span, kitbase.SpanUsage{Input: usage.Input, Output: usage.Output})
 	span.SetStatus(codes.Ok, "")
 	return aiserver.GraphResponse{Response: out, Usage: usage}, nil
 }
@@ -184,12 +186,12 @@ func (r *graphRun) subAgentTool(parent *aiserver.GraphNode, e aiserver.GraphEdge
 // maxToolNameLen is the Anthropic tool name limit (^[a-zA-Z0-9_-]{1,64}$).
 const maxToolNameLen = 64
 
-// subAgentToolName is SubAgentToolPrefix plus key with unsafe characters
+// subAgentToolName is subAgentToolPrefix plus key with unsafe characters
 // replaced by "_". A name that is too long, or that another child of the
 // same parent already uses (keys "a.b" and "a_b"), is cut and given a hash
 // of the key so it stays valid and unique.
 func subAgentToolName(key string, taken map[string]bool) string {
-	name := SubAgentToolPrefix + unsafeToolChars.ReplaceAllString(key, "_")
+	name := subAgentToolPrefix + unsafeToolChars.ReplaceAllString(key, "_")
 	if len(name) <= maxToolNameLen && !taken[name] {
 		return name
 	}
@@ -218,7 +220,7 @@ func (r *graphRun) markNode(n *aiserver.GraphNode) {
 // as aiserver.Graph does.
 func (r *graphRun) graphEvent(event string, extra map[string]any, metric float64) {
 	if r.tracking {
-		aiserver.TrackGraphEvent(event, r.userCtx, r.runTD, extra, metric)
+		handlerkit.TrackGraphEvent(event, r.userCtx, r.runTD, extra, metric)
 	}
 }
 
@@ -258,16 +260,16 @@ func (r *graphRun) runNode(ctx context.Context, sa *subAgent, input string, hist
 		return aiserver.ToolResultString(res.Response), nil
 	}
 
-	td := n.TrackData(r.def.Key, r.runTD.RunID)
+	td := handlerkit.NodeTrackData(n, r.def.Key, r.runTD.RunID)
 	vars := maps.Clone(r.variables)
 	if vars == nil {
 		vars = map[string]any{}
 	}
-	vars[aiserver.VarLDContext] = aiserver.ContextToMap(r.userCtx)
-	delete(vars, aiserver.VarLD) // the association is written from spanIdentity
+	vars[kitbase.VarLDContext] = kitbase.ContextToMap(r.userCtx)
+	delete(vars, kitbase.VarLD) // the association is written from spanIdentity
 	tools := r.tools
 	if r.tracking {
-		tools = aiserver.WrapToolHandlers(tools, r.userCtx, td)
+		tools = handlerkit.WrapToolHandlers(tools, r.userCtx, td)
 	}
 	start := time.Now()
 	res, err := r.agent.run(ctx, aiserver.HandlerRequest{
@@ -278,7 +280,7 @@ func (r *graphRun) runNode(ctx context.Context, sa *subAgent, input string, hist
 		r.nodeEvent("$ld:ai:generation:error", td, 1)
 		return "", fmt.Errorf("graph node %s: %w", n.Key, err)
 	}
-	u := aiserver.ParseUsage(res.usage.Raw())
+	u := handlerkit.ParseUsage(res.usage.Raw())
 	r.nodeEvent("$ld:ai:generation:success", td, 1)
 	for event, v := range map[string]float64{"$ld:ai:tokens:total": u.Total, "$ld:ai:tokens:input": u.Input, "$ld:ai:tokens:output": u.Output} {
 		if v > 0 {

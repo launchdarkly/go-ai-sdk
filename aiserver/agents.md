@@ -11,18 +11,19 @@ handler packages they use.
 | File | Responsibility |
 |---|---|
 | `types.go` | Public value types: `AiConfig`, `Message`, `ProviderHandler`, `HandlerRequest`, `ToolHandler`, `TrackData`, results |
-| `parse.go` | `ParseAiConfig` — variation validation incl. fail-closed `skills` refs |
+| `parse.go` | `kitParseAiConfig` — variation validation incl. fail-closed `skills` refs |
 | `errors.go` | Exported sentinel errors for `errors.Is` |
-| `utils.go` | `ParseTemplate`, `ParseUsage`, `NormalizeMode`, fence-tolerant JSON parse |
+| `utils.go` | `ParseTemplate`, `kitParseUsage`, `kitNormalizeMode` |
 | `registry.go` | `Registry`, `Compose`, handler/tool resolution |
 | `lifecycle.go` | `InitClient` / `InitWithClient` / `GetClient` / `Shutdown`, OTel setup, sdk-info and helper-usage events |
 | `config.go` | `Config().Invoke/Stream`, handler selection, `InspectConfig`, variation reading |
 | `tracking.go` | Tracked execution, `$ld:ai:*` events, tool-call tracking wrapper, trajectory capture |
-| `judges.go` | Inline judges, `BuildJudgeTasks`, `RunJudge`, judge handler selection |
+| `judges.go` | Inline judges, `buildJudgeTasks`, `RunJudge`, judge handler selection |
 | `judgeeval.go` | Holds a judge's root span open to write `gen_ai.evaluation.result`; binds the graded run's `launchdarkly.judge.target.run.id` / `.config.key` / `.variation.key` (non-empty only) so `ConversationIDSpanProcessor` stamps them on every SDK span the judge starts |
 | `graph.go` | `ResolveGraph`, `GraphDefinition`, `Graph().Invoke/Stream`, handoff routing |
-| `telemetry.go` | Conversation-id processor, context identity, `SetLDSpanAttributes` |
-| `handlerkit.go` | Shared handler building blocks: `ComposePrompt`, span tree (`HandlerRun`), usage attributes |
+| `telemetry.go` | Conversation-id processor, LD span attributes (`setLDSpanAttributesFromVars`, `kitSetLDSpanAttributesFor`) |
+| `handlerkit.go` | The handler kit, unexported: `kitComposePrompt`, the span tree (`kitStartHandlerRun`, `kitHandlerRun`), `kitCallableTools` |
+| `kitexport.go` | Registers the handler kit in `internal/bridge` for `internal/handlerkit` |
 | `capture.go` | `Configure`, `SDKOptions`, `ContentCapture`, `ErrConfigureLocked`; binds a handler's capture setting per call |
 
 Internal packages: `internal/trajectory`, `internal/judging`
@@ -31,7 +32,12 @@ the shared logger, used by `skills`, the experimental entry point and handler
 packages), `internal/telemetry` (the content gate's state and per-call binding, GenAI chat/tool content writers, span-attribute and
 span-counter bindings, tracer flush), `internal/sdkapi` (handler-package entry
 points: `CreateHandler` without a usage report, `StartInvocation` for native
-graph runners).
+graph runners), `internal/kitbase` (type-free handler-kit helpers: `SpanUsage`,
+`HandlerSpanOptions`, the `Run` span-tree interface, `VarLD`, `TracerPrefix`,
+`ContextIdentity`, `WithOutputFormat`, `WildcardProvider`, ...; imports nothing from
+`aiserver`), `internal/handlerkit` (typed access for handler packages to the kit that
+stays unexported here: `StartHandlerRun`, `handlerkit.ComposePrompt`/`Prompt`, `ReportUsage`,
+`ParseUsage`, `WrapToolHandlers`, `TrackGraphEvent`, ...; `aiserver` never imports it).
 
 ## Public exports
 
@@ -42,8 +48,8 @@ InitClient, InitWithClient, GetClient, Shutdown, SetLogger, InitOptions, LDClien
 Config, ConfigArgs, AIConfig, InspectConfig, InspectResult
 // graphs
 Graph, ResolveGraph, AgentGraph, GraphDefinition, GraphNode, GraphEdge,
-GraphOptions, GraphResponse, GraphStreamEvent, GraphTopology, RouteResult, RunNodeOptions,
-TraverseVisitor, TrackGraphEvent
+GraphOptions, GraphResponse, GraphStreamEvent, RouteResult, RunNodeOptions,
+TraverseVisitor
 // content capture
 Configure, SDKOptions, ContentCapture, CaptureDefault, CaptureOn, CaptureOff
 // errors
@@ -53,21 +59,14 @@ ErrConfigureLocked
 CallOption, CallOptions, NewCallOptions, WithVariables, WithHistory, EventType,
 EventChunk, EventDone, EventNodeStart, EventNodeDone, EventHandoff
 // handlers
-ProviderHandler, ProvidesFor, Mode, ModeMessages, ModeAgent, WildcardProvider,
+ProviderHandler, ProvidesFor, Mode, ModeMessages, ModeAgent,
 CreateHandler, InvokeFunc, StreamFunc, HandlerRequest,
-HandlerResult, HandlerStreamEvent, ToolHandler, ToolFunc, NativeTool, WrapToolHandlers
-// handler kit
-ComposePrompt, Prompt, WithOutputFormat, OutputFormatInstruction, ContentText, ImageURL,
-StartHandlerRun, HandlerRun, HandlerSpanOptions, SpanUsage, SetUsageSpanAttributes,
-CallableTools, ToolResultString, SetLDSpanAttributes
+HandlerResult, HandlerStreamEvent, ToolHandler, ToolFunc, NativeTool, ToolResultString
 // judges
-BuildJudgeTasks, BuildJudgeTasksArgs, RunJudge, JudgeTask, JudgeResult, JudgeRunResult,
-FormattingInstructions
+RunJudge, JudgeTask, JudgeResult, JudgeRunResult
 // registry, utils, telemetry
-Registry, RegistryEntries, NewRegistry, Compose, ParseAiConfig, ParseTemplate,
-ParseUsage, NormalizeMode, ParseJSONWithPossibleFences, WithConversationID,
-ConversationIDSpanProcessor, ContextIdentity, ContextToMap, Track, RegisterAiSdkPackage,
-ReportUsage, TracerPrefix, PackageName, PackageVersion
+Registry, RegistryEntries, NewRegistry, Compose, ParseTemplate, WithConversationID,
+ConversationIDSpanProcessor, Track, PackageName, PackageVersion
 ```
 
 ## Implementation details
@@ -88,7 +87,7 @@ ReportUsage, TracerPrefix, PackageName, PackageVersion
 
 1. Resolve handlers (local first, then registry) and tools (local overlays registry).
 2. `extractVariation`: variation with default `{enabled:false}`, require
-   `_ldMeta.enabled`, `ParseAiConfig`. An `AIConfig` built through
+   `_ldMeta.enabled`, `kitParseAiConfig`. An `AIConfig` built through
    `bridge.ConfigWithOptions` calls its `RunOptions.Variation` instead of
    `JSONVariation`, and its tracked runs use the options' run id, extra track
    data and span attributes.
@@ -160,7 +159,7 @@ reuse an LD client you already built.
 
 ## Common pitfalls
 
-- **Defer `EndOnPanic` after `StartHandlerRun`.** Without it a panicking
+- **Defer `EndOnPanic` after `handlerkit.StartHandlerRun`.** Without it a panicking
   provider call or tool leaves the run's spans unended; with it every open
   span ends ERROR and the panic continues.
 - **Tool keys are the contract.** The model sees the `tools` map key from the

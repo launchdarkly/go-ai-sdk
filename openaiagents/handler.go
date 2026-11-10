@@ -19,6 +19,8 @@ import (
 	"github.com/openai/openai-go/v3/option"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
@@ -47,10 +49,10 @@ var (
 	ErrNilGraph = errors.New("openaiagents: agent graph definition is nil")
 )
 
-// ProvidesFor is the variation provider/mode this handler serves.
-var ProvidesFor = aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeAgent}
+// providesFor is the variation provider/mode this handler serves.
+var providesFor = aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeAgent}
 
-func init() { aiserver.RegisterAiSdkPackage(PackageName, PackageVersion) }
+func init() { handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion) }
 
 // Options configure NewHandler and the client used by the graph helpers.
 type Options struct {
@@ -81,13 +83,13 @@ func (o Options) client() *openai.Client {
 
 // NewHandler returns the OpenAI agent handler (createOpenAIAgentsHandler).
 func NewHandler(opts Options) *aiserver.ProviderHandler {
-	aiserver.ReportUsage("openai-agents.createOpenAIAgentsHandler", PackageName, PackageVersion)
+	handlerkit.ReportUsage("openai-agents.createOpenAIAgentsHandler", PackageName, PackageVersion)
 	return newHandler(opts)
 }
 
 func newHandler(opts Options) *aiserver.ProviderHandler {
 	h := &handler{client: opts.client(), maxTurns: opts.MaxTurns}
-	return sdkapi.CreateHandler(ProvidesFor, h.invoke, h.stream, opts.CaptureContent)
+	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent)
 }
 
 // InvokeOptions are the optional arguments to OpenAIAgents.
@@ -104,7 +106,7 @@ type InvokeOptions struct {
 // OpenAIAgents invokes configKey through a fresh OpenAI agent handler
 // (openaiAgents). opts may be nil.
 func OpenAIAgents(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error) {
-	aiserver.ReportUsage("openai-agents.openaiAgents", PackageName, PackageVersion)
+	handlerkit.ReportUsage("openai-agents.openaiAgents", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}
@@ -125,8 +127,8 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 	cfg := req.Config
 	// Agent mode: instructions win over config system messages;
 	// history and userInput become structured input items.
-	p := aiserver.ComposePrompt(req, aiserver.ModeAgent)
-	span := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{
+	p := handlerkit.ComposePrompt(req, aiserver.ModeAgent)
+	span := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
 		Tracer: PackageName, Name: SpanName, System: "openai", Operation: operation, RequestModel: cfg.Model.Name,
 	}, req, p)
 	defer span.EndOnPanic()

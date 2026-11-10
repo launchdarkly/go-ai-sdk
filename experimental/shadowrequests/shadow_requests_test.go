@@ -24,6 +24,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 type trackedEvent struct {
@@ -170,7 +172,7 @@ func (s *stub) handler(provider string) *aiserver.ProviderHandler {
 			s.calls = append(s.calls, req)
 			s.mu.Unlock()
 			if s.span {
-				run := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{Tracer: aiserver.TracerPrefix + "/test", Name: "test.run", System: "test"}, req, aiserver.ComposePrompt(req, aiserver.ModeMessages))
+				run := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/test", Name: "test.run", System: "test"}, req, handlerkit.ComposePrompt(req, aiserver.ModeMessages))
 				defer run.Finish("", s.out)
 			}
 			if s.panics {

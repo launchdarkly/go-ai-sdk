@@ -17,6 +17,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
@@ -27,7 +29,7 @@ import (
 // package's agent handler as the only handler. Any options.Handlers value is replaced, so the graph
 // cannot be bound to a different handler. handler supplies the model: its Model or ModelFactory runs every node.
 func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph {
-	aiserver.ReportUsage("langchain-agents.langchainGraph", PackageName, PackageVersion)
+	handlerkit.ReportUsage("langchain-agents.langchainGraph", PackageName, PackageVersion)
 	options.Handlers = []*aiserver.ProviderHandler{newHandler(handler)}
 	return sdkapi.Graph(key, options)
 }
@@ -59,7 +61,7 @@ type LangGraph struct {
 // opts may be nil. Errors for a nil, disabled or
 // rootless definition are returned by Invoke.
 func ToLangGraph(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *LangGraph {
-	aiserver.ReportUsage("langchain-agents.toLangGraph", PackageName, PackageVersion)
+	handlerkit.ReportUsage("langchain-agents.toLangGraph", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &NativeGraphOptions{}
 	}
@@ -98,16 +100,16 @@ func (g *LangGraph) Invoke(ctx context.Context, input string, opts ...aiserver.C
 		g: g, variables: co.Variables, runID: uuid.NewString(),
 		userCtx: g.opts.Context, tracking: g.opts.Context.IsDefined(),
 	}
-	r.graphTD = def.TrackData()
+	r.graphTD = handlerkit.GraphTrackData(def)
 	r.graphTD.RunID = r.runID
 
 	// Nodes run without a handler, so the run binds the process default
 	// (Configure) itself, as an invocation.
 	ctx = sdkapi.StartInvocation(ctx, aiserver.CaptureDefault)
-	spanCtx, span := otel.Tracer(PackageName).Start(ctx, aiserver.GraphSpanName)
+	spanCtx, span := otel.Tracer(PackageName).Start(ctx, kitbase.GraphSpanName)
 	defer span.End()
 	span.SetAttributes(attribute.String("ld.ai.graph.key", def.Key))
-	aiserver.SetLDSpanAttributesFor(span, r.graphTD, ldcontext.Context{}) // identity belongs on handler root spans only
+	handlerkit.SetLDSpanAttributesFor(span, r.graphTD, ldcontext.Context{}) // identity belongs on handler root spans only
 	start := time.Now()
 
 	response, err := r.run(spanCtx, input, co.History)
@@ -120,7 +122,7 @@ func (g *LangGraph) Invoke(ctx context.Context, input string, opts ...aiserver.C
 	}
 	usage := aiserver.TokenUsage{Input: r.usage.Input, Output: r.usage.Output, Total: r.usage.Input + r.usage.Output}
 	span.SetAttributes(attribute.String("launchdarkly.graph.path", strings.Join(r.path, "->")))
-	aiserver.SetUsageSpanAttributes(span, r.usage)
+	kitbase.SetUsageSpanAttributes(span, r.usage)
 	if usage.Total > 0 {
 		r.graphEvent("$ld:ai:graph:total_tokens", nil, usage.Total)
 	}
@@ -143,7 +145,7 @@ type graphRun struct {
 	rootHistory []llms.MessageContent
 
 	path  []string
-	usage aiserver.SpanUsage
+	usage kitbase.SpanUsage
 	steps int
 	err   error
 	// prev is the node that ran last: the source of the next node's handoff.
@@ -154,7 +156,7 @@ type graphRun struct {
 // as aiserver.Graph does.
 func (r *graphRun) graphEvent(event string, extra map[string]any, metric float64) {
 	if r.tracking {
-		aiserver.TrackGraphEvent(event, r.userCtx, r.graphTD, extra, metric)
+		handlerkit.TrackGraphEvent(event, r.userCtx, r.graphTD, extra, metric)
 	}
 }
 
@@ -216,10 +218,10 @@ func (r *graphRun) run(ctx context.Context, input string, history []aiserver.Mes
 	// The graph state starts with the current user turn. History reaches
 	// the root only: the root's agent reads it ahead of the state, and
 	// it never enters the state other nodes see.
-	turns := aiserver.ComposePrompt(aiserver.HandlerRequest{UserInput: input, History: history}, aiserver.ModeAgent).Turns
-	msgs := langchainwire.ToMessages(aiserver.Prompt{Turns: turns})
+	turns := handlerkit.ComposePrompt(aiserver.HandlerRequest{UserInput: input, History: history}, aiserver.ModeAgent).Turns
+	msgs := langchainwire.ToMessages(handlerkit.Prompt{Turns: turns})
 	if len(msgs) == 0 { // history of system turns only, and no input
-		msgs = []llms.MessageContent{llms.TextParts(llms.ChatMessageTypeHuman, "")}
+		msgs = []llms.MessageContent{langchainwire.TextParts(llms.ChatMessageTypeHuman, "")}
 	}
 	r.rootHistory = msgs[:len(msgs)-1]
 	final, err := compiled.Invoke(ctx, map[string]any{messagesKey: msgs[len(msgs)-1:]})
@@ -265,7 +267,7 @@ func (r *graphRun) nodeFunc(n *aiserver.GraphNode) func(context.Context, any) (a
 			return r.fail(fmt.Errorf("%w (%d)", ErrRecursionLimit, recursionLimit))
 		}
 		r.visit(n)
-		td := n.TrackData(r.g.def.Key, r.runID)
+		td := handlerkit.NodeTrackData(n, r.g.def.Key, r.runID)
 		start := time.Now()
 		cfg := langchainwire.ModelConfig(n.Config)
 
@@ -273,15 +275,15 @@ func (r *graphRun) nodeFunc(n *aiserver.GraphNode) func(context.Context, any) (a
 		if n == r.g.def.Root {
 			in = append(slices.Clip(r.rootHistory), in...)
 		}
-		system := aiserver.ComposePrompt(aiserver.HandlerRequest{Config: n.Config, Variables: r.variables}, aiserver.ModeAgent).System
+		system := handlerkit.ComposePrompt(aiserver.HandlerRequest{Config: n.Config, Variables: r.variables}, aiserver.ModeAgent).System
 		// Each node run is an agent run with its own root span, carrying the
 		// node's config association and the context identity.
-		span := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{
+		span := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
 			Tracer: PackageName, Name: SpanName, System: langchainwire.GenAISystem, ProviderName: langchainwire.ProviderName(cfg), Operation: operation,
 			RequestModel: cfg.Model.Name,
 		}, aiserver.HandlerRequest{}, promptOf(system, in))
 		defer span.EndOnPanic()
-		aiserver.SetLDSpanAttributesFor(span.Root, td, r.userCtx)
+		handlerkit.SetLDSpanAttributesFor(span.RootSpan(), td, r.userCtx)
 
 		a, err := r.agent(span.Context(), n, cfg, td, system, span)
 		var res agentResult
@@ -322,7 +324,7 @@ func (r *graphRun) handoff(n *aiserver.GraphNode, event string) {
 	r.prev = n
 }
 
-func trackNodeUsage(userCtx ldcontext.Context, td aiserver.TrackData, u aiserver.SpanUsage) {
+func trackNodeUsage(userCtx ldcontext.Context, td aiserver.TrackData, u kitbase.SpanUsage) {
 	aiserver.Track("$ld:ai:generation:success", userCtx, td, 1)
 	if total := u.Input + u.Output; total > 0 {
 		aiserver.Track("$ld:ai:tokens:total", userCtx, td, total)
@@ -337,14 +339,14 @@ func trackNodeUsage(userCtx ldcontext.Context, td aiserver.TrackData, u aiserver
 
 // agent builds n's ReAct agent: its model, system prompt (instructions, or
 // the config's system messages), regular tools and handoff tools.
-func (r *graphRun) agent(ctx context.Context, n *aiserver.GraphNode, cfg aiserver.AiConfig, td aiserver.TrackData, system string, span *aiserver.HandlerRun) (*reactAgent, error) {
+func (r *graphRun) agent(ctx context.Context, n *aiserver.GraphNode, cfg aiserver.AiConfig, td aiserver.TrackData, system string, span kitbase.Run) (*reactAgent, error) {
 	model, err := r.model(ctx, n, cfg)
 	if err != nil {
 		return nil, err
 	}
 	handlers := r.g.opts.ToolHandlers
 	if r.tracking {
-		handlers = aiserver.WrapToolHandlers(handlers, r.userCtx, td)
+		handlers = handlerkit.WrapToolHandlers(handlers, r.userCtx, td)
 	}
 	tools, exec := r.tools(n, handlers, span)
 	return &reactAgent{
@@ -356,7 +358,7 @@ func (r *graphRun) agent(ctx context.Context, n *aiserver.GraphNode, cfg aiserve
 // tools lists n's tool definitions — config tools that have a handler
 // (a ToolFunc, or a NativeTool answered with ""), then one
 // transfer_to_<target> tool per outgoing edge — and the executor for them.
-func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.ToolHandler, span *aiserver.HandlerRun) ([]llms.Tool, toolExec) {
+func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.ToolHandler, span kitbase.Run) ([]llms.Tool, toolExec) {
 	var defs []llms.Tool
 	fns := map[string]aiserver.ToolFunc{}
 	natives := map[string]*aiserver.NativeTool{}
@@ -405,7 +407,7 @@ func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.Too
 		}
 		if nt := natives[name]; nt != nil {
 			markTool(span, name, tc.ID)
-			nt.Track() // a provider built-in has no local implementation
+			handlerkit.TrackNativeTool(nt) // a provider built-in has no local implementation
 			return langchainwire.ToolResponse(tc, ""), nil, nil
 		}
 		m, err := langchainwire.RunTool(ctx, span, fns, tc)
@@ -415,7 +417,7 @@ func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.Too
 }
 
 // markTool records a tool call that runs no local code as an execute_tool span.
-func markTool(span *aiserver.HandlerRun, name, callID string) {
+func markTool(span kitbase.Run, name, callID string) {
 	if span != nil {
 		span.EndTool(span.StartTool(name, callID), nil)
 	}
@@ -423,8 +425,8 @@ func markTool(span *aiserver.HandlerRun, name, callID string) {
 
 // promptOf is a node run's prompt for its root span: the system prompt and
 // the text of each message the node receives.
-func promptOf(system string, msgs []llms.MessageContent) aiserver.Prompt {
-	p := aiserver.Prompt{System: system}
+func promptOf(system string, msgs []llms.MessageContent) handlerkit.Prompt {
+	p := handlerkit.Prompt{System: system}
 	for _, m := range msgs {
 		role := map[llms.ChatMessageType]string{llms.ChatMessageTypeHuman: "user", llms.ChatMessageTypeAI: "assistant",
 			llms.ChatMessageTypeSystem: "system", llms.ChatMessageTypeTool: "tool"}[m.Role]

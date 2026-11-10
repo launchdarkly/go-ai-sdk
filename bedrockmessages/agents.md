@@ -2,7 +2,7 @@
 
 ## Role and tier
 
-Tier 1 handler package. `ProvidesFor = {Provider: "Bedrock", Mode: "messages"}`. Depends on the Tier 0 core
+Tier 1 handler package. The handler's `ProvidesFor` field is `{Provider: "Bedrock", Mode: "messages"}`. Depends on the Tier 0 core
 `aiserver`; nothing in the SDK depends on it.
 
 ## File map
@@ -24,7 +24,6 @@ const (
 	SpanName       = "invoke_agent"
 	GenAISystem    = "aws.bedrock"
 )
-var ProvidesFor aiserver.ProvidesFor
 var ErrUnsupportedContent error
 var ErrToolNotFound error
 var ErrMaxSteps error
@@ -45,25 +44,25 @@ both then use the non-reporting `build` and `internal/sdkapi.Config`.
 
 ## Implementation details
 
-- **config** — `aiserver.ComposePrompt(req, ModeMessages)` builds system + turns (messages win over instructions;
+- **config** — `handlerkit.ComposePrompt(req, ModeMessages)` builds system + turns (messages win over instructions;
   these rules live in the core). `model.name` + `model.region` → `modelId` (prefix once, exact
   `<region>.` match). `model.parameters` → `inferenceConfig` for the four documented fields only.
   `model.custom` is never read. `outputFormat` appends the core's JSON instruction to the system prompt on the
-  blocking path only. `tools` filtered by `aiserver.CallableTools` → `toolConfig.tools[].toolSpec` with the
+  blocking path only. `tools` filtered by `handlerkit.CallableTools` → `toolConfig.tools[].toolSpec` with the
   schema passed through as a document.
-- **userInput** — appended by `ComposePrompt` as a text block (`""` when empty and appended).
+- **userInput** — appended by `handlerkit.ComposePrompt` as a text block (`""` when empty and appended).
 - **toolHandlers** — only `aiserver.ToolFunc` entries are offered. On `stopReason: tool_use` each `toolUse` runs
   under an `execute_tool <name>` span; the assistant message and a user message of `toolResult` blocks are
   appended and the loop continues for at most 10 turns; a model still asking for tools after that fails the
   run with `ErrMaxSteps`. Tool errors abort the run and propagate (wrapped, `errors.Is` works). A `toolUse`
   naming a tool that was not offered fails the run with `ErrToolNotFound` (the error names the tool; its
   `execute_tool <name>` span ends ERROR), even when `ToolHandlers` has a function under that name.
-- **variables** — template values for `ComposePrompt`, plus `__ld` / `ldContext` written to the root span by
-  `aiserver.StartHandlerRun` (child spans never carry them).
+- **variables** — template values for `handlerkit.ComposePrompt`, plus `__ld` / `ldContext` written to the root span by
+  `handlerkit.StartHandlerRun` (child spans never carry them).
 - **Telemetry** — root `invoke_agent` (operation `invoke_agent`, system/provider `aws.bedrock`, request and
   response model = resolved `modelId`), one `chat <modelId>` child per turn, sibling `execute_tool <name>`.
   Usage on spans is cache-inclusive (`inputTokens + cacheReadInputTokens + cacheWriteInputTokens`); the
-  handler's returned usage keeps Bedrock's raw camelCase keys so `aiserver.ParseUsage` folds exactly once.
+  handler's returned usage keeps Bedrock's raw camelCase keys so `handlerkit.ParseUsage` folds exactly once.
   The AWS SDK's own tracer is left at its no-op default, so there is no second span representation.
 - **ConverseOptions** — called per turn; `copyFields` (reflection, by field name) merges every non-zero field
   except `ModelId`, `Messages`, `System`, `ToolConfig`. `ToolConfig` is taken whole only when the handler has no

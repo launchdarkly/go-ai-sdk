@@ -29,7 +29,7 @@ func (r *Registry) Register(e RegistryEntries) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, h := range e.Handlers {
-		if !h.ProvidesFor.IsZero() {
+		if !h.ProvidesFor.isZero() {
 			kept := r.handlers[:0:0]
 			for _, existing := range r.handlers {
 				if existing.ProvidesFor.Provider == h.ProvidesFor.Provider && handlerMode(existing) == handlerMode(h) {

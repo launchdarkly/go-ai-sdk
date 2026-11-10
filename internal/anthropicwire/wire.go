@@ -10,6 +10,8 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 // DefaultMaxTokens is sent when the config sets no max_tokens; the Messages
@@ -82,7 +84,7 @@ func FunctionTool(name, description string, parameters map[string]any) anthropic
 // their config map key.
 func Tools(cfg aiserver.AiConfig, handlers map[string]aiserver.ToolHandler) []anthropic.ToolUnionParam {
 	var out []anthropic.ToolUnionParam
-	for key, t := range aiserver.CallableTools(cfg, handlers) {
+	for key, t := range handlerkit.CallableTools(cfg, handlers) {
 		out = append(out, FunctionTool(key, t.Description, t.Parameters))
 	}
 	return out
@@ -112,7 +114,7 @@ func FinishReason(r string) string {
 }
 
 // Usage keeps Anthropic's own field names with cache buckets unfolded: it is
-// a handler's return value and aiserver.ParseUsage folds once.
+// a handler's return value and handlerkit.ParseUsage folds once.
 type Usage struct{ Input, Output, CacheRead, CacheCreation int64 }
 
 // Add accumulates one response's usage.
@@ -132,8 +134,8 @@ func (u Usage) Raw() map[string]any {
 }
 
 // SpanUsage is one response's span usage, cache-inclusive input.
-func SpanUsage(x anthropic.Usage) aiserver.SpanUsage {
-	return aiserver.SpanUsage{
+func SpanUsage(x anthropic.Usage) kitbase.SpanUsage {
+	return kitbase.SpanUsage{
 		Input:     float64(x.InputTokens + x.CacheReadInputTokens + x.CacheCreationInputTokens),
 		Output:    float64(x.OutputTokens),
 		CacheRead: float64(x.CacheReadInputTokens), CacheCreation: float64(x.CacheCreationInputTokens),

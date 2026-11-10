@@ -2,7 +2,7 @@
 
 ## Role and tier
 
-Tier 1 handler package. `ProvidesFor = {"*", "agent"}`: the wildcard fallback for any
+Tier 1 handler package. The handler's `ProvidesFor` field is `{"*", "agent"}`: the wildcard fallback for any
 agent-mode variation. Built on the SDK's own `llms` package; graphs run on the internal `internal/stategraph` runner. Also
 exports the `LangChainGraph` wrapper and the `ToLangGraph` native adapter.
 
@@ -27,7 +27,6 @@ one tool call) lives in
 
 ```go
 const PackageName, PackageVersion, SpanName
-var ProvidesFor
 var ErrRecursionLimit, ErrNoToolHandler, ErrEmptyResponse, ErrNoRoot, ErrNilGraph, ErrNodeName
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
 type Options struct{ Model llms.Model; ModelFactory ModelFactory; CaptureContent aiserver.ContentCapture }
@@ -54,18 +53,18 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
 ## Implementation details
 
 - **`config`** — `ModelConfig` applies the Bedrock `model.region` prefix; lowercased
-  `provider.name` is `gen_ai.provider.name` (`gen_ai.system` is always `langchain`) and picks the built-in model. `aiserver.ComposePrompt(req,
+  `provider.name` is `gen_ai.provider.name` (`gen_ai.system` is always `langchain`) and picks the built-in model. `handlerkit.ComposePrompt(req,
   ModeAgent)` gives the system prompt (instructions win over system messages) and the turns.
-  `outputFormat` (blocking only) appends `aiserver.OutputFormatInstruction` to the system prompt
+  `outputFormat` (blocking only) appends `kitbase.OutputFormatInstruction` to the system prompt
   (best effort). `model.parameters` → `llms.CallOption`s; `model.custom` is never read.
 - **`userInput` / `history`** — the turns become the agent's initial `messages` state
   (structured `llms.MessageContent`, images as `BinaryContent` / `ImageURLContent`). The
   system prompt is prepended at each model call, never stored in state, never containing history.
-- **`toolHandlers`** — `aiserver.CallableTools` filters config tools to `ToolFunc`s; the
+- **`toolHandlers`** — `handlerkit.CallableTools` filters config tools to `ToolFunc`s; the
   tools node runs each requested call in order under an `execute_tool` span. Unoffered tool →
   `ErrNoToolHandler`, with an ERROR `execute_tool` span; tool errors propagate.
-- **`variables`** — template substitution in `ComposePrompt`; `__ld` / `ldContext` reach the root
-  span through `aiserver.StartHandlerRun`.
+- **`variables`** — template substitution in `handlerkit.ComposePrompt`; `__ld` / `ldContext` reach the root
+  span through `handlerkit.StartHandlerRun`.
 - **Agent graph** — `createReactAgent` compiles `agent` (model call) → tools condition →
   `tools` → `agent` …, ending at `END` when the model answers without tool calls. State is
   `map[string]any{"messages": []llms.MessageContent}` carried as `any`; `messages` is appended to, other keys
@@ -83,7 +82,7 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
 - **Tracking (ToLangGraph, only with `NativeGraphOptions.Context`)** — per first node visit
   `$ld:ai:graph:node {nodeKey, index}`; per node run `$ld:ai:duration:total`,
   `$ld:ai:generation:success` (or `:error`), `$ld:ai:tokens:{total,input,output}` when > 0;
-  `$ld:ai:tool_call` through `aiserver.WrapToolHandlers` (NativeTools via `Track()`);
+  `$ld:ai:tool_call` through `handlerkit.WrapToolHandlers` (NativeTools via `Track()`);
   for every hop into a node (a handoff or the single static edge), after that node has run,
   `$ld:ai:graph:handoff_success {sourceKey, targetKey}` or `:handoff_failure` when it failed;
   `$ld:ai:graph:duration:total` on every path; on success `$ld:ai:graph:total_tokens` (when > 0)

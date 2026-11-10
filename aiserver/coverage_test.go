@@ -22,6 +22,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 // Tests for behaviour not covered elsewhere.
@@ -53,7 +55,7 @@ func TestParseJSONInvalidLogsNothing(t *testing.T) {
 	SetLogger(slog.New(spy))
 	slog.SetDefault(slog.New(spy))
 	t.Cleanup(func() { SetLogger(nil); slog.SetDefault(prev) })
-	if v, ok := ParseJSONWithPossibleFences("not json"); ok || v != nil {
+	if v, ok := kitbase.ParseJSONWithPossibleFences("not json"); ok || v != nil {
 		t.Errorf("got %v %v", v, ok)
 	}
 	if n := spy.count(); n != 0 {
@@ -66,7 +68,7 @@ func TestParseAiConfigOptionalFieldsAndSkillEdges(t *testing.T) {
 	cfg["tools"] = map[string]any{"t": map[string]any{"name": "t", "type": "function", "parameters": map[string]any{}}}
 	cfg["judgeConfiguration"] = map[string]any{"judges": []any{map[string]any{"key": "j", "samplingRate": 1.0}}}
 	cfg["evaluationMetricKey"] = "accuracy"
-	got, err := ParseAiConfig(cfg)
+	got, err := kitParseAiConfig(cfg)
 	if err != nil || got.EvaluationMetricKey != "accuracy" || got.Tools["t"].Name != "t" || got.JudgeConfiguration.Judges[0].Key != "j" {
 		t.Errorf("optional fields: %+v %v", got, err)
 	}
@@ -74,7 +76,7 @@ func TestParseAiConfigOptionalFieldsAndSkillEdges(t *testing.T) {
 		[]any{map[string]any{"key": ".x", "version": 1.0}},
 		[]any{map[string]any{"key": "k", "version": -1.0}},
 	} {
-		if _, err := ParseAiConfig(with("skills", s)); err == nil {
+		if _, err := kitParseAiConfig(with("skills", s)); err == nil {
 			t.Errorf("skills %v accepted", s)
 		}
 	}
@@ -159,7 +161,7 @@ func TestResolveHandlersAndTools(t *testing.T) {
 type toolToken struct{ n int }
 
 func TestWrappedToolsPreserveResults(t *testing.T) {
-	if got := WrapToolHandlers(nil, userCtx, TrackData{}); got == nil || len(got) != 0 {
+	if got := kitWrapToolHandlers(nil, userCtx, TrackData{}); got == nil || len(got) != 0 {
 		t.Errorf("WrapToolHandlers(nil) = %#v, want a non-nil empty map", got)
 	}
 	f := withFake(t, nil)
@@ -169,7 +171,7 @@ func TestWrappedToolsPreserveResults(t *testing.T) {
 		"ok":   ToolFunc(func(context.Context, map[string]any) (any, error) { return token, nil }),
 		"fail": ToolFunc(func(context.Context, map[string]any) (any, error) { return nil, broke }),
 	}
-	wrapped := WrapToolHandlers(tools, userCtx, TrackData{})
+	wrapped := kitWrapToolHandlers(tools, userCtx, TrackData{})
 	if v, err := wrapped["ok"].(ToolFunc)(bg, nil); v != token || err != nil {
 		t.Errorf("tracking wrapper changed the result: %v %v", v, err)
 	}
@@ -198,7 +200,7 @@ func TestWrappedToolsPreserveResults(t *testing.T) {
 	}
 }
 
-// restorePackagesAfter undoes RegisterAiSdkPackage calls made by a test:
+// restorePackagesAfter undoes kitRegisterAiSdkPackage calls made by a test:
 // registration is process-global, and a leaked package changes every later
 // test's sdk:info count.
 func restorePackagesAfter(t *testing.T) {
@@ -218,8 +220,8 @@ func TestSdkInfoPayloadAndRegistry(t *testing.T) {
 	prev := otel.GetTracerProvider()
 	t.Cleanup(func() { otel.SetTracerProvider(prev) })
 	restorePackagesAfter(t)
-	RegisterAiSdkPackage("two-version-pkg", "1.0.0")
-	RegisterAiSdkPackage("two-version-pkg", "2.0.0")
+	kitRegisterAiSdkPackage("two-version-pkg", "1.0.0")
+	kitRegisterAiSdkPackage("two-version-pkg", "2.0.0")
 	f := &fakeLD{}
 	if _, err := InitWithClient(bg, f, InitOptions{OTLPEndpoint: unreachableOTLP}); err != nil {
 		t.Fatal(err)
@@ -308,7 +310,7 @@ func TestInitClientTelemetryAndShutdown(t *testing.T) {
 		}
 	}
 	tp := tracerProvider
-	_, span := otel.Tracer(TracerPrefix+"/probe").Start(WithConversationID(bg, "conv-init"), "probe-span")
+	_, span := otel.Tracer(kitbase.TracerPrefix+"/probe").Start(WithConversationID(bg, "conv-init"), "probe-span")
 	span.End()
 
 	if err := Shutdown(bg); err != nil {
@@ -380,7 +382,7 @@ func TestConfigInvokeForwardsContextAndRequest(t *testing.T) {
 	if seen.UserInput != "the input" || seen.Config.Model.Name != "test-model" || seen.Config.Instructions != "be helpful" || seen.Config.Provider.Name != "P" {
 		t.Errorf("request = %+v", seen)
 	}
-	if _, ok := seen.ToolHandlers["lookup"].(ToolFunc); !ok || seen.Variables["v"] != "1" || seen.Variables[VarLDContext].(map[string]any)["key"] != "org-1" {
+	if _, ok := seen.ToolHandlers["lookup"].(ToolFunc); !ok || seen.Variables["v"] != "1" || seen.Variables[kitbase.VarLDContext].(map[string]any)["key"] != "org-1" {
 		t.Errorf("tools=%v variables=%v", seen.ToolHandlers, seen.Variables)
 	}
 }
@@ -459,7 +461,7 @@ func TestSkipJudgesWithoutJudgeConfiguration(t *testing.T) {
 	if err != nil || resp.JudgeTasks == nil || len(resp.JudgeTasks) != 0 || resp.JudgeResults != nil {
 		t.Errorf("tasks=%#v results=%v err=%v", resp.JudgeTasks, resp.JudgeResults, err)
 	}
-	tasks, err := BuildJudgeTasks(bg, BuildJudgeTasksArgs{Config: AiConfig{JudgeConfiguration: &JudgeConfiguration{Judges: []JudgeRef{}}}, UserContext: userCtx, Handler: h})
+	tasks, err := buildJudgeTasksFromArgs(bg, buildJudgeTasksArgs{Config: AiConfig{JudgeConfiguration: &JudgeConfiguration{Judges: []JudgeRef{}}}, UserContext: userCtx, Handler: h})
 	if err != nil || tasks == nil || len(tasks) != 0 {
 		t.Errorf("empty judges: %#v %v", tasks, err)
 	}
@@ -525,7 +527,7 @@ func TestGraphJudgeTrajectoryScope(t *testing.T) {
 	histories := map[string]string{}
 	h := createHandler(ProvidesFor{"P", ModeAgent}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		if mh, isJudge := req.Variables["message_history"].(string); isJudge {
-			histories[req.Variables[VarLD].(TrackData).ConfigKey] = mh
+			histories[req.Variables[kitbase.VarLD].(TrackData).ConfigKey] = mh
 			return HandlerResult{Output: `{"score":1,"reasoning":"r"}`}, nil
 		}
 		for name := range req.Config.Tools {
@@ -555,12 +557,12 @@ func TestBuildJudgeTasksCollapseAndExclusion(t *testing.T) {
 	withFake(t, map[string]any{"j-p": enabledConfig("P", "judge", nil), "j-other": enabledConfig("Other", "judge", nil)})
 	cfg := AiConfig{JudgeConfiguration: &JudgeConfiguration{Judges: []JudgeRef{{Key: "j-p", SamplingRate: 1}, {Key: "j-other", SamplingRate: 1}}}}
 	wildAgent := &ProviderHandler{ProvidesFor: ProvidesFor{"*", ModeAgent}}
-	tasks, err := BuildJudgeTasks(bg, BuildJudgeTasksArgs{Config: cfg, UserContext: userCtx, Handler: wildAgent, Handlers: []*ProviderHandler{wildAgent}})
+	tasks, err := buildJudgeTasksFromArgs(bg, buildJudgeTasksArgs{Config: cfg, UserContext: userCtx, Handler: wildAgent, Handlers: []*ProviderHandler{wildAgent}})
 	if err != nil || len(tasks) != 2 || !tasks[0].CollapseMessages || !tasks[1].CollapseMessages {
 		t.Errorf("wildcard agent: %s %v", taskSummary(tasks), err)
 	}
 	p := &ProviderHandler{ProvidesFor: ProvidesFor{"P", ModeMessages}}
-	tasks, err = BuildJudgeTasks(bg, BuildJudgeTasksArgs{Config: cfg, UserContext: userCtx, Handler: p, Handlers: []*ProviderHandler{p}})
+	tasks, err = buildJudgeTasksFromArgs(bg, buildJudgeTasksArgs{Config: cfg, UserContext: userCtx, Handler: p, Handlers: []*ProviderHandler{p}})
 	if err != nil || len(tasks) != 1 || tasks[0].ConfigKey != "j-p" || tasks[0].CollapseMessages {
 		t.Errorf("provider exclusion: %s %v", taskSummary(tasks), err)
 	}
@@ -616,8 +618,8 @@ func TestConfigStreamTrackingJudgesAndRouting(t *testing.T) {
 	if done := events[len(events)-1]; err != nil || done.JudgeResults["judge"].Score != 0.4 || done.JudgeResults["judge"].Response != "meh" {
 		t.Errorf("judged done = %+v err=%v", done, err)
 	}
-	if lc, _ := seenVars[VarLDContext].(map[string]any); lc["key"] != "user-123" || lc["email"] != "user@example.com" {
-		t.Errorf("stream handler ldContext = %v", seenVars[VarLDContext])
+	if lc, _ := seenVars[kitbase.VarLDContext].(map[string]any); lc["key"] != "user-123" || lc["email"] != "user@example.com" {
+		t.Errorf("stream handler ldContext = %v", seenVars[kitbase.VarLDContext])
 	}
 
 	if _, err := drain(Config(ConfigArgs{Key: "nomatch", Handlers: []*ProviderHandler{p, q}}).Stream(bg, "q", userCtx)); !errors.Is(err, ErrNoHandler) {
@@ -659,7 +661,7 @@ func TestGraphStreamParity(t *testing.T) {
 		if req.Variables["response_to_evaluate"] != nil {
 			return HandlerResult{Output: `{"score":0.8,"reasoning":"good"}`}, nil
 		}
-		return HandlerResult{Output: req.Variables[VarLD].(TrackData).ConfigKey + " out", Usage: map[string]any{"input": 1.0, "output": 1.0}}, nil
+		return HandlerResult{Output: req.Variables[kitbase.VarLD].(TrackData).ConfigKey + " out", Usage: map[string]any{"input": 1.0, "output": 1.0}}, nil
 	}, nil, CaptureDefault)
 	events, err := drainGraph(Graph("g", GraphOptions{Handlers: []*ProviderHandler{h}, GraphJudge: "gj"}).Stream(bg, "q", userCtx))
 	if err != nil {
@@ -697,7 +699,7 @@ func TestGraphInvokeSpanParenting(t *testing.T) {
 	spans := exp.GetSpans().Snapshots()
 	var graph sdktrace.ReadOnlySpan
 	for _, s := range spans {
-		if s.Name() == GraphSpanName {
+		if s.Name() == kitbase.GraphSpanName {
 			graph = s
 		}
 	}
@@ -706,7 +708,7 @@ func TestGraphInvokeSpanParenting(t *testing.T) {
 	}
 	names := []string{}
 	for _, s := range spans {
-		if s.Name() == GraphSpanName {
+		if s.Name() == kitbase.GraphSpanName {
 			continue
 		}
 		names = append(names, s.Name())
@@ -732,7 +734,7 @@ func TestGraphSpanCarriesConversationID(t *testing.T) {
 	}
 	found := false
 	for _, s := range exp.GetSpans().Snapshots() {
-		if s.Name() != GraphSpanName {
+		if s.Name() != kitbase.GraphSpanName {
 			continue
 		}
 		for _, a := range s.Attributes() {
@@ -752,7 +754,7 @@ func TestContextKeysAttributeForEscapedKey(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
 	c := ldcontext.NewBuilder("a%b:c").Kind("org").Build()
 	_, span := tp.Tracer("t").Start(bg, "root")
-	SetLDSpanAttributes(span, map[string]any{VarLD: TrackData{ConfigKey: "k"}, varLDContextTyped: c})
+	setLDSpanAttributesFromVars(span, map[string]any{kitbase.VarLD: TrackData{ConfigKey: "k"}, varLDContextTyped: c})
 	span.End()
 	got := ""
 	for _, a := range exp.GetSpans().Snapshots()[0].Attributes() {
@@ -778,7 +780,7 @@ func TestHelperUsagePerPublicFunction(t *testing.T) {
 		{"client.resolveGraph", func() { _, _ = ResolveGraph(bg, "g", userCtx, GraphOptions{}) }},
 		{"client.inspectConfig", func() { _, _ = InspectConfig(bg, "root-node", userCtx) }},
 		{"client.runJudge", func() { _, _ = RunJudge(bg, JudgeTask{}, nil) }},
-		{"client.buildJudgeTasks", func() { _, _ = BuildJudgeTasks(bg, BuildJudgeTasksArgs{}) }},
+		{"client.buildJudgeTasks", func() { _, _ = buildJudgeTasksFromArgs(bg, buildJudgeTasksArgs{}) }},
 	}
 	for _, r := range rows {
 		_ = Shutdown(bg)
@@ -833,7 +835,7 @@ func TestNativeToolOutOfTrajectory(t *testing.T) {
 			return HandlerResult{Output: `{"score":1,"reasoning":"r"}`}, nil
 		}
 		_, _ = req.ToolHandlers["lookup"].(ToolFunc)(ctx, nil)
-		req.ToolHandlers["web_search"].(*NativeTool).Track()
+		req.ToolHandlers["web_search"].(*NativeTool).trackCall()
 		return HandlerResult{Output: "answer"}, nil
 	}, nil, CaptureDefault)
 	th := map[string]ToolHandler{

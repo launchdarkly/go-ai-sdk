@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 func node(instr, model string, tools ...string) map[string]any {
@@ -163,7 +164,7 @@ func TestToOpenAIAgentsRun(t *testing.T) {
 		t.Error("$ld:ai:graph:path tracked")
 	}
 
-	spans := spansByName(exp)[aiserver.GraphSpanName]
+	spans := spansByName(exp)[kitbase.GraphSpanName]
 	if len(spans) != 1 {
 		t.Fatalf("graph spans = %v", spansByName(exp))
 	}
@@ -200,7 +201,7 @@ func TestToOpenAIAgentsRun(t *testing.T) {
 		t.Errorf("child spans = %v", byName)
 	}
 	for name, ss := range byName {
-		if name == SpanName || name == aiserver.GraphSpanName {
+		if name == SpanName || name == kitbase.GraphSpanName {
 			continue
 		}
 		for k := range attrs(ss[0]) {
@@ -268,7 +269,7 @@ func TestToOpenAIAgentsNodeOnce(t *testing.T) {
 	if !reflect.DeepEqual(keys, []any{"triage", "billing"}) || len(ld.events("$ld:ai:graph:handoff_success")) != 2 {
 		t.Errorf("node keys = %v handoffs %d", keys, len(ld.events("$ld:ai:graph:handoff_success")))
 	}
-	if p := attrs(spansByName(exp)[aiserver.GraphSpanName][0])["launchdarkly.graph.path"]; p != "triage->billing" {
+	if p := attrs(spansByName(exp)[kitbase.GraphSpanName][0])["launchdarkly.graph.path"]; p != "triage->billing" {
 		t.Errorf("path = %q", p)
 	}
 }
@@ -288,7 +289,7 @@ func TestToOpenAIAgentsErrors(t *testing.T) {
 		if got := ld.aiEvents(); !reflect.DeepEqual(got, []string{"$ld:ai:graph:node", "$ld:ai:duration:total", "$ld:ai:generation:error", "$ld:ai:graph:duration:total", "$ld:ai:graph:invocation_failure"}) {
 			t.Errorf("events = %v", got)
 		}
-		s := spansByName(exp)[aiserver.GraphSpanName]
+		s := spansByName(exp)[kitbase.GraphSpanName]
 		if len(s) != 1 || s[0].Status().Code != codes.Error {
 			t.Errorf("graph span = %v", s)
 		}
@@ -411,7 +412,7 @@ func TestToOpenAIAgentsToolPanicEndsSpans(t *testing.T) {
 		_, _ = ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{ToolHandlers: tools, Context: user, Handler: Options{Client: c}}).Invoke(bg, "q")
 	}()
 	byName := spansByName(exp)
-	for _, name := range []string{aiserver.GraphSpanName, SpanName, "execute_tool lookup"} {
+	for _, name := range []string{kitbase.GraphSpanName, SpanName, "execute_tool lookup"} {
 		if s := byName[name]; len(s) != 1 || s[0].Status().Code != codes.Error {
 			t.Errorf("%s not ended ERROR: %v", name, s)
 		}

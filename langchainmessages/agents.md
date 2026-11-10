@@ -2,7 +2,7 @@
 
 ## Role and tier
 
-Tier 1 handler package. `ProvidesFor = {"*", "messages"}`: the wildcard fallback for any
+Tier 1 handler package. The handler's `ProvidesFor` field is `{"*", "messages"}`: the wildcard fallback for any
 messages-mode variation. Built on the SDK's own [`llms`](../llms) package (model interface plus
 built-in OpenAI Chat Completions, Anthropic Messages and Bedrock Converse models). LangChain has
 no official Go SDK, and the community ports were removed.
@@ -22,7 +22,6 @@ no official Go SDK, and the community ports were removed.
 
 ```go
 const PackageName, PackageVersion, SpanName
-var ProvidesFor
 var ErrMaxSteps, ErrNoToolHandler, ErrEmptyResponse
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
 type Options struct{ Model llms.Model; ModelFactory ModelFactory; CaptureContent aiserver.ContentCapture }
@@ -36,7 +35,7 @@ func LangChainMessages(ctx, configKey, userInput string, userCtx ldcontext.Conte
 `aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
 `gen_ai.tool.name` are written either way.
 
-`init()` calls `aiserver.RegisterAiSdkPackage(PackageName, PackageVersion)`. `NewHandler` reports
+`init()` calls `handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion)`. `NewHandler` reports
 `langchain-messages.createLangChainMessagesHandler`, `LangChainMessages` reports
 `langchain-messages.langchainMessages`; both then use the non-reporting `newHandler` and
 `internal/sdkapi.Config`.
@@ -46,22 +45,22 @@ func LangChainMessages(ctx, configKey, userInput string, userCtx ldcontext.Conte
 - **`config`** — `langchainwire.ModelConfig` applies the Bedrock `model.region` prefix. `provider.name`
   (lowercased, `openai` when empty) is `gen_ai.provider.name` (`gen_ai.system` is always `langchain`) and picks the built-in model.
   `model.parameters` maps to `llms.CallOption`s; `model.custom` is never read. `tools` are
-  filtered by `aiserver.CallableTools` and sent with `llms.WithTools`, sorted by name.
+  filtered by `handlerkit.CallableTools` and sent with `llms.WithTools`, sorted by name.
   `outputFormat` (blocking only) adds `llms.WithJSONMode()` plus the schema instruction on the
   system prompt, and for the built-in OpenAI model an `openai.WithResponseFormat` json_schema.
-- **`userInput` / `history`** — `aiserver.ComposePrompt(req, ModeMessages)` decides the turns;
+- **`userInput` / `history`** — `handlerkit.ComposePrompt(req, ModeMessages)` decides the turns;
   `langchainwire.ToMessages` maps them to `llms.MessageContent` (system → `ChatMessageTypeSystem`,
   user → `Human`, assistant → `AI`). Base64 images become `llms.BinaryContent`, URL images
   `llms.ImageURLContent`.
 - **`toolHandlers`** — only `aiserver.ToolFunc` values are callable. Each requested tool runs in
   order under an `execute_tool <name>` span; the assistant turn is replayed with
-  `resp.AssistantMessage()` and each result goes back as one `ChatMessageTypeTool` message with a
+  `langchainwire.AssistantMessage(resp)` and each result goes back as one `ChatMessageTypeTool` message with a
   `llms.ToolCallResponse`. Tool errors propagate (wrapped, `errors.Is` holds). A request for an
   unregistered tool returns `ErrNoToolHandler` (its `execute_tool` span ends ERROR); more than 10 tool rounds returns `ErrMaxSteps`.
-- **`variables`** — template substitution in `ComposePrompt`; the `__ld` / `ldContext` entries
-  are written to the root span by `aiserver.StartHandlerRun`.
+- **`variables`** — template substitution in `handlerkit.ComposePrompt`; the `__ld` / `ldContext` entries
+  are written to the root span by `handlerkit.StartHandlerRun`.
 - **Spans** — root `invoke_agent` (blocking and streaming), `chat <model>`
-  per turn and `execute_tool <name>` per call as siblings under the root (`aiserver.HandlerRun`).
+  per turn and `execute_tool <name>` per call as siblings under the root (`kitbase.Run`).
 - **Usage** — read from `ContentChoice.GenerationInfo`, first choice that has it:
   Anthropic `InputTokens`/`OutputTokens`/`CacheReadInputTokens`/`CacheCreationInputTokens`
   (input is uncached; cache is folded in), OpenAI `PromptTokens`/`CompletionTokens`/

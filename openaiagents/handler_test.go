@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 func cfg(extra func(*aiserver.AiConfig)) aiserver.AiConfig {
@@ -131,7 +132,7 @@ func invoke(t *testing.T, h *aiserver.ProviderHandler, req aiserver.HandlerReque
 
 func TestFactoryMetadata(t *testing.T) {
 	a, b := newHandler(Options{}), newHandler(Options{CaptureContent: aiserver.CaptureOn})
-	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeAgent}) || a.ProvidesFor != ProvidesFor {
+	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeAgent}) || a.ProvidesFor != providesFor {
 		t.Errorf("providesFor = %+v", a.ProvidesFor)
 	}
 	if a.CaptureContent != aiserver.CaptureDefault || b.CaptureContent != aiserver.CaptureOn {
@@ -430,7 +431,7 @@ func itoa(n int) string { return strings.TrimSpace(toJSON(n)) }
 func TestTelemetry(t *testing.T) {
 	h, _, exp := setup(t, response("r", textOutput("done"), 10, 4, 3))
 	invoke(t, h, aiserver.HandlerRequest{Config: cfg(instructions("Be terse")), UserInput: "hi",
-		Variables: map[string]any{aiserver.VarLD: ldFixture}})
+		Variables: map[string]any{kitbase.VarLD: ldFixture}})
 	assertRoot(t, exp, "invoke_agent", 10, 3, 4, "done")
 	if SpanName != "invoke_agent" {
 		t.Error("span name constants changed")
@@ -447,7 +448,7 @@ func TestTelemetry(t *testing.T) {
 		h, _, exp := setup(t, textResp("ok", 1, 1))
 		td := ldFixture
 		td.GraphKey = "g-1"
-		invoke(t, h, aiserver.HandlerRequest{Config: cfg(instructions("sys")), Variables: map[string]any{aiserver.VarLD: td}})
+		invoke(t, h, aiserver.HandlerRequest{Config: cfg(instructions("sys")), Variables: map[string]any{kitbase.VarLD: td}})
 		if attrs(spansByName(exp)[SpanName][0])["launchdarkly.graph.key"] != "g-1" {
 			t.Error("graph key missing")
 		}
@@ -489,7 +490,7 @@ func TestStream(t *testing.T) {
 		evs, err := collect(t, h, aiserver.HandlerRequest{Config: cfg(func(c *aiserver.AiConfig) {
 			c.Instructions = "Be terse"
 			c.OutputFormat = map[string]any{"properties": map[string]any{"a": map[string]any{"type": "string"}}}
-		}), UserInput: "hi", Variables: map[string]any{aiserver.VarLD: ldFixture}})
+		}), UserInput: "hi", Variables: map[string]any{kitbase.VarLD: ldFixture}})
 		if err != nil {
 			t.Fatal(err)
 		}

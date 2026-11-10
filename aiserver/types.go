@@ -18,9 +18,6 @@ const (
 	ModeAgent    Mode = "agent"
 )
 
-// WildcardProvider matches any provider name.
-const WildcardProvider = "*"
-
 // ProvidesFor is the [provider, mode] tuple. The zero value means
 // "no providesFor": such a handler is never deduplicated by a Registry.
 type ProvidesFor struct {
@@ -28,7 +25,7 @@ type ProvidesFor struct {
 	Mode     Mode
 }
 
-func (p ProvidesFor) IsZero() bool { return p == ProvidesFor{} }
+func (p ProvidesFor) isZero() bool { return p == ProvidesFor{} }
 
 // ContentBlock is the LaunchDarkly-canonical multimodal block.
 type ContentBlock struct {
@@ -178,9 +175,9 @@ type ToolFunc func(ctx context.Context, args map[string]any) (any, error)
 
 func (ToolFunc) isToolHandler() {}
 
-// NativeTool marks a provider built-in tool. After WrapToolHandlers,
-// Track emits `$ld:ai:tool_call`; this replaces TypeScript's zero-arg stub
-// carrying the instance under NATIVE_TOOL_KEY.
+// NativeTool marks a provider built-in tool. Once the core wraps it for a
+// run, a handler that uses it emits `$ld:ai:tool_call`; this replaces
+// TypeScript's zero-arg stub carrying the instance under NATIVE_TOOL_KEY.
 type NativeTool struct {
 	ToolName string
 	track    func()
@@ -188,8 +185,8 @@ type NativeTool struct {
 
 func (*NativeTool) isToolHandler() {}
 
-// Track records a native tool call. It is a no-op on an unwrapped NativeTool.
-func (n *NativeTool) Track() {
+// trackCall records a native tool call. It is a no-op on an unwrapped NativeTool.
+func (n *NativeTool) trackCall() {
 	if n.track != nil {
 		n.track()
 	}

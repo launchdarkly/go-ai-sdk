@@ -12,11 +12,9 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
-
-// TracerPrefix scopes the tracers whose spans get a conversation id.
-const TracerPrefix = "github.com/launchdarkly/go-ai-sdk"
 
 type conversationKey struct{}
 
@@ -42,7 +40,7 @@ func conversationID(ctx context.Context) string {
 type ConversationIDSpanProcessor struct{}
 
 func (ConversationIDSpanProcessor) OnStart(parent context.Context, s sdktrace.ReadWriteSpan) {
-	if !strings.HasPrefix(s.InstrumentationScope().Name, TracerPrefix) {
+	if !strings.HasPrefix(s.InstrumentationScope().Name, kitbase.TracerPrefix) {
 		return
 	}
 	telemetry.CountSpan(parent)
@@ -73,26 +71,6 @@ func (ConversationIDSpanProcessor) OnEnd(sdktrace.ReadOnlySpan)      {}
 func (ConversationIDSpanProcessor) Shutdown(context.Context) error   { return nil }
 func (ConversationIDSpanProcessor) ForceFlush(context.Context) error { return nil }
 
-// ContextIdentity returns the canonical key and per-kind keys, or
-// ok=false. ldcontext.Context.FullyQualifiedKey already implements the
-// canonical-key rules (sorting, %/: escaping, bare user key).
-func ContextIdentity(c ldcontext.Context) (canonical string, perKind map[string]string, ok bool) {
-	if c.Err() != nil {
-		return "", nil, false
-	}
-	perKind = map[string]string{}
-	for i := 0; i < c.IndividualContextCount(); i++ {
-		ic := c.IndividualContextByIndex(i)
-		if ic.Key() != "" {
-			perKind[string(ic.Kind())] = ic.Key()
-		}
-	}
-	if len(perKind) == 0 {
-		return "", nil, false
-	}
-	return c.FullyQualifiedKey(), perKind, true
-}
-
 // compactSortedJSON renders per-kind keys byte-identically to TS/Python:
 // sorted keys, no HTML escaping, literal non-ASCII.
 func compactSortedJSON(m map[string]string) string {
@@ -119,10 +97,8 @@ func compactSortedJSON(m map[string]string) string {
 	return buf.String()
 }
 
-// LDMeta is the `__ld` variables entry handlers read.
+// Unexported variables entries beside kitbase.VarLD and kitbase.VarLDContext.
 const (
-	VarLD        = "__ld"
-	VarLDContext = "ldContext"
 	// ldContextValue holds the typed context alongside the template map; Go
 	// templates need a map but identity needs the typed ldcontext.Context.
 	varLDContextTyped = "__ldContextTyped"
@@ -139,12 +115,12 @@ const varLDNoFlagEvent = "__ldNoFlagEvent"
 
 type noFlagEvent struct{}
 
-// SetLDSpanAttributes writes the LaunchDarkly config-association and context
+// setLDSpanAttributesFromVars writes the LaunchDarkly config-association and context
 // identity attributes on a handler's root span from variables. Without an
 // `__ld` entry (a handler called directly) only launchdarkly.operation.type
 // is written, so the span is still found by the LLM dashboard filter.
-func SetLDSpanAttributes(span trace.Span, variables map[string]any) {
-	td, ok := variables[VarLD].(TrackData)
+func setLDSpanAttributesFromVars(span trace.Span, variables map[string]any) {
+	td, ok := variables[kitbase.VarLD].(TrackData)
 	if !ok {
 		span.SetAttributes(attribute.String("launchdarkly.operation.type", "gen_ai"))
 		return
@@ -157,10 +133,10 @@ func SetLDSpanAttributes(span trace.Span, variables map[string]any) {
 	}
 }
 
-// SetLDSpanAttributesFor writes the same attributes for a span that has no
+// kitSetLDSpanAttributesFor writes the same attributes for a span that has no
 // handler variables, such as a native graph runner's graph span. A zero
 // Context writes no identity.
-func SetLDSpanAttributesFor(span trace.Span, td TrackData, userCtx ldcontext.Context) {
+func kitSetLDSpanAttributesFor(span trace.Span, td TrackData, userCtx ldcontext.Context) {
 	setLDSpanAttributes(span, td, userCtx, true)
 }
 
@@ -182,7 +158,7 @@ func setLDSpanAttributes(span trace.Span, td TrackData, userCtx ldcontext.Contex
 		eventAttrs = append(eventAttrs, attribute.String("feature_flag.set.id", td.EnvironmentID))
 	}
 	if userCtx.IsDefined() {
-		if canonical, perKind, ok := ContextIdentity(userCtx); ok {
+		if canonical, perKind, ok := kitbase.ContextIdentity(userCtx); ok {
 			eventAttrs = append(eventAttrs,
 				attribute.String("feature_flag.context.id", canonical),
 				attribute.String("feature_flag.contextKeys", compactSortedJSON(perKind)))

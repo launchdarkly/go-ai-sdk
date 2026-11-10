@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 // Regression tests for bugs fixed in the core. Each was shown to fail with
@@ -118,7 +120,7 @@ func TestGraphSpanHasNoContextIdentity(t *testing.T) {
 	}
 	found := false
 	for _, s := range exp.GetSpans().Snapshots() {
-		if s.Name() != GraphSpanName {
+		if s.Name() != kitbase.GraphSpanName {
 			continue
 		}
 		found = true

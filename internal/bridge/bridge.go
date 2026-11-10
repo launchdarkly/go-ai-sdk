@@ -17,7 +17,7 @@ import (
 
 // ExtractVariationRaw resolves a flag variation as decoded JSON and returns
 // an error when it is disabled. Set by the core package at init; experimental
-// code parses the result with aiserver.ParseAiConfig.
+// code parses the result with handlerkit.ParseAiConfig.
 var ExtractVariationRaw func(ctx context.Context, key string, c ldcontext.Context) (map[string]any, error)
 
 // VariationClient is the part of the LaunchDarkly client a Variation gets.
@@ -86,3 +86,64 @@ func ShutdownHooks() []func(context.Context) {
 // code logs where the application pointed the core. The core assigns it once
 // in init, before any goroutine can read it.
 var Logger = slog.Default
+
+// The handler kit. The core package sets each variable at init to a function
+// of the type its comment gives; internal/handlerkit asserts each one once.
+// Package names in the comments: aiserver, kitbase (internal/kitbase), trace
+// (OpenTelemetry), ldcontext.
+
+// StartHandlerRun is func(context.Context, kitbase.HandlerSpanOptions, aiserver.HandlerRequest, string, []aiserver.Message) kitbase.Run.
+// The string and the messages are the prompt's system text and turns.
+var StartHandlerRun any
+
+// ComposePrompt is func(aiserver.HandlerRequest, aiserver.Mode) (string, []aiserver.Message).
+// It returns the prompt's system text and turns.
+var ComposePrompt any
+
+// CallableTools is func(aiserver.AiConfig, map[string]aiserver.ToolHandler) map[string]aiserver.Tool.
+var CallableTools any
+
+// ReportUsage is func(helper, pkg, version string).
+var ReportUsage any
+
+// RegisterAiSdkPackage is func(name, version string).
+var RegisterAiSdkPackage any
+
+// SetLDSpanAttributesFor is func(trace.Span, aiserver.TrackData, ldcontext.Context).
+var SetLDSpanAttributesFor any
+
+// WrapToolHandlers is func(map[string]aiserver.ToolHandler, ldcontext.Context, aiserver.TrackData) map[string]aiserver.ToolHandler.
+var WrapToolHandlers any
+
+// ParseUsage is func(map[string]any) aiserver.TokenUsage.
+var ParseUsage any
+
+// NormalizeMode is func(string) aiserver.Mode.
+var NormalizeMode any
+
+// ParseAiConfig is func(any) (aiserver.AiConfig, error).
+var ParseAiConfig any
+
+// TrackGraphEvent is func(event string, userCtx ldcontext.Context, td aiserver.TrackData, extra map[string]any, metric float64).
+var TrackGraphEvent any
+
+// SelectHandler is func([]*aiserver.ProviderHandler, string, aiserver.Mode) (*aiserver.ProviderHandler, error).
+var SelectHandler any
+
+// ImageURL is func(aiserver.ImageSource) string.
+var ImageURL any
+
+// ContentText is func(aiserver.Message) string.
+var ContentText any
+
+// NodeTrackData is func(n *aiserver.GraphNode, graphKey, runID string) aiserver.TrackData.
+var NodeTrackData any
+
+// GraphTrackData is func(*aiserver.GraphDefinition) aiserver.TrackData.
+var GraphTrackData any
+
+// GraphUserContext is func(*aiserver.GraphDefinition) ldcontext.Context.
+var GraphUserContext any
+
+// TrackNativeTool is func(*aiserver.NativeTool).
+var TrackNativeTool any

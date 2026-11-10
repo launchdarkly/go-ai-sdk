@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 // ModelID builds the Bedrock modelId: model.region is a short
@@ -98,7 +99,7 @@ func toMessages(turns []aiserver.Message) ([]types.Message, error) {
 // buildTools forwards config tools that have a local ToolFunc as
 // toolSpecs whose JSON Schema is sent unmodified. nil means no toolConfig.
 func buildTools(cfg aiserver.AiConfig, handlers map[string]aiserver.ToolHandler) *types.ToolConfiguration {
-	callable := aiserver.CallableTools(cfg, handlers)
+	callable := handlerkit.CallableTools(cfg, handlers)
 	if len(callable) == 0 {
 		return nil
 	}

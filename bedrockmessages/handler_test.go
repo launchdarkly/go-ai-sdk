@@ -20,6 +20,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/bedrockwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 var bg = context.Background()
@@ -387,7 +388,7 @@ func TestTelemetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u := aiserver.ParseUsage(res.Usage); u.Input != 16 || u.Output != 6 || u.Total != 22 || u.InputDetails == nil || u.InputDetails.CacheRead != 3 || u.InputDetails.CacheCreation != 2 {
+	if u := handlerkit.ParseUsage(res.Usage); u.Input != 16 || u.Output != 6 || u.Total != 22 || u.InputDetails == nil || u.InputDetails.CacheRead != 3 || u.InputDetails.CacheCreation != 2 {
 		t.Errorf("usage = %+v %+v", u, u.InputDetails)
 	}
 	const id = "us.anthropic.claude-sonnet-4-5"
@@ -776,7 +777,7 @@ func TestStream(t *testing.T) {
 	if !reflect.DeepEqual(chunks, []string{"Let me ", "check. ", "Sun", "ny"}) || done.Type != "done" || *done.Output != "Let me check. Sunny" {
 		t.Fatalf("events = %+v", events)
 	}
-	if u := aiserver.ParseUsage(done.Usage); u.Input != 8 || u.Output != 4 {
+	if u := handlerkit.ParseUsage(done.Usage); u.Input != 8 || u.Output != 4 {
 		t.Errorf("usage = %+v", u)
 	}
 	if gotArgs["city"] != "Paris" {

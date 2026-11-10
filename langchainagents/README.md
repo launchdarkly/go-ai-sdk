@@ -12,7 +12,7 @@ go get github.com/launchdarkly/go-ai-sdk/langchainagents
 
 ## providesFor
 
-`ProvidesFor = {Provider: "*", Mode: "agent"}`. The `*` wildcard makes this the fallback for
+The handler's `ProvidesFor` field is `{Provider: "*", Mode: "agent"}`. The `*` wildcard makes this the fallback for
 any variation whose `_ldMeta.mode` is `agent`: the router picks it when no handler names the
 variation's `provider.name` exactly. List exact-provider agent handlers (`claudeagents`,
 `openaiagents`, `bedrockagents`) first if you want them to win.

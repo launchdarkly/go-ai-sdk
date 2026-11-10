@@ -15,6 +15,8 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 	"github.com/launchdarkly/go-ai-sdk/llms"
@@ -32,9 +34,9 @@ const (
 	maxSteps = 10
 )
 
-// ProvidesFor is the variation provider/mode this handler serves: the '*'
+// providesFor is the variation provider/mode this handler serves: the '*'
 // wildcard, because LangChain routes to any provider.
-var ProvidesFor = aiserver.ProvidesFor{Provider: aiserver.WildcardProvider, Mode: aiserver.ModeMessages}
+var providesFor = aiserver.ProvidesFor{Provider: kitbase.WildcardProvider, Mode: aiserver.ModeMessages}
 
 var (
 	// ErrMaxSteps is returned when the model keeps requesting tools past the
@@ -47,7 +49,7 @@ var (
 	ErrEmptyResponse = langchainwire.ErrEmptyResponse
 )
 
-func init() { aiserver.RegisterAiSdkPackage(PackageName, PackageVersion) }
+func init() { handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion) }
 
 // ModelFactory builds the llms model for one call from the evaluated
 // AI Config, so the model can see config.model.parameters and name.
@@ -68,13 +70,13 @@ type Options struct {
 
 // NewHandler returns the LangChain messages handler (createLangChainMessagesHandler).
 func NewHandler(opts Options) *aiserver.ProviderHandler {
-	aiserver.ReportUsage("langchain-messages.createLangChainMessagesHandler", PackageName, PackageVersion)
+	handlerkit.ReportUsage("langchain-messages.createLangChainMessagesHandler", PackageName, PackageVersion)
 	return newHandler(opts)
 }
 
 func newHandler(opts Options) *aiserver.ProviderHandler {
 	h := &handler{opts: opts}
-	return sdkapi.CreateHandler(ProvidesFor, h.invoke, h.stream, opts.CaptureContent)
+	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent)
 }
 
 // InvokeOptions are the optional arguments to LangChainMessages.
@@ -91,7 +93,7 @@ type InvokeOptions struct {
 // LangChainMessages invokes configKey through a fresh LangChain messages
 // handler. opts may be nil.
 func LangChainMessages(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error) {
-	aiserver.ReportUsage("langchain-messages.langchainMessages", PackageName, PackageVersion)
+	handlerkit.ReportUsage("langchain-messages.langchainMessages", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}
@@ -120,7 +122,7 @@ func normalizeSchema(schema map[string]any) map[string]any {
 type runResult struct {
 	text      string // final output text (blocking: last turn; streaming: all turns)
 	parsed    any    // decoded structured output, nil when not applicable
-	usage     aiserver.SpanUsage
+	usage     kitbase.SpanUsage
 	abandoned bool
 }
 
@@ -144,11 +146,11 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 	enforce := schema != nil && (len(tools) == 0 || provider == "openai")
 	parse := schema != nil && len(tools) == 0
 
-	p := aiserver.ComposePrompt(req, aiserver.ModeMessages)
+	p := handlerkit.ComposePrompt(req, aiserver.ModeMessages)
 	if enforce {
-		p.System = aiserver.WithOutputFormat(p.System, schema)
+		p.System = kitbase.WithOutputFormat(p.System, schema)
 	}
-	r := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{
+	r := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
 		Tracer: PackageName, Name: SpanName, System: langchainwire.GenAISystem, ProviderName: provider, RequestModel: cfg.Model.Name,
 	}, req, p)
 	defer r.EndOnPanic()
@@ -200,7 +202,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 			r.Fail(err)
 			return res, err
 		}
-		msgs = append(msgs, resp.AssistantMessage())
+		msgs = append(msgs, langchainwire.AssistantMessage(resp))
 		for _, tc := range calls {
 			out, terr := langchainwire.RunTool(r.Context(), r, fns, tc)
 			if terr != nil {
@@ -214,7 +216,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 		res.text = all.String()
 	}
 	if parse {
-		if v, ok := aiserver.ParseJSONWithPossibleFences(res.text); ok {
+		if v, ok := kitbase.ParseJSONWithPossibleFences(res.text); ok {
 			res.parsed = v
 		}
 	}

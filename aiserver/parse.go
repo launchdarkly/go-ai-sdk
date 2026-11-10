@@ -13,10 +13,10 @@ func isObject(v any) (map[string]any, bool) {
 	return m, ok
 }
 
-// ParseAiConfig validates a decoded flag variation. raw is the
+// kitParseAiConfig validates a decoded flag variation. raw is the
 // encoding/json decoding of the variation (map[string]any). The JS and Python
 // `{success, data} | {success:false, error}` maps to Go's (value, error).
-func ParseAiConfig(raw any) (AiConfig, error) {
+func kitParseAiConfig(raw any) (AiConfig, error) {
 	obj, ok := isObject(raw)
 	if !ok {
 		return AiConfig{}, errorf("config must be an object")

@@ -11,12 +11,14 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace/noop"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
-func roleTexts(p Prompt) []string {
+func roleTexts(p prompt) []string {
 	var out []string
 	for _, t := range p.Turns {
-		out = append(out, t.Role+":"+ContentText(t))
+		out = append(out, t.Role+":"+kitContentText(t))
 	}
 	return out
 }
@@ -44,7 +46,7 @@ func TestComposePrompt(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			p := ComposePrompt(HandlerRequest{Config: c.cfg, UserInput: c.input, History: c.history, Variables: map[string]any{"n": "Al"}}, c.mode)
+			p := kitComposePrompt(HandlerRequest{Config: c.cfg, UserInput: c.input, History: c.history, Variables: map[string]any{"n": "Al"}}, c.mode)
 			if p.System != c.wantSystem || !reflect.DeepEqual(roleTexts(p), c.wantTurns) {
 				t.Errorf("got system=%q turns=%v", p.System, roleTexts(p))
 			}
@@ -52,21 +54,21 @@ func TestComposePrompt(t *testing.T) {
 	}
 	// Empty history behaves exactly like no history.
 	cfg := AiConfig{Messages: []Message{{Role: "user", Text: "u"}}}
-	if a, b := ComposePrompt(HandlerRequest{Config: cfg, UserInput: "q"}, ModeMessages), ComposePrompt(HandlerRequest{Config: cfg, UserInput: "q", History: []Message{}}, ModeMessages); !reflect.DeepEqual(a, b) {
+	if a, b := kitComposePrompt(HandlerRequest{Config: cfg, UserInput: "q"}, ModeMessages), kitComposePrompt(HandlerRequest{Config: cfg, UserInput: "q", History: []Message{}}, ModeMessages); !reflect.DeepEqual(a, b) {
 		t.Errorf("empty history changed prompt: %v vs %v", a, b)
 	}
 	// Multimodal history keeps its blocks.
-	p := ComposePrompt(HandlerRequest{Config: AiConfig{Instructions: "s"}, History: []Message{img}, UserInput: "q"}, ModeMessages)
+	p := kitComposePrompt(HandlerRequest{Config: AiConfig{Instructions: "s"}, History: []Message{img}, UserInput: "q"}, ModeMessages)
 	if p.Turns[0].Blocks == nil || p.Turns[0].Blocks[0].Source.URL != "u" {
 		t.Error("image block lost")
 	}
 }
 
 func TestWithOutputFormat(t *testing.T) {
-	if got := WithOutputFormat("base", nil); got != "base" {
+	if got := kitbase.WithOutputFormat("base", nil); got != "base" {
 		t.Errorf("no schema changed system: %q", got)
 	}
-	if got := WithOutputFormat("base", map[string]any{"type": "object"}); got != "base\n\nRespond with valid JSON matching this schema:\n{\"type\":\"object\"}" {
+	if got := kitbase.WithOutputFormat("base", map[string]any{"type": "object"}); got != "base\n\nRespond with valid JSON matching this schema:\n{\"type\":\"object\"}" {
 		t.Errorf("got %q", got)
 	}
 }
@@ -80,9 +82,9 @@ func TestHandlerRunWithoutTracerProvider(t *testing.T) {
 	t.Cleanup(func() { otel.SetTracerProvider(prev) })
 	req := HandlerRequest{Config: AiConfig{Model: Model{Name: "m"}}}
 	for _, fail := range []bool{false, true} {
-		r := StartHandlerRun(context.Background(), HandlerSpanOptions{Tracer: TracerPrefix + "/t", Name: "x", System: "s"}, req, Prompt{})
+		r := kitStartHandlerRun(context.Background(), kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/t", Name: "x", System: "s"}, req, prompt{})
 		chat := r.StartChat("m")
-		r.EndChat(chat, "m", SpanUsage{Input: 1}, "stop")
+		r.EndChat(chat, "m", kitbase.SpanUsage{Input: 1}, "stop")
 		tool := r.StartTool("t", "id")
 		if fail {
 			r.Fail(errors.New("boom"))
@@ -91,7 +93,7 @@ func TestHandlerRunWithoutTracerProvider(t *testing.T) {
 		r.EndTool(tool, nil)
 		r.Finish("m", "out")
 	}
-	r := StartHandlerRun(context.Background(), HandlerSpanOptions{Tracer: TracerPrefix + "/t", Name: "x"}, req, Prompt{})
+	r := kitStartHandlerRun(context.Background(), kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/t", Name: "x"}, req, prompt{})
 	r.StartChat("m")
 	r.Abandon()
 }
@@ -105,8 +107,8 @@ func TestHandlerRunContentEvents(t *testing.T) {
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp)))
 	t.Cleanup(func() { otel.SetTracerProvider(prev) })
 
-	p := Prompt{System: "Be terse", Turns: []Message{{Role: "user", Text: "what is a flag?"}}}
-	r := StartHandlerRun(context.Background(), HandlerSpanOptions{Tracer: TracerPrefix + "/t", Name: "x", System: "s", RequestModel: "m"},
+	p := prompt{System: "Be terse", Turns: []Message{{Role: "user", Text: "what is a flag?"}}}
+	r := kitStartHandlerRun(context.Background(), kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/t", Name: "x", System: "s", RequestModel: "m"},
 		HandlerRequest{}, p)
 	r.Finish("m", "a toggle")
 
@@ -143,8 +145,8 @@ func TestHandlerRunContentEvents(t *testing.T) {
 // success, failure and abandonment, and the root carries run usage.
 func TestHandlerRunSpanTree(t *testing.T) {
 	exp := withSpans(t)
-	opts := HandlerSpanOptions{Tracer: TracerPrefix + "/t", Name: "invoke_agent", System: "anthropic", RequestModel: "m"}
-	req := HandlerRequest{Variables: map[string]any{VarLD: TrackData{ConfigKey: "cfg", VariationKey: "v", RunID: "r"}}}
+	opts := kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/t", Name: "invoke_agent", System: "anthropic", RequestModel: "m"}
+	req := HandlerRequest{Variables: map[string]any{kitbase.VarLD: TrackData{ConfigKey: "cfg", VariationKey: "v", RunID: "r"}}}
 	byName := func() map[string]tracetest.SpanStub {
 		out := map[string]tracetest.SpanStub{}
 		for _, s := range exp.GetSpans() {
@@ -161,12 +163,12 @@ func TestHandlerRunSpanTree(t *testing.T) {
 		return ""
 	}
 
-	r := StartHandlerRun(bg, opts, req, Prompt{})
+	r := kitStartHandlerRun(bg, opts, req, prompt{})
 	chat := r.StartChat("")
-	r.EndChat(chat, "m-resp", SpanUsage{Input: 3, Output: 2}, "tool_use")
+	r.EndChat(chat, "m-resp", kitbase.SpanUsage{Input: 3, Output: 2}, "tool_use")
 	tool := r.StartTool("lookup", "call-1")
 	r.EndTool(tool, nil)
-	r.EndChat(r.StartChat("m"), "", SpanUsage{Input: 1, Output: 1}, "")
+	r.EndChat(r.StartChat("m"), "", kitbase.SpanUsage{Input: 1, Output: 1}, "")
 	r.Finish("m-resp", "done")
 	s := byName()
 	root := s["invoke_agent"]
@@ -208,8 +210,8 @@ func TestHandlerRunSpanTree(t *testing.T) {
 
 	// Failure: every open span and the root end ERROR; usage reported so far survives.
 	exp.Reset()
-	r = StartHandlerRun(bg, opts, req, Prompt{})
-	r.AddUsage(SpanUsage{Input: 5})
+	r = kitStartHandlerRun(bg, opts, req, prompt{})
+	r.AddUsage(kitbase.SpanUsage{Input: 5})
 	r.StartChat("m")
 	r.StartTool("lookup", "call-2")
 	r.Fail(errors.New("provider down"))
@@ -224,7 +226,7 @@ func TestHandlerRunSpanTree(t *testing.T) {
 
 	// Abandonment: every open span ends UNSET with the abandoned flag.
 	exp.Reset()
-	r = StartHandlerRun(bg, opts, req, Prompt{})
+	r = kitStartHandlerRun(bg, opts, req, prompt{})
 	r.StartChat("m")
 	r.Abandon()
 	r.Fail(errors.New("late")) // ends nothing twice
@@ -242,7 +244,7 @@ func TestHandlerRunSpanTree(t *testing.T) {
 // model a turn reported, else the request model.
 func TestHandlerRunResponseModelOnFailAndAbandon(t *testing.T) {
 	exp := withSpans(t)
-	opts := HandlerSpanOptions{Tracer: TracerPrefix + "/t", Name: "root", System: "s", RequestModel: "req-model"}
+	opts := kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/t", Name: "root", System: "s", RequestModel: "req-model"}
 	rootModel := func() string {
 		for _, s := range exp.GetSpans() {
 			if s.Name == "root" {
@@ -255,19 +257,19 @@ func TestHandlerRunResponseModelOnFailAndAbandon(t *testing.T) {
 		}
 		return ""
 	}
-	for name, end := range map[string]func(*HandlerRun){
-		"fail":    func(r *HandlerRun) { r.Fail(errors.New("x")) },
-		"abandon": func(r *HandlerRun) { r.Abandon() },
+	for name, end := range map[string]func(*kitHandlerRun){
+		"fail":    func(r *kitHandlerRun) { r.Fail(errors.New("x")) },
+		"abandon": func(r *kitHandlerRun) { r.Abandon() },
 	} {
 		exp.Reset()
-		r := StartHandlerRun(bg, opts, HandlerRequest{}, Prompt{})
+		r := kitStartHandlerRun(bg, opts, HandlerRequest{}, prompt{})
 		end(r)
 		if got := rootModel(); got != "req-model" {
 			t.Errorf("%s without a turn: response model = %q", name, got)
 		}
 		exp.Reset()
-		r = StartHandlerRun(bg, opts, HandlerRequest{}, Prompt{})
-		r.EndChat(r.StartChat(""), "resp-model", SpanUsage{}, "")
+		r = kitStartHandlerRun(bg, opts, HandlerRequest{}, prompt{})
+		r.EndChat(r.StartChat(""), "resp-model", kitbase.SpanUsage{}, "")
 		r.StartChat("")
 		end(r)
 		if got := rootModel(); got != "resp-model" {
@@ -279,11 +281,11 @@ func TestHandlerRunResponseModelOnFailAndAbandon(t *testing.T) {
 // EndOnPanic ends every open span ERROR and lets the panic continue.
 func TestHandlerRunEndOnPanic(t *testing.T) {
 	exp := withSpans(t)
-	opts := HandlerSpanOptions{Tracer: TracerPrefix + "/t", Name: "root", System: "s", RequestModel: "m"}
+	opts := kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/t", Name: "root", System: "s", RequestModel: "m"}
 	var got any
 	func() {
 		defer func() { got = recover() }()
-		r := StartHandlerRun(bg, opts, HandlerRequest{}, Prompt{})
+		r := kitStartHandlerRun(bg, opts, HandlerRequest{}, prompt{})
 		defer r.EndOnPanic()
 		r.StartChat("m")
 		r.StartTool("lookup", "c1")
@@ -303,7 +305,7 @@ func TestHandlerRunEndOnPanic(t *testing.T) {
 	// No panic: a finished run is left as it was.
 	exp.Reset()
 	func() {
-		r := StartHandlerRun(bg, opts, HandlerRequest{}, Prompt{})
+		r := kitStartHandlerRun(bg, opts, HandlerRequest{}, prompt{})
 		defer r.EndOnPanic()
 		r.Finish("m", "ok")
 	}()

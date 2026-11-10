@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 // fakeAnthropic replays canned responses and records request bodies.
@@ -248,7 +249,7 @@ func TestToolFilteringAndLoop(t *testing.T) {
 	if !reflect.DeepEqual(calls, []string{"a", "b"}) || gotArgs["city"] != "Paris" || res.Output != "final" {
 		t.Errorf("calls=%v args=%v out=%v", calls, gotArgs, res.Output)
 	}
-	if u := aiserver.ParseUsage(res.Usage); u.Input != 4 || u.Output != 5 {
+	if u := handlerkit.ParseUsage(res.Usage); u.Input != 4 || u.Output != 5 {
 		t.Errorf("usage = %+v", u)
 	}
 
@@ -423,7 +424,7 @@ func TestStream(t *testing.T) {
 	if len(events) != 3 || events[0].Text != "Hel" || events[1].Text != "lo" || events[2].Type != "done" || *events[2].Output != "Hello" {
 		t.Fatalf("events = %+v", events)
 	}
-	if u := aiserver.ParseUsage(events[2].Usage); u.Input != 3 || u.Output != 2 {
+	if u := handlerkit.ParseUsage(events[2].Usage); u.Input != 3 || u.Output != 2 {
 		t.Errorf("usage = %+v", u)
 	}
 

@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 func attrsOf(s sdktrace.ReadOnlySpan) map[string]string {
@@ -57,7 +58,7 @@ func TestChatSpanTelemetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u := aiserver.ParseUsage(res.Usage); u.Input != 16 || u.Output != 6 || u.InputDetails == nil || u.InputDetails.CacheRead != 3 || u.InputDetails.CacheCreation != 2 {
+	if u := handlerkit.ParseUsage(res.Usage); u.Input != 16 || u.Output != 6 || u.InputDetails == nil || u.InputDetails.CacheRead != 3 || u.InputDetails.CacheCreation != 2 {
 		t.Errorf("usage = %+v", u)
 	}
 	chats := spansNamed(exp, "chat test-model")

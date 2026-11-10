@@ -5,7 +5,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 // defaultWriteTimeout is WriteSkills' default time budget.
@@ -80,7 +80,7 @@ type selection struct {
 //
 // Run at most one reconcile per root at a time.
 func WriteSkills[I SkillInput](skills []I, root string, opts *WriteSkillsOptions) (ReconcileReport, error) {
-	aiserver.ReportUsage("client.writeSkills", "", "")
+	handlerkit.ReportUsage("client.writeSkills", "", "")
 	items := make([]SkillInput, len(skills))
 	for i, s := range skills {
 		items[i] = s
@@ -93,7 +93,7 @@ func WriteSkills[I SkillInput](skills []I, root string, opts *WriteSkillsOptions
 // rather than going through AllSkills, so a skill that fails verification
 // keeps its files on disk instead of reading as revoked.
 func WriteAllSkills(root string, opts *WriteSkillsOptions) (ReconcileReport, error) {
-	aiserver.ReportUsage("client.writeSkills", "", "")
+	handlerkit.ReportUsage("client.writeSkills", "", "")
 	return writeSkills(selection{all: true}, root, opts)
 }
 

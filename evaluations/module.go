@@ -13,6 +13,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 // helperName is the usage ID InitEvaluations reports. The TypeScript and
@@ -102,7 +103,7 @@ func option(explicit, name string) string {
 // module. It performs no network I/O and fails on a missing value in this
 // order: project key, token, SDK key.
 func InitEvaluations(opts InitEvaluationsOptions) (*EvaluationsModule, error) {
-	aiserver.ReportUsage(helperName, "", "")
+	handlerkit.ReportUsage(helperName, "", "")
 	project := option(opts.ProjectKey, "LD_PROJECT_KEY")
 	if project == "" {
 		return nil, fmt.Errorf("evaluations: %w: no LaunchDarkly project key; set LD_PROJECT_KEY or pass InitEvaluationsOptions.ProjectKey", ErrMissingCredential)

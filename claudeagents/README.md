@@ -92,8 +92,8 @@ out, err := claudeagents.ClaudeGraph("support-graph", claudeagents.GraphOptions{
 	claudeagents.Options{}).Invoke(ctx, "I was double charged", ldcontext.New("user-123"))
 ```
 
-Native adapter: every child node becomes a sub-agent tool of its parent, and the root drives
-the run.
+Native adapter: every child node becomes a sub-agent tool of its parent, named
+`mcp__subagents__<key>`, and the root drives the run.
 
 ```go
 def, err := aiserver.ResolveGraph(ctx, "support-graph", ldcontext.New("user-123"), aiserver.GraphOptions{})
@@ -149,8 +149,6 @@ const PackageName = "github.com/launchdarkly/go-ai-sdk/claudeagents"
 const PackageVersion = "0.1.0"
 const SpanName = "invoke_agent"
 const DefaultMaxSteps = 10
-const SubAgentToolPrefix = "mcp__subagents__"
-var ProvidesFor = aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeAgent}
 var ErrToolNotFound, ErrUnsupportedNativeTool, ErrMaxSteps error
 
 type Options struct {

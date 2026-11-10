@@ -13,6 +13,9 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
+	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
 	"github.com/launchdarkly/go-ai-sdk/llms"
 )
@@ -265,7 +268,7 @@ func TestToLangGraphExecutors(t *testing.T) {
 	ld.resetTracks()
 	native := &aiserver.NativeTool{ToolName: "web_search"}
 	r := newRun(def, NativeGraphOptions{Context: user})
-	handlers := aiserver.WrapToolHandlers(map[string]aiserver.ToolHandler{"lookup": native}, user, def.GetNode("triage").TrackData("g", "run"))
+	handlers := handlerkit.WrapToolHandlers(map[string]aiserver.ToolHandler{"lookup": native}, user, handlerkit.NodeTrackData(def.GetNode("triage"), "g", "run"))
 	defs, exec := r.tools(def.GetNode("triage"), handlers, nil)
 	if len(defs) != 2 || defs[0].Function.Name != "lookup" {
 		t.Fatalf("defs = %+v", defs)
@@ -349,7 +352,7 @@ func TestToLangGraphRun(t *testing.T) {
 		t.Error("$ld:ai:graph:path tracked")
 	}
 
-	spans := spansByName(exp)[aiserver.GraphSpanName]
+	spans := spansByName(exp)[kitbase.GraphSpanName]
 	if len(spans) != 1 {
 		t.Fatalf("graph spans = %d", len(spans))
 	}
@@ -381,7 +384,7 @@ func TestToLangGraphFailureAndNoContext(t *testing.T) {
 		len(ld.events("$ld:ai:generation:error")) != 1 {
 		t.Errorf("events = %v", ld.aiEvents())
 	}
-	if s := spansByName(exp)[aiserver.GraphSpanName]; len(s) != 1 || s[0].Status().Code != codes.Error || s[0].EndTime().IsZero() {
+	if s := spansByName(exp)[kitbase.GraphSpanName]; len(s) != 1 || s[0].Status().Code != codes.Error || s[0].EndTime().IsZero() {
 		t.Errorf("graph span = %v", s)
 	}
 
@@ -522,12 +525,12 @@ func TestToLangGraphRealStateGraph(t *testing.T) {
 
 // Two updates from the same state must not share the messages backing array.
 func TestMessagesSchemaUpdateDoesNotAlias(t *testing.T) {
-	base := map[string]any{messagesKey: append(make([]llms.MessageContent, 0, 4), llms.TextParts(human, "q"))}
-	a, err := (messagesSchema{}).Update(base, map[string]any{messagesKey: llms.TextParts(ai, "a")})
+	base := map[string]any{messagesKey: append(make([]llms.MessageContent, 0, 4), langchainwire.TextParts(human, "q"))}
+	a, err := (messagesSchema{}).Update(base, map[string]any{messagesKey: langchainwire.TextParts(ai, "a")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := (messagesSchema{}).Update(base, map[string]any{messagesKey: llms.TextParts(ai, "b")}); err != nil {
+	if _, err := (messagesSchema{}).Update(base, map[string]any{messagesKey: langchainwire.TextParts(ai, "b")}); err != nil {
 		t.Fatal(err)
 	}
 	if got := messagesOf(a); len(got) != 2 || text(got[1]) != "a" {
@@ -541,7 +544,7 @@ func TestLangChainGraph(t *testing.T) {
 	installClient(t, ld)
 	f := &fakeModel{turns: []scripted{streamTurn(nil, 1, 1, toolCall("lookup", nil)), streamTurn([]string{"fine"}, 1, 1)}}
 	bogusCalled := false
-	bogus := &aiserver.ProviderHandler{ProvidesFor: ProvidesFor, Invoke: func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
+	bogus := &aiserver.ProviderHandler{ProvidesFor: providesFor, Invoke: func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
 		bogusCalled = true
 		return aiserver.HandlerResult{}, nil
 	}}
@@ -633,7 +636,7 @@ func TestToLangGraphNodeSpansAndPayloads(t *testing.T) {
 	}
 
 	byName := spansByName(exp)
-	graphSpan := byName[aiserver.GraphSpanName][0]
+	graphSpan := byName[kitbase.GraphSpanName][0]
 	nodes := byName[SpanName]
 	if len(nodes) != 2 {
 		t.Fatalf("node spans = %d", len(nodes))
@@ -655,7 +658,7 @@ func TestToLangGraphNodeSpansAndPayloads(t *testing.T) {
 		}
 	}
 	for name, ss := range byName {
-		if name == SpanName || name == aiserver.GraphSpanName {
+		if name == SpanName || name == kitbase.GraphSpanName {
 			continue
 		}
 		for k := range spanAttrs(ss[0]) {

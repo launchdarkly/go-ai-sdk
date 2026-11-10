@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/judging"
 )
 
@@ -272,7 +273,7 @@ func TestJudgeConfigUnrenderedAndVariables(t *testing.T) {
 	var rendered string
 	judge := func(_ context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
 		// The handler owns the one template pass.
-		rendered = aiserver.ParseTemplate(aiserver.ContentText(req.Config.Messages[0]), req.Variables)
+		rendered = aiserver.ParseTemplate(handlerkit.ContentText(req.Config.Messages[0]), req.Variables)
 		return verdict(0.5, "ok")(nil, req)
 	}
 	e, args, rec := judgeEnv(t, 1, judge, nil)
@@ -287,7 +288,7 @@ func TestJudgeConfigUnrenderedAndVariables(t *testing.T) {
 	}
 	mustRun(t, e.module(), args)
 	jc := rec.all()[0]
-	if aiserver.ContentText(jc.Config.Messages[0]) != "Grade {{message_history}}" {
+	if handlerkit.ContentText(jc.Config.Messages[0]) != "Grade {{message_history}}" {
 		t.Fatal("the harness rendered the judge config")
 	}
 	if jc.UserInput != "says {{expected_output}}" || !strings.Contains(rendered, "says {{expected_output}}") {
@@ -304,7 +305,7 @@ func TestJudgeConfigUnrenderedAndVariables(t *testing.T) {
 	}
 	v := jc.Variables
 	if v["expected_output"] != "" || v["ground_truth_context"] != "" || v["input"] != "Q 1" || v["response_to_evaluate"] != "says {{expected_output}}" ||
-		v["formatting_instructions"] != aiserver.FormattingInstructions {
+		v["formatting_instructions"] != judging.FormattingInstructions {
 		t.Fatalf("judge variables %v", v)
 	}
 	if v["message_history"] != judging.BuildMessageHistory("Q 1", "", "says {{expected_output}}") ||
@@ -319,7 +320,7 @@ func TestJudgeConfigUnrenderedAndVariables(t *testing.T) {
 func TestDefaultTemplateJudgeScoresWithoutEdits(t *testing.T) {
 	var rendered string
 	judge := func(_ context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
-		rendered = aiserver.ParseTemplate(aiserver.ContentText(req.Config.Messages[0]), req.Variables)
+		rendered = aiserver.ParseTemplate(handlerkit.ContentText(req.Config.Messages[0]), req.Variables)
 		return verdict(0.8, "grounded")(nil, req)
 	}
 	e, args, rec := judgeEnv(t, 1, judge, map[string]any{

@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 func TestParseTemplate(t *testing.T) {
@@ -43,16 +45,16 @@ func TestParseJSONWithPossibleFences(t *testing.T) {
 		"```\r\n{\"a\":1}\r\n```",
 		"  ```json\n{\"a\":1}\n```",
 	} {
-		got, ok := ParseJSONWithPossibleFences(in)
+		got, ok := kitbase.ParseJSONWithPossibleFences(in)
 		if !ok || !reflect.DeepEqual(got, want) {
 			t.Errorf("%q -> %v %v", in, got, ok)
 		}
 	}
-	if _, ok := ParseJSONWithPossibleFences("not json"); ok {
+	if _, ok := kitbase.ParseJSONWithPossibleFences("not json"); ok {
 		t.Error("invalid JSON parsed")
 	}
 	nested := `{"x":[1,{"y":[true,null]}]}`
-	if got, ok := ParseJSONWithPossibleFences(nested); !ok || got.(map[string]any)["x"] == nil {
+	if got, ok := kitbase.ParseJSONWithPossibleFences(nested); !ok || got.(map[string]any)["x"] == nil {
 		t.Errorf("nested: %v", got)
 	}
 }
@@ -69,7 +71,7 @@ func TestParseUsage(t *testing.T) {
 		{map[string]any{"input_tokens": 1.0, "output_tokens": 1.0, "inputTokens": 7.0, "outputTokens": 7.0}, TokenUsage{1, 1, 2, nil}},
 	}
 	for _, c := range cases {
-		if got := ParseUsage(c.in); !reflect.DeepEqual(got, c.want) {
+		if got := kitParseUsage(c.in); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("ParseUsage(%v) = %+v, want %+v", c.in, got, c.want)
 		}
 	}
@@ -77,7 +79,7 @@ func TestParseUsage(t *testing.T) {
 
 func TestNormalizeMode(t *testing.T) {
 	for in, want := range map[string]Mode{"agent": ModeAgent, "completion": ModeMessages, "judge": ModeMessages, "": ModeMessages, "zzz": ModeMessages} {
-		if got := NormalizeMode(in); got != want {
+		if got := kitNormalizeMode(in); got != want {
 			t.Errorf("NormalizeMode(%q) = %q", in, got)
 		}
 	}
@@ -104,7 +106,7 @@ func TestParseAiConfig(t *testing.T) {
 		with("skills", []any{map[string]any{"key": "pdf-extraction", "version": 2.0}}),
 	}
 	for i, v := range valid {
-		if _, err := ParseAiConfig(v); err != nil {
+		if _, err := kitParseAiConfig(v); err != nil {
 			t.Errorf("valid[%d]: %v", i, err)
 		}
 	}
@@ -117,7 +119,7 @@ func TestParseAiConfig(t *testing.T) {
 		with("tools", map[string]any{"t": map[string]any{"name": "t", "type": "class", "parameters": map[string]any{}}}),
 	}
 	for i, v := range invalid {
-		if _, err := ParseAiConfig(v); err == nil {
+		if _, err := kitParseAiConfig(v); err == nil {
 			t.Errorf("invalid[%d] accepted", i)
 		}
 	}
@@ -127,12 +129,12 @@ func TestParseAiConfig(t *testing.T) {
 		[]any{map[string]any{"key": "", "version": 1.0}}, []any{map[string]any{"key": strings.Repeat("a", 257), "version": 1.0}},
 		[]any{map[string]any{"key": "k"}}, []any{map[string]any{"key": "k", "version": 0.0}}, []any{map[string]any{"key": "k", "version": 2.5}},
 		[]any{map[string]any{"key": "k", "version": "2"}}, []any{map[string]any{"key": "k", "version": true}}} {
-		_, err := ParseAiConfig(with("skills", s))
+		_, err := kitParseAiConfig(with("skills", s))
 		if err == nil || !strings.Contains(err.Error(), "skills") {
 			t.Errorf("skills[%d]=%v: err %v", i, s, err)
 		}
 	}
-	cfg, _ := ParseAiConfig(with("skills", []any{map[string]any{"key": "k", "version": 2.0}}))
+	cfg, _ := kitParseAiConfig(with("skills", []any{map[string]any{"key": "k", "version": 2.0}}))
 	if !reflect.DeepEqual(cfg.Raw["skills"], []any{map[string]any{"key": "k", "version": 2.0}}) {
 		t.Errorf("skills did not round-trip: %v", cfg.Raw["skills"])
 	}

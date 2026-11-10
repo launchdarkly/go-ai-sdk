@@ -10,6 +10,8 @@ where it leaves a detail open, the JavaScript SDK decides, then the Python SDK.
 Tier 0  aiserver                 core: no provider SDK imports
         experimental/shadowrequests  experimental: shadow requests
         internal/{bridge,trajectory,judging}   shared internals
+        internal/kitbase     type-free handler-kit helpers (SpanUsage, HandlerSpanOptions, Run, ...); imports nothing from aiserver
+        internal/handlerkit  typed access to the handler kit that stays unexported in aiserver; imports aiserver, never imported by it
 Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         claudeagents   openaiagents   bedrockagents
         internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers shared by a pair
@@ -19,7 +21,9 @@ Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
 
 Tier 1 packages import `aiserver` and their provider SDK only (`skills` and `evaluations` have none). `aiserver`
 never imports a Tier 1 package, and core never names an experimental type:
-the two meet only through `internal/bridge`.
+the two meet only through `internal/bridge`. The handler kit (prompt
+composition, span tree, usage reporting, tool wrapping) is not public API:
+handler packages reach it through `internal/handlerkit` and `internal/kitbase`.
 
 ## The ProviderHandler contract
 
@@ -45,10 +49,10 @@ type HandlerRequest struct {
 with `CreateHandler` (applications). SDK packages call `internal/sdkapi`,
 which does not report usage; they report their own helper usage instead.
 
-A handler must: compose its prompt with `aiserver.ComposePrompt`; offer only
-config tools that have a `ToolFunc` (`CallableTools`); run the tool loop and
-propagate tool errors; open its span tree with `StartHandlerRun`; return
-provider usage in a shape `ParseUsage` reads (cache buckets unfolded for
+A handler must: compose its prompt with `handlerkit.ComposePrompt`; offer only
+config tools that have a `ToolFunc` (`handlerkit.CallableTools`); run the tool loop and
+propagate tool errors; open its span tree with `handlerkit.StartHandlerRun`; return
+provider usage in a shape `handlerkit.ParseUsage` reads (cache buckets unfolded for
 Anthropic/Bedrock, cache-inclusive input for OpenAI/LangChain); and on
 streaming, yield `chunk` events then exactly one `done`, stopping cleanly when
 the consumer stops.
@@ -58,18 +62,18 @@ the consumer stops.
 A `*aiserver.NativeTool{ToolName}` value in `ToolHandlers` marks a provider
 built-in instead of a local function. After the core wraps it, the handler
 detects it with a type switch (`case *aiserver.NativeTool`), wires the
-provider's built-in named `ToolName`, and calls `Track()` when the model uses
+provider's built-in named `ToolName`, and calls `handlerkit.TrackNativeTool` when the model uses
 it so `$ld:ai:tool_call` is sent with the LaunchDarkly tool key. This replaces
 the JS `NATIVE_TOOL_KEY` symbol.
 
 Built-ins per provider (only the agent handlers wire `NativeTool`; every
-`*messages` handler offers only `ToolFunc` tools via `CallableTools`, so a
+`*messages` handler offers only `ToolFunc` tools via `handlerkit.CallableTools`, so a
 `NativeTool` there is not sent to the model):
 
 | Provider | Package | Sentinel → provider built-in | Unsupported |
 |---|---|---|---|
-| Anthropic | `claudeagents` (`builtins.go`, `handler.go` `serverTool`, `hosttools.go`) | `ClaudeWebSearch` (`WebSearch`) → `web_search_20250305`; `ClaudeWebFetch` (`WebFetch`) → `web_fetch_20250910` server tools. `ClaudeBash`, `ClaudeRead`, `ClaudeEdit`, `ClaudeWrite`, `ClaudeGlob`, `ClaudeGrep`, `ClaudeTodoWrite`, `ClaudeNotebookEdit` → function tools under the Claude Code name and schema, executed on the host; file tools confined to `Options.WorkDir` (`os.Root`), Bash not sandboxed. `Track()` fires per call. | Any other `ToolName`: the config fails with `ErrUnsupportedNativeTool` |
-| OpenAI | `openaiagents` (`runner.go` `newAgent`, `openaiwire.HostedTool`) | No exported sentinels: `&aiserver.NativeTool{ToolName: "web_search"}` (or any hosted Responses tool type, e.g. `file_search`, `code_interpreter`) becomes a hosted tool `{"type": ToolName, ...customParameters}`. `Track()` fires on the matching `<type>_call` output item. | — (the type is passed through; the API rejects unknown types) |
+| Anthropic | `claudeagents` (`builtins.go`, `handler.go` `serverTool`, `hosttools.go`) | `ClaudeWebSearch` (`WebSearch`) → `web_search_20250305`; `ClaudeWebFetch` (`WebFetch`) → `web_fetch_20250910` server tools. `ClaudeBash`, `ClaudeRead`, `ClaudeEdit`, `ClaudeWrite`, `ClaudeGlob`, `ClaudeGrep`, `ClaudeTodoWrite`, `ClaudeNotebookEdit` → function tools under the Claude Code name and schema, executed on the host; file tools confined to `Options.WorkDir` (`os.Root`), Bash not sandboxed. `handlerkit.TrackNativeTool` fires per call. | Any other `ToolName`: the config fails with `ErrUnsupportedNativeTool` |
+| OpenAI | `openaiagents` (`runner.go` `newAgent`, `openaiwire.HostedTool`) | No exported sentinels: `&aiserver.NativeTool{ToolName: "web_search"}` (or any hosted Responses tool type, e.g. `file_search`, `code_interpreter`) becomes a hosted tool `{"type": ToolName, ...customParameters}`. `handlerkit.TrackNativeTool` fires on the matching `<type>_call` output item. | — (the type is passed through; the API rejects unknown types) |
 | Bedrock | `bedrockagents` | none | `NativeTool` is not wired |
 | LangChain | `langchainmessages` | none | `NativeTool` is not wired |
 
@@ -81,13 +85,13 @@ up telemetry. A failed init is never cached.
 
 ## Agent graphs
 
-A graph flag holds a `GraphTopology` (`root` + `edges`). `ResolveGraph`
+A graph flag holds a topology (`root` + `edges`). `ResolveGraph`
 evaluates every referenced node config; any disabled node disables the graph.
 `GraphDefinition` exposes `Root`, `GetNode`, `GetChildNodes`,
 `GetParentNodes`, `TerminalNodes`, `EdgesFrom`, `Traverse` (root first),
 `ReverseTraverse` (leaves first, root last), `RunNode` and `Route`. Agent
 packages build `XxxGraph` wrappers on `internal/sdkapi.Graph` and native runners on
-`ResolveGraph`, emitting graph events with `TrackGraphEvent`.
+`ResolveGraph`, emitting graph events with `handlerkit.TrackGraphEvent`.
 
 ## OTel setup
 
@@ -95,7 +99,7 @@ packages build `XxxGraph` wrappers on `internal/sdkapi.Graph` and native runners
 (OTLP/HTTP + gzip, `launchdarkly.project_id` / `service.name` /
 `deployment.environment` resource, W3C propagators,
 `ConversationIDSpanProcessor`). Handler packages only start spans through
-`StartHandlerRun`; they never configure OTel. The OTel SDK modules are ordinary
+`handlerkit.StartHandlerRun`; they never configure OTel. The OTel SDK modules are ordinary
 `go.mod` dependencies, so there is nothing extra to install. Endpoint and
 resource configuration (`OTEL_EXPORTER_OTLP_ENDPOINT`, `LD_SERVICE_NAME`,
 `LD_ENVIRONMENT`): see [aiserver/agents.md](aiserver/agents.md#otel-setup) and
