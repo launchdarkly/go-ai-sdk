@@ -683,7 +683,7 @@ func (g *AgentGraph) stream(ctx context.Context, input string, userCtx ldcontext
 		runTD.RunID = uuid.NewString() // each run gets its own id
 
 		spanCtx, span := otel.Tracer(kitbase.TracerPrefix+"/aiserver").Start(ctx, kitbase.GraphSpanName)
-		span.SetAttributes(attribute.String("ld.ai.graph.key", g.key))
+		span.SetAttributes(attribute.String("launchdarkly.graph.key", g.key))
 		// Context identity goes on the root handler span only, not here.
 		kitSetLDSpanAttributesFor(span, runTD, ldcontext.Context{})
 

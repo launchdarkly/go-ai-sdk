@@ -111,7 +111,7 @@ node tracks its own generation, duration and token events under a node `TrackDat
 the graph's run id. Each node's `invoke_agent` root span gets the LaunchDarkly association
 (including `launchdarkly.graph.key`) and the user's context identity through `spanIdentity`,
 because the core only reads the typed context from variables it builds itself. A non-Anthropic node runs through `GraphDefinition.RunNode` and gets no
-sub-agent tools. The `ld.ai.graph` span carries `ld.ai.graph.key`, `launchdarkly.graph.path` and
+sub-agent tools. The `launchdarkly.graph` span carries `launchdarkly.graph.key`, `launchdarkly.graph.path` and
 the summed usage and is ended on every path; the result is the root's final text.
 
 ## OTel setup
@@ -138,7 +138,7 @@ runtimes), or call it at startup to pre-warm the connection.
 | `github.com/launchdarkly/go-ai-sdk/internal/anthropicwire` | Anthropic wire mapping shared with `claudemessages`. |
 | `github.com/anthropics/anthropic-sdk-go` | Messages API client, server-tool params, streaming accumulator. |
 | `github.com/launchdarkly/go-sdk-common/v3` | `ldcontext.Context` for the wrapper and graph tracking. |
-| `go.opentelemetry.io/otel` | The `ld.ai.graph` span in `ToClaudeAgents`. |
+| `go.opentelemetry.io/otel` | The `launchdarkly.graph` span in `ToClaudeAgents`. |
 | `github.com/google/uuid` | Per-run graph run id; NotebookEdit cell ids. |
 
 ## Common pitfalls

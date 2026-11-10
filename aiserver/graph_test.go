@@ -550,7 +550,7 @@ func TestGraphStream(t *testing.T) {
 	if len(f.events("$ld:ai:graph:invocation_success")) != 1 {
 		t.Error("success not tracked")
 	}
-	// Every handler span descends from ld.ai.graph and shares its trace.
+	// Every handler span descends from launchdarkly.graph and shares its trace.
 	var graphSpanID string
 	spans := exp.GetSpans().Snapshots()
 	for _, s := range spans {
@@ -882,5 +882,44 @@ func TestGraphRoutingNormalizesHandlerMode(t *testing.T) {
 	}
 	if !reflect.DeepEqual(served, []string{"agent:root-node", "legacy:leaf-node"}) {
 		t.Errorf("served = %v", served)
+	}
+}
+
+// The graph run's span is launchdarkly.graph and carries the graph key as
+// launchdarkly.graph.key, on invoke and stream.
+func TestGraphSpanNameAndKey(t *testing.T) {
+	if kitbase.GraphSpanName != "launchdarkly.graph" {
+		t.Errorf("GraphSpanName = %q", kitbase.GraphSpanName)
+	}
+	withFake(t, twoNode(nil))
+	exp := withSpans(t)
+	rh := &recordingHandler{stream: true}
+	g := Graph("g", GraphOptions{Handlers: []*ProviderHandler{rh.handler()}})
+	if _, err := g.Invoke(bg, "q", userCtx); err != nil {
+		t.Fatal(err)
+	}
+	for range g.Stream(bg, "q", userCtx) {
+	}
+	n := 0
+	for _, s := range exp.GetSpans() {
+		if s.Name != "launchdarkly.graph" {
+			continue
+		}
+		n++
+		key := ""
+		for _, a := range s.Attributes {
+			if a.Key == "launchdarkly.graph.key" {
+				key = a.Value.AsString()
+			}
+			if strings.HasPrefix(string(a.Key), "ld.") {
+				t.Errorf("graph span has legacy attribute %s", a.Key)
+			}
+		}
+		if key != "g" {
+			t.Errorf("launchdarkly.graph.key = %q, want g", key)
+		}
+	}
+	if n != 2 {
+		t.Errorf("launchdarkly.graph spans = %d, want 2", n)
 	}
 }
