@@ -1,14 +1,11 @@
-# experimental — contributor and agent guide
+# shadowrequests — contributor and agent guide
 
-Experimental entry point. Each feature's names are documented as Experimental. A feature promoted
-to core leaves this package: Agent Skills is now package `skills`, and Evaluations from Code is
-package `evaluations`.
-
-<!-- Each feature owns one section below. Append; do not rewrite another feature's section. -->
+Experimental feature package: its names are documented as Experimental and may change in a minor
+release. When it is promoted to core, it moves out of `experimental/`.
 
 ## Shadow requests
 
-All code is in `shadow_requests.go`; tests are `shadow_requests_test.go` (package `experimental`,
+All code is in `shadow_requests.go`; tests are `shadow_requests_test.go` (package `shadowrequests`,
 for `inSample` and the `running` wait group) and `shadow_requests_surface_test.go`.
 
 The core seam is `bridge.ConfigWithOptions(args, bridge.RunOptions{...})`, which returns an
@@ -27,4 +24,4 @@ tracked once; nothing is added to A's events; `aiserver.Shutdown` cancels backgr
 `sha1("<id>.<canonical key>")[:15] / 0xFFFFFFFFFFFFFFF`, with the canonical key from
 `aiserver.ContextIdentity`.
 
-Check: `go vet ./aiserver/... && go test -race ./aiserver/experimental/ -run 'Shadow|Sampling'`.
+Check: `go vet ./aiserver/... && go test -race ./experimental/shadowrequests/ -run 'Shadow|Sampling'`.

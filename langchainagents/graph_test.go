@@ -95,7 +95,11 @@ func twoNode() *fakeLD {
 var user = ldcontext.New("u-1")
 
 func resolve(key string) *aiserver.GraphDefinition {
-	return aiserver.ResolveGraph(bg, key, user, aiserver.GraphOptions{})
+	def, err := aiserver.ResolveGraph(bg, key, user, aiserver.GraphOptions{})
+	if err != nil {
+		panic(err)
+	}
+	return def
 }
 
 // models returns a ModelFactory serving one fake model per node key.

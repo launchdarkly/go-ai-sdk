@@ -24,7 +24,7 @@ var rootSurface = []string{
 	"HandlerRequest", "HandlerResult", "HandlerRun", "HandlerSpanOptions", "HandlerStreamEvent", "ImageSource",
 	"ImageURL", "InitClient", "InitOptions", "InitWithClient", "InputDetails", "InspectConfig", "InspectResult",
 	"InvokeFunc", "JudgeConfiguration", "JudgeRef", "JudgeResult", "JudgeRunResult", "JudgeTask", "LDClient", "Message",
-	"Mode", "ModeAgent", "ModeMessages", "Model", "NativeTool", "NewCallOptions", "NewRegistry",
+	"Mode", "ModeAgent", "ModeMessages", "Model", "NativeGraphRunner", "NativeTool", "NewCallOptions", "NewRegistry",
 	"NormalizeMode", "OutputFormatInstruction", "PackageName", "PackageVersion", "ParseAiConfig",
 	"ParseJSONWithPossibleFences", "ParseTemplate", "ParseUsage", "Prompt", "ProviderHandler", "ProviderResponse",
 	"ProvidesFor", "RegisterAiSdkPackage", "Registry", "RegistryEntries", "ReportUsage", "ResolveGraph", "RouteResult",
@@ -87,7 +87,7 @@ func TestRootSurfaceIsPinned(t *testing.T) {
 // No experimental name (shadow requests) leaks onto the root.
 func TestNoExperimentalNameOnRoot(t *testing.T) {
 	root := exportedNames(t, "*.go")
-	experimental := exportedNames(t, "experimental/*.go")
+	experimental := exportedNames(t, "../experimental/shadowrequests/*.go")
 	for _, must := range []string{"ShadowConfig", "RunShadow"} {
 		if !slices.Contains(experimental, must) {
 			t.Fatalf("experimental surface lost %s; the leak check would be vacuous", must)

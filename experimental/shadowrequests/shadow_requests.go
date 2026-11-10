@@ -1,4 +1,4 @@
-package experimental
+package shadowrequests
 
 import (
 	"bytes"
@@ -36,8 +36,8 @@ import (
 // to run later with RunShadow. A shadow's response is discarded; it is
 // tracked on the normal $ld:ai:* events with isShadow.
 //
-//	shadowed, err := experimental.ShadowConfig(
-//		aiserver.ConfigArgs{Key: "my-ai-config", Handlers: handlers}, experimental.ShadowOptions{})
+//	shadowed, err := shadowrequests.ShadowConfig(
+//		aiserver.ConfigArgs{Key: "my-ai-config", Handlers: handlers}, shadowrequests.ShadowOptions{})
 //	resp, err := shadowed.Invoke(ctx, "Summarize this document", userCtx)
 
 const (

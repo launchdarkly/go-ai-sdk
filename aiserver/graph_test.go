@@ -1,16 +1,18 @@
 package aiserver
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"iter"
-	"log/slog"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	ld "github.com/launchdarkly/go-server-sdk/v7"
+	"github.com/launchdarkly/go-server-sdk/v7/ldcomponents"
+	"github.com/launchdarkly/go-server-sdk/v7/testhelpers/ldtestdata"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -109,9 +111,9 @@ func TestResolveGraphTopology(t *testing.T) {
 		"root": nodeCfg("r"), "A": nodeCfg("a"), "B": nodeCfg("b"),
 		"no-root": map[string]any{"edges": map[string]any{}},
 	})
-	def := ResolveGraph(bg, "g", userCtx, GraphOptions{})
-	if !def.Enabled || def.Root.Key != "root" || def.GetNode("A").Config.Instructions != "a" {
-		t.Fatalf("def = %+v", def)
+	def, err := ResolveGraph(bg, "g", userCtx, GraphOptions{})
+	if err != nil || !def.Enabled || def.Root.Key != "root" || def.GetNode("A").Config.Instructions != "a" {
+		t.Fatalf("def = %+v err = %v", def, err)
 	}
 	names := func(ns []*GraphNode) (out []string) {
 		for _, n := range ns {
@@ -149,8 +151,10 @@ func TestResolveGraphTopology(t *testing.T) {
 	if _, _ = def.ReverseTraverse(bg, visit); !reflect.DeepEqual(order, []string{"B", "A", "root"}) {
 		t.Errorf("reverse order = %v", order)
 	}
-	if ResolveGraph(bg, "no-root", userCtx, GraphOptions{}).Enabled || ResolveGraph(bg, "missing", userCtx, GraphOptions{}).Enabled {
-		t.Error("graph without root must be disabled")
+	for _, key := range []string{"no-root", "missing"} {
+		if d, err := ResolveGraph(bg, key, userCtx, GraphOptions{}); err != nil || d == nil || d.Enabled {
+			t.Errorf("%s: def = %+v err = %v, want disabled and nil error", key, d, err)
+		}
 	}
 }
 
@@ -183,23 +187,58 @@ func TestReverseTraverseVisitsEveryChildBeforeItsParent(t *testing.T) {
 			order = append(order, n.Key)
 			return n.Key, nil
 		}
-		v, err := ResolveGraph(bg, key, userCtx, GraphOptions{}).ReverseTraverse(bg, visit)
+		def, rerr := ResolveGraph(bg, key, userCtx, GraphOptions{})
+		if rerr != nil {
+			t.Fatal(rerr)
+		}
+		v, err := def.ReverseTraverse(bg, visit)
 		if err != nil || v != "root" || !reflect.DeepEqual(order, want) {
 			t.Errorf("%s: reverse order = %v (%v, %v), want %v", key, order, v, err, want)
 		}
 	}
 }
 
-func TestDisabledNodeDisablesGraphAndLogs(t *testing.T) {
-	var buf bytes.Buffer
-	SetLogger(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { SetLogger(slog.Default()) })
-	withFake(t, twoNode(map[string]any{"leaf-node": map[string]any{"_ldMeta": map[string]any{"enabled": false}}}))
-	if ResolveGraph(bg, "g", userCtx, GraphOptions{}).Enabled {
-		t.Error("graph should be disabled")
+func TestMissingGraphFlagIsDisabled(t *testing.T) {
+	td := ldtestdata.DataSource()
+	c, err := ld.MakeCustomClient("k", ld.Config{DataSource: td, Events: ldcomponents.NoEvents()}, time.Second)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(buf.String(), "level=ERROR") || !strings.Contains(buf.String(), "leaf-node") {
-		t.Errorf("error not logged: %s", buf.String())
+	t.Cleanup(func() { _ = Shutdown(bg) })
+	if _, err := InitWithClient(bg, c, InitOptions{OTLPEndpoint: unreachableOTLP}); err != nil {
+		t.Fatal(err)
+	}
+	def, err := ResolveGraph(bg, "missing-graph", userCtx, GraphOptions{})
+	if err != nil || def == nil || def.Enabled {
+		t.Fatalf("def = %+v err = %v, want disabled and nil error", def, err)
+	}
+	_, err = Graph("missing-graph", GraphOptions{Handlers: []*ProviderHandler{(&recordingHandler{}).handler()}}).Invoke(bg, "hi", userCtx)
+	if !errors.Is(err, ErrGraphDisabled) {
+		t.Errorf("Invoke err = %v, want ErrGraphDisabled", err)
+	}
+}
+
+func TestDisabledNodeTurnsGraphOff(t *testing.T) {
+	withFake(t, twoNode(map[string]any{"leaf-node": map[string]any{"_ldMeta": map[string]any{"enabled": false}}}))
+	def, err := ResolveGraph(bg, "g", userCtx, GraphOptions{})
+	if err != nil || def == nil || def.Enabled {
+		t.Fatalf("def = %+v err = %v, want disabled and nil error", def, err)
+	}
+	_, err = Graph("g", GraphOptions{Handlers: []*ProviderHandler{(&recordingHandler{}).handler()}}).Invoke(bg, "hi", userCtx)
+	if !errors.Is(err, ErrGraphDisabled) {
+		t.Errorf("Invoke err = %v, want ErrGraphDisabled", err)
+	}
+}
+
+func TestResolveGraphFailureReturnsDisabledDefinition(t *testing.T) {
+	// "g" evaluates to a JSON value that is not a topology object.
+	withFake(t, map[string]any{"g": map[string]any{"root": 1}})
+	def, err := ResolveGraph(bg, "g", userCtx, GraphOptions{})
+	if err == nil || def == nil || def.Enabled {
+		t.Fatalf("def = %+v err = %v, want error with a disabled definition", def, err)
+	}
+	if _, err := Graph("g", GraphOptions{Handlers: []*ProviderHandler{(&recordingHandler{}).handler()}}).Invoke(bg, "hi", userCtx); err == nil || errors.Is(err, ErrGraphDisabled) {
+		t.Errorf("Invoke err = %v, want the resolution error", err)
 	}
 }
 
@@ -243,7 +282,7 @@ func TestGraphInvoke(t *testing.T) {
 func TestGraphInvokeErrors(t *testing.T) {
 	f := withFake(t, twoNode(map[string]any{"off": map[string]any{"_ldMeta": map[string]any{"enabled": true}}}))
 	if _, err := Graph("off", GraphOptions{Handlers: []*ProviderHandler{(&recordingHandler{}).handler()}}).Invoke(bg, "", userCtx); !errors.Is(err, ErrGraphDisabled) {
-		t.Errorf("disabled graph err = %v", err)
+		t.Errorf("graph without root err = %v", err)
 	}
 	if _, err := Graph("g", GraphOptions{}).Invoke(bg, "", userCtx); err == nil {
 		t.Error("no handlers must error")
@@ -562,7 +601,7 @@ func TestGraphStreamAbandonAndErrors(t *testing.T) {
 			t.Errorf("graph span abandoned=%v status=%v", abandoned, s.Status().Code)
 		}
 	}
-	// A disabled graph surfaces its error on the first receive.
+	// A graph that does not resolve surfaces that error on the first receive.
 	var gotErr error
 	for _, err := range Graph("nope", GraphOptions{Handlers: []*ProviderHandler{rh.handler()}}).Stream(bg, "q", userCtx) {
 		gotErr = err
@@ -674,8 +713,8 @@ func TestGraphFailedResolutionIsNotCached(t *testing.T) {
 	delete(f.variations, "leaf-node") // a node that fails to resolve, e.g. a transient fetch error
 	rh := &recordingHandler{}
 	g := Graph("g", GraphOptions{Handlers: []*ProviderHandler{rh.handler()}})
-	if _, err := g.Invoke(bg, "", userCtx); !errors.Is(err, ErrGraphDisabled) {
-		t.Fatalf("first call err = %v, want ErrGraphDisabled", err)
+	if _, err := g.Invoke(bg, "", userCtx); !errors.Is(err, ErrConfigNotFound) {
+		t.Fatalf("first call err = %v, want ErrConfigNotFound", err)
 	}
 	f.variations["leaf-node"] = leaf
 	resp, err := g.Invoke(bg, "", userCtx)

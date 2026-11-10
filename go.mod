@@ -12,13 +12,13 @@ require (
 	github.com/aws/smithy-go v1.28.7
 	github.com/google/uuid v1.6.0
 	github.com/launchdarkly/go-sdk-common/v3 v3.6.0
-	github.com/launchdarkly/go-server-sdk/v7 v7.19.1
-	github.com/openai/openai-go/v3 v3.90.0
+	github.com/launchdarkly/go-server-sdk/v7 v7.21.2
+	github.com/openai/openai-go/v3 v3.91.1
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
 )
 
@@ -45,9 +45,9 @@ require (
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/launchdarkly/ccache v1.1.0 // indirect
-	github.com/launchdarkly/eventsource v1.14.0 // indirect
+	github.com/launchdarkly/eventsource v1.14.2 // indirect
 	github.com/launchdarkly/go-jsonstream/v3 v3.1.2 // indirect
-	github.com/launchdarkly/go-sdk-events/v3 v3.7.0 // indirect
+	github.com/launchdarkly/go-sdk-events/v3 v3.8.1 // indirect
 	github.com/launchdarkly/go-semver v1.0.3 // indirect
 	github.com/launchdarkly/go-server-sdk-evaluation/v3 v3.2.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
