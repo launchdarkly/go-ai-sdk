@@ -7,8 +7,9 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
 
-// AdapterOptions.Handler.CaptureContent gates content on the native run's
-// node, chat and tool spans.
+// AdapterOptions.Handler.CaptureContent gates tool content on the native
+// run's tool spans. A node opens no root span, so no span carries a node's
+// prompt or completion either way.
 func TestToClaudeAgentsCaptureContent(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -38,10 +39,14 @@ func TestToClaudeAgentsCaptureContent(t *testing.T) {
 					got[ev.Name] = true
 				}
 			}
-			for _, k := range []string{"gen_ai.prompt.0.content", "gen_ai.completion.0.content", "gen_ai.tool.call.arguments",
-				"gen_ai.tool.call.result", "gen_ai.content.prompt", "gen_ai.content.completion"} {
+			for _, k := range []string{"gen_ai.tool.call.arguments", "gen_ai.tool.call.result"} {
 				if got[k] != tc.want {
 					t.Errorf("%s present=%v, want %v", k, got[k], tc.want)
+				}
+			}
+			for _, k := range []string{"gen_ai.prompt.0.content", "gen_ai.completion.0.content", "gen_ai.content.prompt", "gen_ai.content.completion"} {
+				if got[k] {
+					t.Errorf("%s present; a node has no root to carry it", k)
 				}
 			}
 			if !got["gen_ai.tool.name"] {

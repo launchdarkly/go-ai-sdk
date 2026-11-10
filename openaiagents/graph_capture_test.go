@@ -8,8 +8,6 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
 
-var graphContentKeys = []string{"gen_ai.prompt.0.content", "gen_ai.completion.0.content", "gen_ai.tool.call.arguments", "gen_ai.tool.call.result"}
-
 // contentOnSpans reports which content attributes and events appear on any
 // exported span.
 func contentOnSpans(exp *tracetest.InMemoryExporter) map[string]bool {
@@ -47,9 +45,15 @@ func TestToOpenAIAgentsCaptureContent(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := contentOnSpans(exp)
-			for _, k := range append(graphContentKeys, "gen_ai.content.prompt", "gen_ai.content.completion") {
+			for _, k := range []string{"gen_ai.tool.call.arguments", "gen_ai.tool.call.result"} {
 				if got[k] != tc.want {
 					t.Errorf("%s present=%v, want %v", k, got[k], tc.want)
+				}
+			}
+			// A node opens no root span, so no span carries its prompt or completion.
+			for _, k := range []string{"gen_ai.prompt.0.content", "gen_ai.completion.0.content", "gen_ai.content.prompt", "gen_ai.content.completion"} {
+				if got[k] {
+					t.Errorf("%s present; a node has no root to carry it", k)
 				}
 			}
 			for _, k := range []string{"gen_ai.request.model", "gen_ai.tool.name"} {

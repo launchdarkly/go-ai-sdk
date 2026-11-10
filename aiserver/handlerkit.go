@@ -130,7 +130,10 @@ func kitStartHandlerRun(ctx context.Context, opts kitbase.HandlerSpanOptions, re
 		opts.ProviderName = opts.System
 	}
 	tracer := otel.Tracer(opts.Tracer)
-	rctx, rawRoot := tracer.Start(ctx, opts.Name)
+	rctx, rawRoot := ctx, trace.SpanFromContext(context.Background()) // non-recording
+	if !opts.NoRoot {
+		rctx, rawRoot = tracer.Start(ctx, opts.Name)
+	}
 	root := trackSpan(rawRoot)
 	r := &kitHandlerRun{opts: opts, ctx: rctx, Root: root, tracer: tracer, open: map[trace.Span]bool{root: true}, judge: judgeScopeFrom(ctx)}
 	root.SetAttributes(attribute.String("gen_ai.operation.name", opts.Operation))

@@ -223,7 +223,6 @@ func (n *nativeRun) hooks() hooks {
 // agentStart records a node's first entry ($ld:ai:graph:node, once per node)
 // and opens the node run.
 func (n *nativeRun) agentStart(a *agent) {
-	def := n.g.def
 	if !slices.Contains(n.path, a.key) {
 		n.path = append(n.path, a.key)
 		n.graphEvent("$ld:ai:graph:node", map[string]any{"nodeKey": a.key, "index": len(n.path) - 1}, 1)
@@ -233,9 +232,8 @@ func (n *nativeRun) agentStart(a *agent) {
 		p.Turns = n.rootTurns // a handoff target continues the conversation through previous_response_id
 	}
 	span := handlerkit.StartHandlerRun(n.ctx, kitbase.HandlerSpanOptions{
-		Tracer: PackageName, Name: SpanName, System: "openai", Operation: operation, RequestModel: a.model,
-	}, aiserver.HandlerRequest{}, p)
-	handlerkit.SetLDSpanAttributesFor(span.RootSpan(), handlerkit.NodeTrackData(def.GetNode(a.key), def.Key, n.runID), n.userCtx)
+		Tracer: PackageName, System: "openai", Operation: operation, RequestModel: a.model, NoRoot: true,
+	}, aiserver.HandlerRequest{}, p) // a node's spans nest under the graph span; its $ld:ai:graph:node event names it
 	n.runner.span = span
 	n.seg = &segment{a: a, from: n.from, span: span, start: time.Now()}
 }

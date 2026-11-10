@@ -267,7 +267,7 @@ func (r *graphRun) runNode(ctx context.Context, sa *subAgent, input string, hist
 		vars = map[string]any{}
 	}
 	vars[kitbase.VarLDContext] = kitbase.ContextToMap(r.userCtx)
-	delete(vars, kitbase.VarLD) // the association is written from spanIdentity
+	delete(vars, kitbase.VarLD) // a node opens no root, so it writes no association
 	tools := r.tools
 	if r.tracking {
 		tools = handlerkit.WrapToolHandlers(tools, r.userCtx, td)
@@ -275,7 +275,7 @@ func (r *graphRun) runNode(ctx context.Context, sa *subAgent, input string, hist
 	start := time.Now()
 	res, err := r.agent.run(ctx, aiserver.HandlerRequest{
 		Config: n.Config, UserInput: input, Variables: vars, History: history, ToolHandlers: tools,
-	}, sa.tools, &spanIdentity{td: td, userCtx: r.userCtx}, nil)
+	}, sa.tools, true, nil)
 	r.nodeEvent("$ld:ai:duration:total", td, float64(time.Since(start).Milliseconds()))
 	if err != nil {
 		r.nodeEvent("$ld:ai:generation:error", td, 1)

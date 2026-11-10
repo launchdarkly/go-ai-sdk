@@ -75,6 +75,9 @@ type HandlerSpanOptions struct {
 	Operation    string // gen_ai.operation.name; "" means "invoke_agent"
 	RequestModel string
 	ProviderName string // gen_ai.provider.name; "" means System
+	// NoRoot opens no root span: turns and tool calls become children of
+	// the span in ctx. A native graph node runs this way, under the graph span.
+	NoRoot bool
 }
 
 // VarLD and VarLDContext are the handler variables entries: the run's track

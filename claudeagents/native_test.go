@@ -12,6 +12,7 @@ import (
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
@@ -111,31 +112,38 @@ func TestToClaudeAgentsRun(t *testing.T) {
 	if ga["launchdarkly.graph.key"] != "g" || ga["launchdarkly.graph.path"] != "root->leaf" || ga["gen_ai.usage.total_tokens"] != "16" {
 		t.Errorf("graph span attrs = %v", ga)
 	}
-	q := e.spans(SpanName)
-	if len(q) != 2 {
-		t.Fatalf("want 2 invoke_agent spans, got %d", len(q))
+	// The run has no per-node invoke_agent root: every node span descends
+	// from the graph span (the leaf's through the root's sub-agent tool span),
+	// and each node is identified by its $ld:ai:graph:node event.
+	if q := e.spans(SpanName); len(q) != 0 {
+		t.Errorf("per-node %s spans = %d, want 0", SpanName, len(q))
 	}
-	// the leaf runs inside the root's execute_tool span
+	all := e.exp.GetSpans().Snapshots()
+	parent := map[trace.SpanID]trace.SpanID{}
+	for _, s := range all {
+		parent[s.SpanContext().SpanID()] = s.Parent().SpanID()
+	}
 	tools := e.spans("execute_tool mcp__subagents__leaf")
-	if len(tools) != 1 || q[0].Parent().SpanID() != tools[0].SpanContext().SpanID() {
-		t.Error("leaf span not nested under the sub-agent tool span")
+	if len(tools) != 1 {
+		t.Fatalf("sub-agent tool spans = %d", len(tools))
 	}
-	// each node's root span carries the graph key and the context
-	// identity; child chat / execute_tool spans carry neither.
-	for _, s := range q {
-		got := attrs(s)
-		ff := map[string]string{}
-		for _, ev := range s.Events() {
-			if ev.Name == "feature_flag" {
-				for _, a := range ev.Attributes {
-					ff[string(a.Key)] = a.Value.AsString()
-				}
-			}
+	var leafChat bool
+	for _, s := range all {
+		if s.Name() == kitbase.GraphSpanName {
+			continue
 		}
-		if got["launchdarkly.graph.key"] != "g" || got["context.contextKeys.user"] != "user-123" ||
-			ff["feature_flag.context.id"] != "user-123" || ff["feature_flag.contextKeys"] != `{"user":"user-123"}` {
-			t.Errorf("node root attrs=%v feature_flag=%v", got, ff)
+		id, under := s.SpanContext().SpanID(), false
+		for id.IsValid() && !under {
+			id = parent[id]
+			under = id == g[0].SpanContext().SpanID()
 		}
+		if !under {
+			t.Errorf("%s does not descend from the graph span", s.Name())
+		}
+		leafChat = leafChat || (strings.HasPrefix(s.Name(), "chat ") && s.Parent().SpanID() == tools[0].SpanContext().SpanID())
+	}
+	if !leafChat {
+		t.Error("the leaf's chat span is not nested under the sub-agent tool span")
 	}
 	for _, s := range e.exp.GetSpans().Snapshots() {
 		if s.Name() == SpanName || s.Name() == kitbase.GraphSpanName {
