@@ -79,9 +79,9 @@ func TestSurfaceIsPinned(t *testing.T) {
 }
 
 // Evaluations is its own package. Neither the aiserver root nor the
-// experimental entry point imports it, so neither can re-export its names.
+// shadow requests package imports it, so neither can re-export its names.
 func TestNotReexportedFromAiserver(t *testing.T) {
-	for _, glob := range []string{"../aiserver/*.go", "../aiserver/experimental/*.go"} {
+	for _, glob := range []string{"../aiserver/*.go", "../experimental/shadowrequests/*.go"} {
 		for _, f := range parseDir(t, glob) {
 			for _, imp := range f.Imports {
 				if p, _ := strconv.Unquote(imp.Path.Value); p == "github.com/launchdarkly/go-ai-sdk/evaluations" {
@@ -90,20 +90,9 @@ func TestNotReexportedFromAiserver(t *testing.T) {
 			}
 		}
 	}
-	// The experimental entry point keeps no evaluations alias.
-	if slices.Contains(exportedNames(t, "../aiserver/experimental/*.go"), "InitEvaluations") {
-		t.Error("aiserver/experimental still exports InitEvaluations")
-	}
-}
-
-// Core never imports experimental code.
-func TestDoesNotImportExperimentalCode(t *testing.T) {
-	for _, f := range parseDir(t, "*.go") {
-		for _, imp := range f.Imports {
-			if p, _ := strconv.Unquote(imp.Path.Value); strings.Contains(p, "/experimental") {
-				t.Errorf("evaluations imports %s", p)
-			}
-		}
+	// Shadow requests keeps no evaluations alias.
+	if slices.Contains(exportedNames(t, "../experimental/shadowrequests/*.go"), "InitEvaluations") {
+		t.Error("experimental/shadowrequests exports InitEvaluations")
 	}
 }
 

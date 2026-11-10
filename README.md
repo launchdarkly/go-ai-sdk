@@ -21,7 +21,7 @@ Requires Go 1.26.
 | Package | Tier | What it does |
 |---|---|---|
 | [`aiserver`](aiserver) | 0 | Core client: `Config`, `Graph`, `ResolveGraph`, `InspectConfig`, registry, lifecycle, judges, telemetry |
-| [`aiserver/experimental`](aiserver/experimental) | 0 | Experimental entry point: shadow requests |
+| [`experimental/shadowrequests`](experimental/shadowrequests) | 0 | Experimental: shadow requests |
 | [`skills`](skills) | 1 | Agent Skills: skill references on AI Configs, verified content, materialization to disk, delivery store, watcher |
 | [`evaluations`](evaluations) | 1 | Evaluations from Code: run a dataset through a handler, score it with judges and scorers, gate CI on the verdict |
 | [`claudemessages`](claudemessages) | 1 | Anthropic Messages API handler — `{Anthropic, messages}` |

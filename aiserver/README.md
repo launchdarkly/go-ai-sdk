@@ -213,4 +213,4 @@ go vet ./...
 ```
 
 Experimental features (shadow requests) live in
-[`aiserver/experimental`](experimental).
+[`experimental/shadowrequests`](../experimental/shadowrequests).
