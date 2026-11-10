@@ -24,7 +24,7 @@ var rootSurface = []string{
 	"HandlerRequest", "HandlerResult", "HandlerRun", "HandlerSpanOptions", "HandlerStreamEvent", "ImageSource",
 	"ImageURL", "InitClient", "InitOptions", "InitWithClient", "InputDetails", "InspectConfig", "InspectResult",
 	"InvokeFunc", "JudgeConfiguration", "JudgeRef", "JudgeResult", "JudgeRunResult", "JudgeTask", "LDClient", "Message",
-	"Mode", "ModeAgent", "ModeMessages", "Model", "NativeTool", "NewCallOptions", "NewRegistry",
+	"Mode", "ModeAgent", "ModeMessages", "Model", "NativeGraphRunner", "NativeTool", "NewCallOptions", "NewRegistry",
 	"NormalizeMode", "OutputFormatInstruction", "PackageName", "PackageVersion", "ParseAiConfig",
 	"ParseJSONWithPossibleFences", "ParseTemplate", "ParseUsage", "Prompt", "ProviderHandler", "ProviderResponse",
 	"ProvidesFor", "RegisterAiSdkPackage", "Registry", "RegistryEntries", "ReportUsage", "ResolveGraph", "RouteResult",

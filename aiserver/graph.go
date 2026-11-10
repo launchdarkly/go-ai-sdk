@@ -114,6 +114,14 @@ type GraphResponse struct {
 	JudgeResults map[string]JudgeResult `json:"judgeResults,omitempty"`
 }
 
+// NativeGraphRunner runs a graph on a provider's own agent framework. The
+// native adapters (claudeagents.ToClaudeAgents, openaiagents.ToOpenAIAgents,
+// langchainagents.ToLangGraph) return concrete runner types that satisfy it,
+// so callers can hold any of them behind one interface.
+type NativeGraphRunner interface {
+	Invoke(ctx context.Context, input string, opts ...CallOption) (GraphResponse, error)
+}
+
 // GraphStreamEvent is one item from Graph(...).Stream. Type is
 // node_start, chunk, node_done, handoff or done. JudgeResults on node_done
 // holds that node's own judges; on done it holds only the graph-level judge.

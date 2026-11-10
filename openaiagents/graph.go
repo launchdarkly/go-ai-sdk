@@ -41,6 +41,8 @@ type NativeGraphOptions struct {
 	Handler Options
 }
 
+var _ aiserver.NativeGraphRunner = (*NativeGraph)(nil)
+
 // NativeGraph runs a resolved graph as one multi-agent run: one agent per
 // node, a handoff tool per outgoing edge, starting at the root.
 type NativeGraph struct {
