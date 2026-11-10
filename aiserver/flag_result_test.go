@@ -173,6 +173,7 @@ func TestGraphFeatureFlagResult(t *testing.T) {
 			if capture == CaptureOff {
 				checkResult(t, "off/graph", evs[kitbase.GraphSpanName], "gv", `"gv"`)
 				checkResult(t, "off/root-node", evs["root root-node"], "v1", `"v1"`)
+				checkResult(t, "off/leaf-node", evs["root leaf-node"], "v1", `"v1"`)
 				return
 			}
 			checkResult(t, "on/graph", evs[kitbase.GraphSpanName], "gv", flagJSON(graph))
