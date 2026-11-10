@@ -104,10 +104,9 @@ func TestToClaudeAgentsRun(t *testing.T) {
 		t.Fatal("graph span not ended OK")
 	}
 	ga := attrs(g[0])
-	for k := range ga {
-		if strings.HasPrefix(k, "context.contextKeys.") {
-			t.Errorf("launchdarkly.graph carries context identity %s; it belongs on handler root spans only", k)
-		}
+	// With no per-node root, the graph span carries the run's context identity.
+	if ga["context.contextKeys.user"] != "user-123" {
+		t.Errorf("graph span context identity = %q, want user-123", ga["context.contextKeys.user"])
 	}
 	if ga["launchdarkly.graph.key"] != "g" || ga["launchdarkly.graph.path"] != "root->leaf" || ga["gen_ai.usage.total_tokens"] != "16" {
 		t.Errorf("graph span attrs = %v", ga)

@@ -91,7 +91,7 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
   node's. `$ld:ai:graph:path` is never tracked.
 - **Spans** — handler: root `invoke_agent` (`gen_ai.operation.name = invoke_agent`),
   `chat <model>` / `execute_tool <name>` children. ToLangGraph: `launchdarkly.graph` with
-  `launchdarkly.graph.key`, LD association attributes without context identity, usage,
+  `launchdarkly.graph.key`, LD association attributes and the context identity, usage,
   `launchdarkly.graph.path`; ended on every path. A node run opens no root span: its `chat` /
   `execute_tool` spans (handoff and NativeTool calls included) are children of the graph span.
 - **Streaming** — `llms.WithStreamingFunc` deltas are `chunk` events; `done.output` joins every

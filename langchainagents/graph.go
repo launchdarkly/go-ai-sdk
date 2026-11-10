@@ -111,7 +111,7 @@ func (g *LangGraph) Invoke(ctx context.Context, input string, opts ...aiserver.C
 	spanCtx, span := otel.Tracer(PackageName).Start(ctx, kitbase.GraphSpanName)
 	defer span.End()
 	span.SetAttributes(attribute.String("launchdarkly.graph.key", def.Key))
-	handlerkit.SetLDSpanAttributesFor(span, r.graphTD, ldcontext.Context{}) // identity belongs on handler root spans only
+	handlerkit.SetLDSpanAttributesFor(span, r.graphTD, r.userCtx) // a node opens no root span, so the run's context identity goes here
 	start := time.Now()
 
 	response, err := r.run(spanCtx, input, co.History)

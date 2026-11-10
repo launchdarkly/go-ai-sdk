@@ -361,10 +361,9 @@ func TestToLangGraphRun(t *testing.T) {
 		spans[0].Status().Code != codes.Ok || spans[0].EndTime().IsZero() {
 		t.Errorf("graph span = %v %v", a, spans[0].Status())
 	}
-	for k := range a {
-		if strings.HasPrefix(k, "context.") {
-			t.Errorf("graph span carries identity %s", k)
-		}
+	// With no per-node root, the graph span carries the run's context identity.
+	if a["context.contextKeys.user"] != "u-1" {
+		t.Errorf("graph span context identity = %q, want u-1", a["context.contextKeys.user"])
 	}
 	// The run has no per-node invoke_agent root: each node's chat and
 	// execute_tool spans are children of the graph span, which identifies the

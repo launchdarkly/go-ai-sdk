@@ -169,10 +169,9 @@ func TestToOpenAIAgentsRun(t *testing.T) {
 		t.Fatalf("graph spans = %v", spansByName(exp))
 	}
 	a := attrs(spans[0])
-	for k := range a {
-		if strings.HasPrefix(k, "context.contextKeys.") {
-			t.Errorf("launchdarkly.graph carries context identity %s; it belongs on handler root spans only", k)
-		}
+	// With no per-node root, the graph span carries the run's context identity.
+	if a["context.contextKeys.user"] != "u-1" {
+		t.Errorf("graph span context identity = %q, want u-1", a["context.contextKeys.user"])
 	}
 	if a["launchdarkly.graph.key"] != "g" || a["launchdarkly.graph.path"] != "triage->billing" || a["gen_ai.usage.total_tokens"] != "18" ||
 		spans[0].Status().Code != codes.Ok {
