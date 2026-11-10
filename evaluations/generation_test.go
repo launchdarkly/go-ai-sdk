@@ -374,7 +374,10 @@ func TestTrajectoryPerRow(t *testing.T) {
 	if gens[1].status != statusError {
 		t.Fatal("row 1 should have failed but kept its calls")
 	}
-	f := generationFields(gens[0])
+	f, err := generationFields(gens[0])
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, k := range []string{"trajectory", "tools", "toolCalls"} {
 		if _, has := f[k]; has {
 			t.Fatalf("generation event carries %s", k)

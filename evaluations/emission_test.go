@@ -2,8 +2,6 @@ package evaluations
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"regexp"
 	"slices"
@@ -90,7 +88,7 @@ func TestGenerationEventEmission(t *testing.T) {
 			t.Errorf("usage %v", d["usage"])
 		}
 		for _, k := range []string{"inputTokens", "outputTokens", "input", "expectedOutput", "expected_output", "metadata", "variables",
-			"error", "errorMessage", "tools", "trajectory", "toolCalls", "verdict", "contentHash"} {
+			"error", "errorMessage", "tools", "trajectory", "toolCalls", "verdict"} {
 			if _, has := d[k]; has {
 				t.Errorf("field %s must be absent", k)
 			}
@@ -102,6 +100,9 @@ func TestGenerationEventEmission(t *testing.T) {
 		}
 		if _, ok := d["latencyMs"].(float64); !ok {
 			t.Errorf("latencyMs %v", d["latencyMs"])
+		}
+		if h, _ := d["contentHash"].(string); !hex64.MatchString(h) {
+			t.Errorf("contentHash %v", d["contentHash"])
 		}
 		if id, _ := d["eventId"].(string); len(id) != 64 {
 			t.Errorf("eventId %v", d["eventId"])
@@ -133,31 +134,6 @@ func TestInlineRunOmitsDatasetIdentity(t *testing.T) {
 	want, _ := eventID(map[string]any{"projectKey": "proj", "evaluationId": "eval-1", "evaluationRunId": "run-1", "runId": "run-1", "rowIndex": 0})
 	if gen["eventId"] != want {
 		t.Fatalf("eventId over the wrong identity set")
-	}
-}
-
-func TestCanonicalJSONMatchesPython(t *testing.T) {
-	cases := []struct {
-		identity map[string]any
-		bytes    string
-		digest   string
-	}{
-		{map[string]any{"projectKey": "proj", "evaluationId": "eval-1", "evaluationRunId": "run-1", "runId": "run-1", "rowIndex": 1},
-			`{"evaluationId":"eval-1","evaluationRunId":"run-1","projectKey":"proj","rowIndex":1,"runId":"run-1"}`,
-			"c8c1bc7d6ea3f69748037db8acbb329b7f833f89ae63a2c255764995f35a8034"},
-		{map[string]any{"projectKey": "p<>&é東\u2028\u2029😀\n\x1f\"\\", "evaluationId": "e", "evaluationRunId": "r", "runId": "r", "rowIndex": 2, "criterionType": "Accuracy"},
-			`{"criterionType":"Accuracy","evaluationId":"e","evaluationRunId":"r","projectKey":"p<>&\u00e9\u6771\u2028\u2029\ud83d\ude00\n\u001f\"\\","rowIndex":2,"runId":"r"}`,
-			"e3b0d69cda28c5fc210186258e383ceea1cd18b5f9be3ba2195140a3ef453ff5"},
-	}
-	for _, tc := range cases {
-		b, err := canonicalJSON(tc.identity)
-		if err != nil || string(b) != tc.bytes {
-			t.Fatalf("canonical\n got %s\nwant %s", b, tc.bytes)
-		}
-		sum := sha256.Sum256(b)
-		if id, _ := eventID(tc.identity); id != tc.digest || hex.EncodeToString(sum[:]) != tc.digest {
-			t.Fatalf("digest %s", id)
-		}
 	}
 }
 

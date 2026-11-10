@@ -14,7 +14,7 @@ by provider and mode. Its exported names are pinned in `surface_test.go`.
 | `steps.go` | Management API steps, in order: AI Config reads (variation tool warnings), dataset resolution, record creation, inline upload/cancel, summary polling. No tool request. |
 | `runner.go` | Validation entry, orchestration, bounded worker pool, generation phase (trajectory recorder per row), judge resolution and invocation, scorers. |
 | `spans.go` | Row, criterion, and fallback `chat` / `execute_tool` spans; content on them follows the capture setting. |
-| `events.go` | Canonical JSON / `eventId` (byte-identical to Python), payload building, flush-bounded emitter with per-event failure isolation. |
+| `events.go` | RFC 8785 canonical JSON, `eventId` and `contentHash` (the generation event sends the normalized output it hashed: NaN and ±Inf as null), payload building, flush-bounded emitter with per-event failure isolation. |
 | `*_test.go` | One file per feature area; `harness_test.go` holds the recording transport, stub LD client and seams; `surface_test.go` pins the exported names and calls them from outside the package. |
 
 Seams (package vars, replaced by tests): `getClient`, `initClient`,
