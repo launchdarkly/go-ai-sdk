@@ -124,7 +124,8 @@ is already a dependency of `aiserver`; there is no extra to install. See the cor
 
 ## `InitClient()`: when to call it
 
-Lazy initialization is the default: `aiserver.Config(...).Invoke`, `ClaudeGraph(...).Invoke` and
+Lazy initialization is the default: `aiserver.Config(...).Invoke`, `Invoke` on the graph
+`ClaudeGraph` returns (`g, err := ClaudeGraph(...)`, then `g.Invoke(...)`) and
 `aiserver.ResolveGraph` initialize the client from `LD_SDK_KEY` on first use. Call
 `aiserver.InitClient` explicitly for custom options (base URIs, OTLP endpoint, service name),
 call `aiserver.InitWithClient` to bring your own LaunchDarkly client (BYOC, including edge
