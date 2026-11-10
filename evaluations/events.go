@@ -63,7 +63,19 @@ func canonicalJSON(v any) ([]byte, error) {
 // 0, and NaN or ±Inf becomes nil (null), as JSON.stringify writes them. The
 // RFC would reject non-finite numbers instead; the SDK contract writes null.
 // The generation event carries this tree too, so it holds what was hashed.
+// A map or slice that contains itself is an error, as json.Marshal reports it.
 func jcsValue(v any) (any, error) {
+	return jcsWalk(v, map[jcsRef]bool{})
+}
+
+// jcsRef names a map or slice on the walk stack. A slice also needs its
+// length: s[:1] and s share a pointer but are different values.
+type jcsRef struct {
+	p uintptr
+	n int
+}
+
+func jcsWalk(v any, stack map[jcsRef]bool) (any, error) {
 	if isNil(v) {
 		return nil, nil
 	}
@@ -74,9 +86,15 @@ func jcsValue(v any) (any, error) {
 		f, _ := strconv.ParseFloat(string(x), 64) // out of range parses to ±Inf, written as null
 		return jcsNumber(f), nil
 	case map[string]any:
+		ref := jcsRef{reflect.ValueOf(x).Pointer(), 0}
+		if stack[ref] {
+			return nil, fmt.Errorf("evaluations: canonical JSON: encountered a cycle via %T", x)
+		}
+		stack[ref] = true
+		defer delete(stack, ref)
 		out := make(map[string]any, len(x))
 		for k, e := range x {
-			n, err := jcsValue(e)
+			n, err := jcsWalk(e, stack)
 			if err != nil {
 				return nil, err
 			}
@@ -84,9 +102,17 @@ func jcsValue(v any) (any, error) {
 		}
 		return out, nil
 	case []any:
+		if len(x) > 0 {
+			ref := jcsRef{reflect.ValueOf(x).Pointer(), len(x)}
+			if stack[ref] {
+				return nil, fmt.Errorf("evaluations: canonical JSON: encountered a cycle via %T", x)
+			}
+			stack[ref] = true
+			defer delete(stack, ref)
+		}
 		out := make([]any, len(x))
 		for i, e := range x {
-			n, err := jcsValue(e)
+			n, err := jcsWalk(e, stack)
 			if err != nil {
 				return nil, err
 			}
@@ -117,7 +143,7 @@ func jcsValue(v any) (any, error) {
 	if err := dec.Decode(&decoded); err != nil {
 		return nil, err
 	}
-	return jcsValue(decoded)
+	return jcsWalk(decoded, stack) // a fresh tree: json.Marshal already rejected cycles
 }
 
 func jcsNumber(f float64) any {

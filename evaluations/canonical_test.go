@@ -240,3 +240,32 @@ func TestWriteJCSRejectsUnhandledTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestCanonicalJSONRejectsCycles(t *testing.T) {
+	m := map[string]any{}
+	m["self"] = m
+	s := []any{nil}
+	s[0] = s
+	through := map[string]any{}
+	through["list"] = []any{through}
+	for name, v := range map[string]any{"map": m, "slice": s, "map through slice": through} {
+		if b, err := canonicalJSON(v); err == nil || !strings.Contains(err.Error(), "encountered a cycle") {
+			t.Errorf("%s: got %q, err %v", name, b, err)
+		}
+	}
+	// A handler returning such an output loses only its generation event.
+	if f, err := generationFields(&genResult{status: "SUCCESS", output: m}); err == nil {
+		t.Errorf("generationFields: got %v, want an error", f)
+	}
+}
+
+func TestCanonicalJSONSharedValuesAreNotCycles(t *testing.T) {
+	shared := map[string]any{"k": "v"}
+	list := []any{1.0, 2.0}
+	v := map[string]any{"a": shared, "b": shared, "c": []any{list, list, list[:1]}}
+	b, err := canonicalJSON(v)
+	want := `{"a":{"k":"v"},"b":{"k":"v"},"c":[[1,2],[1,2],[1]]}`
+	if err != nil || string(b) != want {
+		t.Errorf("got %s, err %v; want %s", b, err, want)
+	}
+}
