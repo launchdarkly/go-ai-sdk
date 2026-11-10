@@ -11,7 +11,7 @@ by provider and mode. Its exported names are pinned in `surface_test.go`.
 | `types.go` | Public types, sentinel errors, criterion constructors (`NewJudge`, `NewScorer`) and wire shapes. |
 | `tools.go` | `ToolsClient` (`EvaluationsModule.Tools`): `Get` validates the key and implementation, reads `ai-tools/<key>` and returns a library `EvalTool` with its pinned version and project. The only tool request. |
 | `validate.go` | Every pre-I/O check: pool, generation mode/coverage/prompt, tools (key, implementation, inline schema or library project, case-folded collisions, in list order), inline rows (strict JSON), criteria. Shared `selectHandler`. |
-| `steps.go` | Management API steps, in order: AI Config reads (variation tool warnings), dataset resolution, record creation, inline upload/cancel, summary polling. No tool request. |
+| `steps.go` | Management API steps, in order: AI Config reads (variation tool warnings), dataset resolution, record creation, inline upload/cancel, summary polling, run verdict wait. No tool request. |
 | `runner.go` | Validation entry, orchestration, bounded worker pool, generation phase (trajectory recorder per row), judge resolution and invocation, scorers. |
 | `spans.go` | Row, criterion, and fallback `chat` / `execute_tool` spans; content on them follows the capture setting. |
 | `events.go` | Canonical JSON / `eventId` (byte-identical to Python), payload building, flush-bounded emitter with per-event failure isolation. |
@@ -34,8 +34,8 @@ type ToolsClient                 // method: Get(ctx, key string, impl aiserver.T
 type EvalTool                    // methods: Source() ToolSource, Version() int, ProjectKey() string
 type InitEvaluationsOptions RunOptions GenerationConfig GenerationMode GenerationOverrides AIConfigRef ToolSource
 type DatasetRow Dataset DatasetKey InlineRows Criterion Judge JudgeOptions Scorer ScorerOptions
-type ScorerFunc SuccessDirection EvalRunResult RunSummary APIError
-const GenerationModeCompletion GenerationModeAgent ToolSourceInline ToolSourceLibrary HigherIsBetter LowerIsBetter
+type ScorerFunc SuccessDirection EvalRunResult RunSummary CriterionSummary Verdict APIError
+const GenerationModeCompletion GenerationModeAgent ToolSourceInline ToolSourceLibrary HigherIsBetter LowerIsBetter VerdictPass VerdictFail
 var ErrInvalidArgument ErrMissingCredential ErrNoClient ErrAPI ErrTransport
 var ErrInvalidResponse ErrNotFound ErrInvalidConfig ErrJudgeResolution
 var ErrUploadFailed ErrPollTimeout

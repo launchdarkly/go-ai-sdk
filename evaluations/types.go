@@ -404,20 +404,59 @@ type RunOptions struct {
 	PollTimeout  time.Duration
 }
 
-// RunSummary are the run's row counts.
+// Verdict is LaunchDarkly's ruling on a run, or on one criterion, against a
+// pass rate threshold. The zero value means no verdict: none was recorded,
+// none was served, or LaunchDarkly returned a value this release does not
+// recognise.
+type Verdict string
+
+// The verdicts this release recognises.
+const (
+	VerdictPass Verdict = "pass"
+	VerdictFail Verdict = "fail"
+)
+
+// CriterionSummary is one criterion's row counts and pass-rate outcome.
+// Errored rows count against the pass rate.
+type CriterionSummary struct {
+	// CriterionType is the judge key or scorer name.
+	CriterionType string
+	// PassRateThreshold is the threshold pinned on the run's evaluation, or nil.
+	PassRateThreshold *float64
+	PassedRows        int
+	FailedRows        int
+	ErrorRows         int
+	// PassRate is the criterion's passed rows over all rows, or nil.
+	PassRate *float64
+	// PassRateVerdict is the criterion's verdict, or "" when there is none.
+	PassRateVerdict Verdict
+}
+
+// RunSummary are the run's row counts and per-criterion summaries.
 type RunSummary struct {
 	TotalRows   int
 	PassedRows  int
 	FailedRows  int
 	ErrorRows   int
 	PendingRows int
+	// CriterionSummaries hold one entry per criterion on the run's
+	// evaluation, in the order LaunchDarkly returned them. Empty when
+	// LaunchDarkly does not serve them for the project.
+	CriterionSummaries []CriterionSummary
 }
 
 // EvalRunResult is the outcome of a run.
 type EvalRunResult struct {
-	// Passed is true iff the terminal summary has no error and no failed rows.
+	// Passed follows Verdict when there is one. Without one, it is true iff
+	// the terminal summary has no error and no failed rows.
 	Passed  bool
 	URL     string
 	RunID   string
 	Summary RunSummary
+	// Verdict is LaunchDarkly's ruling on the run: VerdictFail when any
+	// criterion missed its pass rate threshold, VerdictPass otherwise. It is
+	// "" when no criterion on the run's evaluation has a pass rate threshold,
+	// when LaunchDarkly does not serve verdicts for the project, or when the
+	// verdict could not be read in time.
+	Verdict Verdict
 }

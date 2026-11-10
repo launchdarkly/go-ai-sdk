@@ -18,13 +18,14 @@ import (
 // surface pins the exported names of package evaluations. A new or removed
 // name fails here, so it shows in review.
 var surface = []string{
-	"AIConfigRef", "APIError", "Criterion", "Dataset", "DatasetKey", "DatasetRow", "ErrAPI", "ErrInvalidArgument",
+	"AIConfigRef", "APIError", "Criterion", "CriterionSummary", "Dataset", "DatasetKey", "DatasetRow", "ErrAPI", "ErrInvalidArgument",
 	"ErrInvalidConfig", "ErrInvalidResponse", "ErrJudgeResolution", "ErrMissingCredential", "ErrNoClient",
 	"ErrNotFound", "ErrPollTimeout", "ErrTransport", "ErrUploadFailed", "EvalRunResult", "EvalTool",
 	"EvaluationsModule", "GenerationConfig", "GenerationMode", "GenerationModeAgent", "GenerationModeCompletion",
 	"GenerationOverrides", "HigherIsBetter", "InitEvaluations", "InitEvaluationsOptions", "InlineRows", "Judge",
 	"JudgeOptions", "LowerIsBetter", "NewJudge", "NewScorer", "RunOptions", "RunSummary", "Scorer", "ScorerFunc",
 	"ScorerOptions", "SuccessDirection", "ToolSource", "ToolSourceInline", "ToolSourceLibrary", "ToolsClient",
+	"Verdict", "VerdictFail", "VerdictPass",
 }
 
 // parseDir parses the non-test .go files matching glob.

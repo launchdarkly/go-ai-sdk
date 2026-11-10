@@ -32,6 +32,9 @@ var (
 	}
 	defaultPollInterval = 2 * time.Second
 	defaultPollTimeout  = 3 * time.Minute
+	// verdictWaitTimeout bounds the wait for a run verdict, measured from
+	// the first run read. Not a Run option; a var so tests can patch it.
+	verdictWaitTimeout = 30 * time.Second
 )
 
 const defaultConcurrency = 10
