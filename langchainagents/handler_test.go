@@ -115,7 +115,11 @@ func collect(t *testing.T, h *aiserver.ProviderHandler, req aiserver.HandlerRequ
 
 // factory and metadata.
 func TestFactory(t *testing.T) {
-	a, b := NewHandler(Options{}), NewHandler(Options{CaptureContent: aiserver.CaptureOn})
+	a, err := NewHandler(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := NewHandler(Options{CaptureContent: aiserver.CaptureOn})
 	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "*", Mode: aiserver.ModeAgent}) {
 		t.Errorf("providesFor = %+v", a.ProvidesFor)
 	}

@@ -30,25 +30,26 @@ var exampleTools = map[string]aiserver.ToolHandler{
 var registry *aiserver.Registry
 
 func register() {
-	handlers := []*aiserver.ProviderHandler{
-		openaimessages.NewHandler(openaimessages.Options{}),
-		openaiagents.NewHandler(openaiagents.Options{}),
-		claudemessages.NewHandler(claudemessages.Options{}),
-		claudeagents.NewHandler(claudeagents.Options{}),
-		langchainmessages.NewHandler(langchainmessages.Options{}),
-		// {*, agent}: serves agent configs no provider-specific handler claims.
-		langchainagents.NewHandler(langchainagents.Options{}),
+	var handlers []*aiserver.ProviderHandler
+	// add registers a handler, or reports why it could not be built.
+	add := func(name string) func(*aiserver.ProviderHandler, error) {
+		return func(h *aiserver.ProviderHandler, err error) {
+			if err != nil {
+				fmt.Fprintln(os.Stderr, name, "not registered:", err)
+				return
+			}
+			handlers = append(handlers, h)
+		}
 	}
-	// Bedrock handlers need an AWS configuration; skip them when none loads.
-	if h, err := bedrockmessages.NewHandler(bedrockmessages.Options{}); err == nil {
-		handlers = append(handlers, h)
-	} else {
-		fmt.Fprintln(os.Stderr, "bedrock-messages not registered:", err)
-	}
-	if h, err := bedrockagents.NewHandler(bedrockagents.Options{}); err == nil {
-		handlers = append(handlers, h)
-	} else {
-		fmt.Fprintln(os.Stderr, "bedrock-agents not registered:", err)
-	}
+	add("openai-messages")(openaimessages.NewHandler(openaimessages.Options{}))
+	add("openai-agents")(openaiagents.NewHandler(openaiagents.Options{}))
+	add("claude-messages")(claudemessages.NewHandler(claudemessages.Options{}))
+	add("claude-agents")(claudeagents.NewHandler(claudeagents.Options{}))
+	add("langchain-messages")(langchainmessages.NewHandler(langchainmessages.Options{}))
+	// {*, agent}: serves agent configs no provider-specific handler claims.
+	add("langchain-agents")(langchainagents.NewHandler(langchainagents.Options{}))
+	// Bedrock handlers need an AWS configuration; they are skipped when none loads.
+	add("bedrock-messages")(bedrockmessages.NewHandler(bedrockmessages.Options{}))
+	add("bedrock-agents")(bedrockagents.NewHandler(bedrockagents.Options{}))
 	registry = aiserver.NewRegistry(aiserver.RegistryEntries{Handlers: handlers, Tools: exampleTools})
 }

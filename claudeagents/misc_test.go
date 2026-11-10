@@ -71,7 +71,7 @@ func TestSDKUsage(t *testing.T) {
 		{"claude-agents.claudeAgents", func(e *env) {
 			_, _ = ClaudeAgents(bg, "cfg", "q", user, &InvokeOptions{Handler: e.opts})
 		}},
-		{"claude-agents.claudeGraph", func(e *env) { _, _ = ClaudeGraph("g", GraphOptions{}, e.opts).Invoke(bg, "q", user) }},
+		{"claude-agents.claudeGraph", func(e *env) { g, _ := ClaudeGraph("g", GraphOptions{}, e.opts); _, _ = g.Invoke(bg, "q", user) }},
 		{"claude-agents.toClaudeAgents", func(e *env) { ToClaudeAgents(nil, nil) }},
 	}
 	for _, tc := range cases {

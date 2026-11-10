@@ -26,10 +26,11 @@ import (
 // package's agent handler as the only handler (openaiGraph). Any
 // options.Handlers value is replaced, so the graph cannot be bound to a
 // different handler. handler configures that agent handler.
-func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph {
+// The error is NewHandler's, and nil for now.
+func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error) {
 	handlerkit.ReportUsage("openai-agents.openaiGraph", PackageName, PackageVersion)
 	options.Handlers = []*aiserver.ProviderHandler{newHandler(handler)}
-	return sdkapi.Graph(key, options)
+	return sdkapi.Graph(key, options), nil
 }
 
 // NativeGraphOptions configure ToOpenAIAgents.

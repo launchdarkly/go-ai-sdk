@@ -549,8 +549,12 @@ func TestLangChainGraph(t *testing.T) {
 		return aiserver.HandlerResult{}, nil
 	}}
 	var calls []string
-	res, err := LangChainGraph("g", aiserver.GraphOptions{Handlers: []*aiserver.ProviderHandler{bogus, bogus}, ToolHandlers: handlersFor(&calls)},
-		Options{Model: f}).Invoke(bg, "q", user)
+	g, err := LangChainGraph("g", aiserver.GraphOptions{Handlers: []*aiserver.ProviderHandler{bogus, bogus}, ToolHandlers: handlersFor(&calls)},
+		Options{Model: f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := g.Invoke(bg, "q", user)
 	if err != nil {
 		t.Fatal(err)
 	}

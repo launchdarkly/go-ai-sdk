@@ -366,8 +366,12 @@ func TestOpenAIGraph(t *testing.T) {
 			return aiserver.HandlerResult{}, nil
 		}}
 	var calls []string
-	res, err := OpenAIGraph("g", aiserver.GraphOptions{Handlers: []*aiserver.ProviderHandler{bogus, bogus}, ToolHandlers: handlersFor(&calls)},
-		Options{Client: c}).Invoke(bg, "q", user)
+	g, err := OpenAIGraph("g", aiserver.GraphOptions{Handlers: []*aiserver.ProviderHandler{bogus, bogus}, ToolHandlers: handlersFor(&calls)},
+		Options{Client: c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := g.Invoke(bg, "q", user)
 	if err != nil {
 		t.Fatal(err)
 	}

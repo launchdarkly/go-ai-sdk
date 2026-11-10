@@ -28,10 +28,11 @@ import (
 // LangChainGraph returns aiserver's model-driven graph runner with this
 // package's agent handler as the only handler. Any options.Handlers value is replaced, so the graph
 // cannot be bound to a different handler. handler supplies the model: its Model or ModelFactory runs every node.
-func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph {
+// The error is NewHandler's, and nil for now.
+func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error) {
 	handlerkit.ReportUsage("langchain-agents.langchainGraph", PackageName, PackageVersion)
 	options.Handlers = []*aiserver.ProviderHandler{newHandler(handler)}
-	return sdkapi.Graph(key, options)
+	return sdkapi.Graph(key, options), nil
 }
 
 // NativeGraphOptions configure ToLangGraph.

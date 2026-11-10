@@ -279,13 +279,16 @@ func TestClaudeGraph(t *testing.T) {
 		return aiserver.HandlerResult{Output: "stub"}, nil
 	}, nil, aiserver.CaptureDefault)
 	looked := false
-	g := ClaudeGraph("g", GraphOptions{
+	g, err := ClaudeGraph("g", GraphOptions{
 		Registry: aiserver.NewRegistry(aiserver.RegistryEntries{Handlers: []*aiserver.ProviderHandler{stub}}),
 		ToolHandlers: map[string]aiserver.ToolHandler{"lookup": aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) {
 			looked = true
 			return "data", nil
 		})},
 	}, e.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 	res, err := g.Invoke(bg, "q", user)
 	if err != nil || res.Response != "ok" || stubCalled || !looked || len(e.api.reqs()) != 2 {
 		t.Errorf("res=%v err=%v stub=%v looked=%v calls=%d", res, err, stubCalled, looked, len(e.api.reqs()))
@@ -302,7 +305,11 @@ func TestClaudeGraphJudge(t *testing.T) {
 		"gj":   judge,
 	}
 	e := setup(t, flags, sse([]string{"ok"}, "", 1, 1), textResp(`{"score":0.9,"reasoning":"fine"}`, 1, 1))
-	res, err := ClaudeGraph("g", GraphOptions{GraphJudge: "gj"}, e.opts).Invoke(bg, "q", user)
+	g, err := ClaudeGraph("g", GraphOptions{GraphJudge: "gj"}, e.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := g.Invoke(bg, "q", user)
 	if err != nil || res.JudgeResults["gj"].Score != 0.9 || len(e.api.reqs()) != 2 {
 		t.Fatalf("res=%+v err=%v calls=%d", res, err, len(e.api.reqs()))
 	}

@@ -19,10 +19,11 @@ type GraphOptions struct {
 
 // ClaudeGraph returns aiserver's model-driven graph runner with exactly one
 // handler, this package's agent handler, pre-bound (claudeGraph).
-func ClaudeGraph(key string, opts GraphOptions, handler Options) *aiserver.AgentGraph {
+// The error is NewHandler's, and nil for now.
+func ClaudeGraph(key string, opts GraphOptions, handler Options) (*aiserver.AgentGraph, error) {
 	handlerkit.ReportUsage("claude-agents.claudeGraph", PackageName, PackageVersion)
 	return sdkapi.Graph(key, aiserver.GraphOptions{
 		Handlers:     []*aiserver.ProviderHandler{newHandler(handler)},
 		ToolHandlers: opts.ToolHandlers, GraphJudge: opts.GraphJudge, Registry: opts.Registry,
-	})
+	}), nil
 }
