@@ -58,7 +58,7 @@ func wireRequest(t *testing.T, provider string, params map[string]any, stream bo
 	t.Setenv("OPENAI_BASE_URL", srv.URL)
 	t.Setenv("OPENAI_API_KEY", "test")
 	withTracer(t)
-	h := newHandler(Options{})
+	h := must(newHandler(Options{}))
 	req := aiserver.HandlerRequest{Config: cfg(func(c *aiserver.AiConfig) {
 		c.Provider.Name = provider
 		c.Model = aiserver.Model{Name: "m", Parameters: params}

@@ -144,3 +144,20 @@ func TestMaxRetriesConvenienceExportReturnsTheRefusal(t *testing.T) {
 	}
 	wantRequests(t, f, 0)
 }
+
+// must panics on err, for test fixtures built from valid options.
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+// newHandler checks the options itself: a negative count reaching it is an
+// error, never a vendor SDK panic.
+func TestMaxRetriesNegativeIsRefusedByNewHandlerItself(t *testing.T) {
+	h, err := newHandler(Options{MaxRetries: retries(-1)})
+	if h != nil || err == nil || !strings.Contains(err.Error(), "MaxRetries") {
+		t.Fatalf("newHandler(MaxRetries: -1) = %v, %v; want nil and an error naming MaxRetries", h, err)
+	}
+}

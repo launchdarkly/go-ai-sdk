@@ -114,8 +114,8 @@ func TestToolContentCapture(t *testing.T) {
 	}{{"on", aiserver.CaptureOn, true}, {"off", aiserver.CaptureOff, false}} {
 		t.Run(tc.name, func(t *testing.T) {
 			exp := withTracer(t)
-			h := newHandler(Options{Model: &fakeModel{turns: []scripted{toolTurn("a", map[string]any{"city": "Paris"}), textTurn("done", 1, 1)}},
-				CaptureContent: tc.capture})
+			h := must(newHandler(Options{Model: &fakeModel{turns: []scripted{toolTurn("a", map[string]any{"city": "Paris"}), textTurn("done", 1, 1)}},
+				CaptureContent: tc.capture}))
 			if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: cfg(threeTools), UserInput: "q", ToolHandlers: okA()}); err != nil {
 				t.Fatal(err)
 			}

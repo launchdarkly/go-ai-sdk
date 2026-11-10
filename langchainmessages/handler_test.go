@@ -95,14 +95,14 @@ func hasEvent(s sdktrace.ReadOnlySpan, name, contains string) bool {
 
 // factory metadata: providesFor, captureContent default, independent instances.
 func TestFactoryMetadata(t *testing.T) {
-	a, b := newHandler(Options{}), newHandler(Options{})
+	a, b := must(newHandler(Options{})), must(newHandler(Options{}))
 	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "*", Mode: aiserver.ModeMessages}) {
 		t.Errorf("providesFor = %+v", a.ProvidesFor)
 	}
 	if a.CaptureContent != aiserver.CaptureDefault || a == b || a.Invoke == nil || a.Stream == nil {
 		t.Errorf("factory metadata wrong: %+v", a)
 	}
-	if newHandler(Options{CaptureContent: aiserver.CaptureOn}).CaptureContent != aiserver.CaptureOn {
+	if must(newHandler(Options{CaptureContent: aiserver.CaptureOn})).CaptureContent != aiserver.CaptureOn {
 		t.Error("captureContent not passed through")
 	}
 }
@@ -649,7 +649,7 @@ func TestGenAISystemFromProvider(t *testing.T) {
 func TestModelParametersAndFactory(t *testing.T) {
 	f := &fakeModel{turns: []scripted{textTurn("ok", 1, 1)}}
 	var seen aiserver.AiConfig
-	h := newHandler(Options{ModelFactory: func(c aiserver.AiConfig) (llms.Model, error) { seen = c; return f, nil }})
+	h := must(newHandler(Options{ModelFactory: func(c aiserver.AiConfig) (llms.Model, error) { seen = c; return f, nil }}))
 	withTracer(t)
 	c := cfg(func(c *aiserver.AiConfig) {
 		c.Instructions = "x"
@@ -676,7 +676,7 @@ func TestModelParametersAndFactory(t *testing.T) {
 	}
 
 	bad := errors.New("no creds")
-	h = newHandler(Options{ModelFactory: func(aiserver.AiConfig) (llms.Model, error) { return nil, bad }})
+	h = must(newHandler(Options{ModelFactory: func(aiserver.AiConfig) (llms.Model, error) { return nil, bad }}))
 	if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: instr("x")}); !errors.Is(err, bad) {
 		t.Errorf("factory error = %v", err)
 	}
@@ -707,7 +707,7 @@ func TestDefaultModelRouting(t *testing.T) {
 	c.Provider.Name = "OpenAI"
 	c.Model.Name = "gpt-4o"
 	c.OutputFormat = map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}}
-	res, err := newHandler(Options{}).Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "q"})
+	res, err := must(newHandler(Options{})).Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "q"})
 	if err != nil {
 		t.Fatal(err)
 	}

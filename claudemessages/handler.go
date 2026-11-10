@@ -64,10 +64,7 @@ type Options struct {
 // It returns an error for an invalid option (see Options.MaxRetries).
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error) {
 	handlerkit.ReportUsage("claude-messages.createClaudeMessagesHandler", PackageName, PackageVersion)
-	if err := checkOptions(opts); err != nil {
-		return nil, err
-	}
-	return newHandler(opts), nil
+	return newHandler(opts)
 }
 
 // checkOptions refuses the options NewHandler cannot honour.
@@ -79,7 +76,12 @@ func checkOptions(opts Options) error {
 	return handlerkit.CheckMaxRetries("claudemessages", opts.MaxRetries, supplied)
 }
 
-func newHandler(opts Options) *aiserver.ProviderHandler {
+// newHandler builds the handler without reporting usage. It checks the options
+// itself, so no path builds a client from an unchecked count.
+func newHandler(opts Options) (*aiserver.ProviderHandler, error) {
+	if err := checkOptions(opts); err != nil {
+		return nil, err
+	}
 	c := opts.Client
 	if c == nil {
 		var reqOpts []option.RequestOption
@@ -93,7 +95,7 @@ func newHandler(opts Options) *aiserver.ProviderHandler {
 		c = &nc
 	}
 	h := &handler{client: c}
-	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent)
+	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent), nil
 }
 
 // InvokeOptions are the optional arguments to ClaudeMessages.
@@ -112,11 +114,12 @@ func ClaudeMessages(ctx context.Context, configKey, userInput string, userCtx ld
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}
-	if err := checkOptions(opts.Handler); err != nil {
+	h, err := newHandler(opts.Handler)
+	if err != nil {
 		return aiserver.ProviderResponse{}, err
 	}
 	return sdkapi.Config(aiserver.ConfigArgs{
-		Key: configKey, Handlers: []*aiserver.ProviderHandler{newHandler(opts.Handler)},
+		Key: configKey, Handlers: []*aiserver.ProviderHandler{h},
 		ToolHandlers: opts.ToolHandlers, Registry: opts.Registry, SkipJudges: opts.SkipJudges,
 	}).Invoke(ctx, userInput, userCtx, aiserver.WithVariables(opts.Variables))
 }
