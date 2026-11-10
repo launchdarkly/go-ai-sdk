@@ -85,7 +85,8 @@ for it to be recorded). A run fails when any criterion's pass rate (passed rows 
 errored rows count against it) is below its threshold. `Passed` follows the verdict when there is
 one. Without one, `Passed` is true only when no row errored or failed. Every criterion sends a pass
 rate threshold, 0.95 by default, so a run that sets none passes when 95% of each criterion's rows
-pass. Set `PassRateThreshold: 1.0` on every criterion to require every row to pass. Where
+pass. Set `PassRateThreshold: new(1.0)` in every criterion's `JudgeOptions` or `ScorerOptions` to
+require every row to pass. Where
 LaunchDarkly does not serve verdicts for the project, `Verdict` is `""` and `Passed` uses the row
 counts.
 Management API requests go to `APIBaseURI`, then `LD_API_BASE_URI`, then `https://app.launchdarkly.com`.

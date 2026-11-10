@@ -19,7 +19,7 @@ by provider and mode. Its exported names are pinned in `surface_test.go`.
 
 Seams (package vars, replaced by tests): `getClient`, `initClient`,
 `resolveJudgeConfig` (flag delivery via `internal/bridge.ExtractVariationRaw`),
-`defaultPollInterval`, `defaultPollTimeout`; `EvaluationsModule.flushBound`; `apiClient.sleep/random/now`.
+`defaultPollInterval`, `defaultPollTimeout`, `verdictWaitTimeout`; `EvaluationsModule.flushBound`; `apiClient.sleep/random/now`.
 
 Rules that are easy to break: `Run` issues no tool request (library tools come pinned from `Tools().Get`); only `Get` can make a library `EvalTool`, and `Run` rejects one whose `Key`, `Schema` or `Description` no longer match what `Get` pinned; judges never get tools; the judge config is passed unrendered;
 `message_history` comes only from `internal/judging.BuildMessageHistory`; a row that failed

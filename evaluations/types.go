@@ -1,7 +1,9 @@
 // Package evaluations implements Evaluations from Code: it
 // runs a dataset through caller-supplied handlers, scores the outputs against
 // judges and scorers, reports every result to LaunchDarkly as custom events,
-// and polls the run summary for a verdict.
+// and polls the run summary until every row is accounted for. When the
+// summary reports a pass rate threshold, it then reads LaunchDarkly's verdict
+// from the run itself.
 //
 // Import it as github.com/launchdarkly/go-ai-sdk/evaluations. Start with
 // InitEvaluations, then call EvaluationsModule.Run.
