@@ -22,7 +22,6 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
-	"github.com/launchdarkly/go-ai-sdk/internal/sdkcall"
 )
 
 // Shadow requests. Experimental: every name in this file may change in a
@@ -148,9 +147,7 @@ func (s *ShadowAIConfig) Stream(ctx context.Context, userInput string, userCtx l
 }
 
 func (s *ShadowAIConfig) primary(e *evaluation) *aiserver.AIConfig {
-	args := s.args
-	args.SDKCall = sdkcall.Mark()
-	return bridge.ConfigWithOptions(args, bridge.RunOptions{Variation: e.variation, RunID: e.runID}).(*aiserver.AIConfig)
+	return bridge.ConfigWithOptions(s.args, bridge.RunOptions{Variation: e.variation, RunID: e.runID, NoUsage: true}).(*aiserver.AIConfig)
 }
 
 func (s *ShadowAIConfig) handlers() []*aiserver.ProviderHandler {
@@ -429,7 +426,6 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 	run := bridge.ConfigWithOptions(aiserver.ConfigArgs{
 		Key:      task.ConfigKey,
 		Handlers: []*aiserver.ProviderHandler{withDeadline(h, timeout)},
-		SDKCall:  sdkcall.Mark(),
 	}, bridge.RunOptions{
 		Variation: func(bridge.VariationClient, string, ldcontext.Context, ldvalue.Value) (ldvalue.Value, error) {
 			return value, nil
@@ -438,6 +434,7 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 		TrackData:      extra,
 		SpanAttributes: toAttributes(task.SpanAttributes),
 		ExistingClient: true,
+		NoUsage:        true,
 		NoFlagEvent:    true,
 	}).(*aiserver.AIConfig)
 	vars, _ := deepCopy(task.Variables).(map[string]any)

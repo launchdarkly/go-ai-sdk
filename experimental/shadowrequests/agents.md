@@ -13,7 +13,7 @@ The core seam is `bridge.ConfigWithOptions(args, bridge.RunOptions{...})`, which
 `JSONVariation`, and whose tracked runs use `RunID`, merge `TrackData` into every event and add
 `SpanAttributes` to the handler's root span. The served call (A) uses it with a `Variation` that
 calls `JSONVariationDetail` and strips `shadowConfiguration`; each shadow (B) uses it with a fixed
-value, a deadline wrapped handler and the shadow track data. Both pass `sdkcall.Mark()`, so only
+value, a deadline wrapped handler and the shadow track data. Both set `RunOptions.NoUsage`, so only
 `experimental.shadowConfig` and `experimental.runShadow` are reported.
 
 Rules that are easy to break: shadows start only after A succeeds (after `Invoke` returns, or at
