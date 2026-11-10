@@ -30,10 +30,10 @@ const PackageName, PackageVersion, SpanName
 var ErrRecursionLimit, ErrNoToolHandler, ErrEmptyResponse, ErrNoRoot, ErrNilGraph, ErrNodeName
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
 type Options struct{ Model llms.Model; ModelFactory ModelFactory; CaptureContent aiserver.ContentCapture }
-func NewHandler(opts Options) *aiserver.ProviderHandler
+func NewHandler(opts Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func LangChainAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
-func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph
+func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error)
 type NativeGraphOptions struct{ ToolHandlers; ModelFactory func(*aiserver.GraphNode) (llms.Model, error); Context ldcontext.Context }
 type LangGraph struct{ ... }
 func ToLangGraph(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *LangGraph

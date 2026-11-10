@@ -24,7 +24,7 @@ lives in `internal/openaiwire`, also used by `openaiagents`.
 const PackageName, PackageVersion, SpanName
 var ErrMaxSteps error
 type Options struct{ Client *openai.Client; APIKey string; CaptureContent aiserver.ContentCapture }
-func NewHandler(Options) *aiserver.ProviderHandler
+func NewHandler(Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func OpenAIMessages(ctx, configKey, userInput string, userCtx ldcontext.Context, *InvokeOptions) (aiserver.ProviderResponse, error)
 ```

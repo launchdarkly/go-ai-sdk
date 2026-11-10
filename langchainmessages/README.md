@@ -61,7 +61,10 @@ llm, err := llms.NewOpenAI(llms.OpenAIOptions{Model: "gpt-4o"}) // reads OPENAI_
 if err != nil {
 	return err
 }
-h := langchainmessages.NewHandler(langchainmessages.Options{Model: llm})
+h, err := langchainmessages.NewHandler(langchainmessages.Options{Model: llm})
+if err != nil {
+	return err
+}
 cfg := aiserver.Config(aiserver.ConfigArgs{Key: "my-config", Handlers: []*aiserver.ProviderHandler{h}})
 for ev, err := range cfg.Stream(ctx, "Hello", ldcontext.New("user-1")) {
 	if err != nil {
@@ -76,21 +79,29 @@ Multi-handler: exact-provider handlers first, LangChain as the `*` fallback:
 ```go
 import "github.com/launchdarkly/go-ai-sdk/claudemessages"
 
-cfg := aiserver.Config(aiserver.ConfigArgs{Key: "my-config", Handlers: []*aiserver.ProviderHandler{
-	claudemessages.NewHandler(claudemessages.Options{}), // Anthropic/messages
-	langchainmessages.NewHandler(langchainmessages.Options{}), // */messages: OpenAI, Bedrock, ...
-}})
+claude, err := claudemessages.NewHandler(claudemessages.Options{}) // Anthropic/messages
+if err != nil {
+	return err
+}
+lc, err := langchainmessages.NewHandler(langchainmessages.Options{}) // */messages: OpenAI, Bedrock, ...
+if err != nil {
+	return err
+}
+cfg := aiserver.Config(aiserver.ConfigArgs{Key: "my-config", Handlers: []*aiserver.ProviderHandler{claude, lc}})
 resp, err := cfg.Invoke(ctx, "Hello", ldcontext.New("user-1"))
 ```
 
 Build the model per request from the evaluated config:
 
 ```go
-h := langchainmessages.NewHandler(langchainmessages.Options{
+h, err := langchainmessages.NewHandler(langchainmessages.Options{
 	ModelFactory: func(c aiserver.AiConfig) (llms.Model, error) {
 		return llms.NewAnthropic(llms.AnthropicOptions{Model: c.Model.Name, APIKey: key})
 	},
 })
+if err != nil {
+	return err
+}
 ```
 
 Any type with `GenerateContent(ctx, []llms.MessageContent, ...llms.CallOption)` is a model. The
@@ -140,7 +151,7 @@ type Options struct {
 	ModelFactory   ModelFactory
 	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 }
-func NewHandler(opts Options) *aiserver.ProviderHandler
+func NewHandler(opts Options) (*aiserver.ProviderHandler, error)
 
 type InvokeOptions struct {
 	ToolHandlers map[string]aiserver.ToolHandler

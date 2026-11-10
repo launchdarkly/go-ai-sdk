@@ -67,9 +67,13 @@ bedrock, err := bedrockmessages.NewHandler(bedrockmessages.Options{})
 if err != nil {
 	log.Fatal(err)
 }
+claude, err := claudemessages.NewHandler(claudemessages.Options{})
+if err != nil {
+	log.Fatal(err)
+}
 resp, err := aiserver.Config(aiserver.ConfigArgs{
 	Key:      "support-assistant",
-	Handlers: []*aiserver.ProviderHandler{bedrock, claudemessages.NewHandler(claudemessages.Options{})},
+	Handlers: []*aiserver.ProviderHandler{bedrock, claude},
 }).Invoke(ctx, userInput, ldctx)
 ```
 

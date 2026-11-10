@@ -36,11 +36,11 @@ Shared Anthropic wire mapping (turns, tools, max_tokens, finish reasons, usage) 
 const PackageName, PackageVersion, SpanName, DefaultMaxSteps
 var ErrToolNotFound, ErrUnsupportedNativeTool, ErrMaxSteps error
 type Options struct{ Client *anthropic.Client; APIKey string; CaptureContent aiserver.ContentCapture; MaxSteps int; WorkDir string }
-func NewHandler(Options) *aiserver.ProviderHandler
+func NewHandler(Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func ClaudeAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, *InvokeOptions) (aiserver.ProviderResponse, error)
 type GraphOptions struct{ ToolHandlers; GraphJudge; Registry }
-func ClaudeGraph(key string, GraphOptions, Options) *aiserver.AgentGraph
+func ClaudeGraph(key string, GraphOptions, Options) (*aiserver.AgentGraph, error)
 type AdapterOptions struct{ ToolHandlers; Handler Options }
 type GraphRunner struct{ /* unexported */ }
 func ToClaudeAgents(*aiserver.GraphDefinition, *AdapterOptions) *GraphRunner

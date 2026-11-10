@@ -62,7 +62,10 @@ llm, err := llms.NewOpenAI(llms.OpenAIOptions{Model: "gpt-4o"}) // reads OPENAI_
 if err != nil {
 	return err
 }
-h := langchainagents.NewHandler(langchainagents.Options{Model: llm})
+h, err := langchainagents.NewHandler(langchainagents.Options{Model: llm})
+if err != nil {
+	return err
+}
 resp, err := aiserver.Config(aiserver.ConfigArgs{Key: "my-agent", Handlers: []*aiserver.ProviderHandler{h}}).
 	Invoke(ctx, "Hello", ldcontext.New("user-1"))
 ```
@@ -72,10 +75,15 @@ Multi-handler: exact-provider agents first, LangChain as the `*` fallback:
 ```go
 import "github.com/launchdarkly/go-ai-sdk/claudeagents"
 
-cfg := aiserver.Config(aiserver.ConfigArgs{Key: "my-agent", Handlers: []*aiserver.ProviderHandler{
-	claudeagents.NewHandler(claudeagents.Options{}),       // Anthropic/agent
-	langchainagents.NewHandler(langchainagents.Options{}), // */agent: OpenAI, Bedrock, ...
-}})
+claude, err := claudeagents.NewHandler(claudeagents.Options{}) // Anthropic/agent
+if err != nil {
+	return err
+}
+lc, err := langchainagents.NewHandler(langchainagents.Options{}) // */agent: OpenAI, Bedrock, ...
+if err != nil {
+	return err
+}
+cfg := aiserver.Config(aiserver.ConfigArgs{Key: "my-agent", Handlers: []*aiserver.ProviderHandler{claude, lc}})
 for ev, err := range cfg.Stream(ctx, "Hello", ldcontext.New("user-1")) {
 	if err != nil {
 		return err
@@ -88,9 +96,12 @@ Graph convenience wrapper (every node runs on this handler; the `Options` value 
 the model):
 
 ```go
-out, err := langchainagents.LangChainGraph("support-graph",
-	aiserver.GraphOptions{ToolHandlers: tools}, langchainagents.Options{Model: llm}).
-	Invoke(ctx, "I was double charged", ldcontext.New("user-1"))
+g, err := langchainagents.LangChainGraph("support-graph",
+	aiserver.GraphOptions{ToolHandlers: tools}, langchainagents.Options{Model: llm})
+if err != nil {
+	return err
+}
+out, err := g.Invoke(ctx, "I was double charged", ldcontext.New("user-1"))
 ```
 
 Native LangGraph runner: the resolved graph becomes one state graph on the SDK's own runner.
@@ -110,14 +121,14 @@ out, err := langchainagents.ToLangGraph(def, &langchainagents.NativeGraphOptions
 ## API
 
 ```go
-func NewHandler(opts Options) *aiserver.ProviderHandler
+func NewHandler(opts Options) (*aiserver.ProviderHandler, error)
 type Options struct {
 	Model          llms.Model   // used for every call when set
 	ModelFactory   ModelFactory // func(cfg aiserver.AiConfig) (llms.Model, error), per call
 	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 }
 func LangChainAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
-func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph
+func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error)
 func ToLangGraph(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *LangGraph
 func (g *LangGraph) Invoke(ctx context.Context, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 ```

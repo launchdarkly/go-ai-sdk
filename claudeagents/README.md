@@ -49,7 +49,10 @@ func main() {
 	}
 	defer aiserver.Shutdown(ctx)
 
-	h := claudeagents.NewHandler(claudeagents.Options{}) // reads ANTHROPIC_API_KEY
+	h, err := claudeagents.NewHandler(claudeagents.Options{}) // reads ANTHROPIC_API_KEY
+	if err != nil {
+		log.Fatal(err)
+	}
 	res, err := aiserver.Config(aiserver.ConfigArgs{
 		Key:      "my-agent-config",
 		Handlers: []*aiserver.ProviderHandler{h},
@@ -70,10 +73,15 @@ func main() {
 Multiple handlers: the variation's provider and mode pick one.
 
 ```go
-handlers := []*aiserver.ProviderHandler{
-	claudeagents.NewHandler(claudeagents.Options{}),
-	claudemessages.NewHandler(claudemessages.Options{}), // github.com/launchdarkly/go-ai-sdk/claudemessages
+agents, err := claudeagents.NewHandler(claudeagents.Options{})
+if err != nil {
+	log.Fatal(err)
 }
+messages, err := claudemessages.NewHandler(claudemessages.Options{}) // github.com/launchdarkly/go-ai-sdk/claudemessages
+if err != nil {
+	log.Fatal(err)
+}
+handlers := []*aiserver.ProviderHandler{agents, messages}
 res, err := aiserver.Config(aiserver.ConfigArgs{Key: "my-ai-config", Handlers: handlers}).
 	Invoke(ctx, "Hello", ldcontext.New("user-123"))
 ```
@@ -88,8 +96,12 @@ res, err := claudeagents.ClaudeAgents(ctx, "my-agent-config", "Hello", ldcontext
 Graph convenience wrapper (`graph()` with this handler pre-bound):
 
 ```go
-out, err := claudeagents.ClaudeGraph("support-graph", claudeagents.GraphOptions{ToolHandlers: tools},
-	claudeagents.Options{}).Invoke(ctx, "I was double charged", ldcontext.New("user-123"))
+g, err := claudeagents.ClaudeGraph("support-graph", claudeagents.GraphOptions{ToolHandlers: tools},
+	claudeagents.Options{})
+if err != nil {
+	log.Fatal(err)
+}
+out, err := g.Invoke(ctx, "I was double charged", ldcontext.New("user-123"))
 ```
 
 Native adapter: every child node becomes a sub-agent tool of its parent, named
@@ -158,7 +170,7 @@ type Options struct {
 	MaxSteps       int               // 0 → DefaultMaxSteps; config max_turns wins
 	WorkDir        string            // host built-ins run in and are confined to it; "" → process working directory at construction
 }
-func NewHandler(Options) *aiserver.ProviderHandler
+func NewHandler(Options) (*aiserver.ProviderHandler, error)
 
 type InvokeOptions struct {
 	ToolHandlers map[string]aiserver.ToolHandler
@@ -170,7 +182,7 @@ type InvokeOptions struct {
 func ClaudeAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 
 type GraphOptions struct { ToolHandlers; GraphJudge string; Registry } // no Handlers
-func ClaudeGraph(key string, opts GraphOptions, handler Options) *aiserver.AgentGraph
+func ClaudeGraph(key string, opts GraphOptions, handler Options) (*aiserver.AgentGraph, error)
 
 type AdapterOptions struct { ToolHandlers map[string]aiserver.ToolHandler; Handler Options }
 func ToClaudeAgents(def *aiserver.GraphDefinition, opts *AdapterOptions) *GraphRunner

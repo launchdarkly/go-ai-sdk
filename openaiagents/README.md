@@ -40,7 +40,10 @@ func main() {
 	}
 	defer aiserver.Shutdown(ctx)
 
-	h := openaiagents.NewHandler(openaiagents.Options{}) // reads OPENAI_API_KEY
+	h, err := openaiagents.NewHandler(openaiagents.Options{}) // reads OPENAI_API_KEY
+	if err != nil {
+		log.Fatal(err)
+	}
 	tools := map[string]aiserver.ToolHandler{
 		"get_weather": aiserver.ToolFunc(func(ctx context.Context, args map[string]any) (any, error) {
 			return map[string]any{"city": args["city"], "forecast": "sunny"}, nil
@@ -58,10 +61,15 @@ func main() {
 Multiple handlers: the variation's provider and mode pick one.
 
 ```go
-handlers := []*aiserver.ProviderHandler{
-	openaiagents.NewHandler(openaiagents.Options{}),
-	openaimessages.NewHandler(openaimessages.Options{}), // github.com/launchdarkly/go-ai-sdk/openaimessages
+agents, err := openaiagents.NewHandler(openaiagents.Options{})
+if err != nil {
+	log.Fatal(err)
 }
+messages, err := openaimessages.NewHandler(openaimessages.Options{}) // github.com/launchdarkly/go-ai-sdk/openaimessages
+if err != nil {
+	log.Fatal(err)
+}
+handlers := []*aiserver.ProviderHandler{agents, messages}
 res, err := aiserver.Config(aiserver.ConfigArgs{Key: "my-ai-config", Handlers: handlers}).
 	Invoke(ctx, "Hello", ldcontext.New("user-123"))
 ```
@@ -76,7 +84,10 @@ res, err := openaiagents.OpenAIAgents(ctx, "my-agent", "Hello", ldcontext.New("u
 Graph convenience wrapper (`aiserver.Graph` with this handler pre-bound):
 
 ```go
-g := openaiagents.OpenAIGraph("support-graph", aiserver.GraphOptions{ToolHandlers: tools}, openaiagents.Options{})
+g, err := openaiagents.OpenAIGraph("support-graph", aiserver.GraphOptions{ToolHandlers: tools}, openaiagents.Options{})
+if err != nil {
+	log.Fatal(err)
+}
 out, err := g.Invoke(ctx, "I was double charged", ldcontext.New("user-123"))
 fmt.Println(out.Response, out.Usage.Total)
 ```
@@ -125,7 +136,7 @@ type Options struct {
 	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 	MaxTurns       int            // 0 means 10; a variation's max_turns wins
 }
-func NewHandler(opts Options) *aiserver.ProviderHandler
+func NewHandler(opts Options) (*aiserver.ProviderHandler, error)
 
 type InvokeOptions struct {
 	ToolHandlers map[string]aiserver.ToolHandler
@@ -136,7 +147,7 @@ type InvokeOptions struct {
 }
 func OpenAIAgents(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 
-func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph
+func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error)
 
 type NativeGraphOptions struct {
 	ToolHandlers map[string]aiserver.ToolHandler
