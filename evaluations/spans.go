@@ -238,7 +238,7 @@ func toolCallID(i int) string { return fmt.Sprintf("call_%d", i+1) }
 // spellings of the provider key: gen_ai.system (pre-1.37 semconv, which
 // dashboards still read) and gen_ai.provider.name.
 func modelIdentity(cfg aiserver.AiConfig) []attribute.KeyValue {
-	provider := strings.ToLower(cfg.Provider.Name)
+	provider := telemetry.ProviderName(cfg.Provider.Name)
 	return []attribute.KeyValue{
 		attribute.String("gen_ai.system", provider),
 		attribute.String("gen_ai.provider.name", provider),

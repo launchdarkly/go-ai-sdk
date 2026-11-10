@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 
 	"go.opentelemetry.io/otel"
@@ -77,4 +78,13 @@ func Flush(ctx context.Context) error {
 		return f.ForceFlush(ctx)
 	}
 	return nil
+}
+
+// ProviderName is a configured provider as gen_ai.provider.name: lowercased,
+// with Bedrock written "aws.bedrock", the value the Bedrock handlers write.
+func ProviderName(provider string) string {
+	if p := strings.ToLower(provider); p != "bedrock" {
+		return p
+	}
+	return "aws.bedrock"
 }

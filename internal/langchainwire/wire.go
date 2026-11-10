@@ -22,6 +22,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/internal/bedrockwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
@@ -51,10 +52,7 @@ func ProviderName(cfg aiserver.AiConfig) string {
 // SpanProviderName is gen_ai.provider.name: ProviderName, except the Bedrock
 // route, which is "aws.bedrock" as on the Bedrock handlers' spans.
 func SpanProviderName(cfg aiserver.AiConfig) string {
-	if p := ProviderName(cfg); p != "bedrock" {
-		return p
-	}
-	return "aws.bedrock"
+	return telemetry.ProviderName(ProviderName(cfg))
 }
 
 // ModelConfig applies the Bedrock inference-profile prefix so the
