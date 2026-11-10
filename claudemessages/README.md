@@ -124,9 +124,10 @@ var ErrToolNotFound error
 type Options struct {
 	Client         *anthropic.Client // used when set
 	APIKey         string            // used when Client is nil; else ANTHROPIC_API_KEY
+	MaxRetries     *int              // retries on the client NewHandler builds; nil = SDK default; refused with Client or < 0
 	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 }
-// NewHandler is createClaudeMessagesHandler. The handler has Invoke and Stream; the error reports an invalid option (nil for now).
+// NewHandler is createClaudeMessagesHandler. The handler has Invoke and Stream; the error reports an invalid option (see MaxRetries).
 func NewHandler(Options) (*aiserver.ProviderHandler, error)
 
 type InvokeOptions struct {

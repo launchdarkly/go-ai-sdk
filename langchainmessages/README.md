@@ -149,6 +149,7 @@ type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
 type Options struct {
 	Model          llms.Model
 	ModelFactory   ModelFactory
+	MaxRetries     *int // retries on the built-in model; nil = SDK default; refused with Model, ModelFactory or < 0
 	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 }
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error)

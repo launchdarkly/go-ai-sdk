@@ -51,17 +51,32 @@ type Options struct {
 	// APIKey, falling back to the ANTHROPIC_API_KEY environment variable.
 	Client *anthropic.Client
 	APIKey string
+	// MaxRetries is the retry count on the client NewHandler builds. nil keeps
+	// the provider SDK's default; 0 means a single attempt. A negative count, or
+	// MaxRetries together with Client, is refused by NewHandler.
+	MaxRetries *int
 	// CaptureContent gates prompt, completion, tool and judge-explanation
 	// content on spans. CaptureDefault follows aiserver.Configure, else on.
 	CaptureContent aiserver.ContentCapture
 }
 
 // NewHandler returns the Anthropic messages handler (createClaudeMessagesHandler).
-// It returns an error for an invalid option. No current option can be
-// invalid, so the error is nil for now.
+// It returns an error for an invalid option (see Options.MaxRetries).
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error) {
 	handlerkit.ReportUsage("claude-messages.createClaudeMessagesHandler", PackageName, PackageVersion)
+	if err := checkOptions(opts); err != nil {
+		return nil, err
+	}
 	return newHandler(opts), nil
+}
+
+// checkOptions refuses the options NewHandler cannot honour.
+func checkOptions(opts Options) error {
+	supplied := ""
+	if opts.Client != nil {
+		supplied = "Client"
+	}
+	return handlerkit.CheckMaxRetries("claudemessages", opts.MaxRetries, supplied)
 }
 
 func newHandler(opts Options) *aiserver.ProviderHandler {
@@ -70,6 +85,9 @@ func newHandler(opts Options) *aiserver.ProviderHandler {
 		var reqOpts []option.RequestOption
 		if opts.APIKey != "" {
 			reqOpts = append(reqOpts, option.WithAPIKey(opts.APIKey))
+		}
+		if opts.MaxRetries != nil {
+			reqOpts = append(reqOpts, option.WithMaxRetries(*opts.MaxRetries))
 		}
 		nc := anthropic.NewClient(reqOpts...)
 		c = &nc
@@ -93,6 +111,9 @@ func ClaudeMessages(ctx context.Context, configKey, userInput string, userCtx ld
 	handlerkit.ReportUsage("claude-messages.claudeMessages", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &InvokeOptions{}
+	}
+	if err := checkOptions(opts.Handler); err != nil {
+		return aiserver.ProviderResponse{}, err
 	}
 	return sdkapi.Config(aiserver.ConfigArgs{
 		Key: configKey, Handlers: []*aiserver.ProviderHandler{newHandler(opts.Handler)},

@@ -685,7 +685,7 @@ func TestModelParametersAndFactory(t *testing.T) {
 // Built-in routing: provider.name picks the built-in llms model.
 func TestDefaultModelRouting(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test")
-	m, err := langchainwire.DefaultModel(bg, cfg(nil), nil)
+	m, err := langchainwire.DefaultModel(bg, cfg(nil), nil, nil)
 	if _, ok := m.(*llms.Anthropic); err != nil || !ok {
 		t.Errorf("anthropic route: %T %v", m, err)
 	}

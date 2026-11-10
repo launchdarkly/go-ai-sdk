@@ -63,17 +63,37 @@ type Options struct {
 	// the handler builds a built-in llms model from config.provider.name:
 	// "anthropic", "bedrock", or OpenAI for anything else.
 	ModelFactory ModelFactory
+	// MaxRetries is the retry count on the built-in model the handler builds
+	// (OpenAI, Anthropic or Bedrock). nil keeps the provider SDK's default; 0
+	// means a single attempt. A negative count, or MaxRetries together with
+	// Model or ModelFactory, is refused by NewHandler: set retries on that
+	// model instead.
+	MaxRetries *int
 	// CaptureContent gates prompt, completion, tool and judge-explanation
 	// content on spans. CaptureDefault follows aiserver.Configure, else on.
 	CaptureContent aiserver.ContentCapture
 }
 
 // NewHandler returns the LangChain messages handler (createLangChainMessagesHandler).
-// It returns an error for an invalid option. No current option can be
-// invalid, so the error is nil for now.
+// It returns an error for an invalid option (see Options.MaxRetries).
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error) {
 	handlerkit.ReportUsage("langchain-messages.createLangChainMessagesHandler", PackageName, PackageVersion)
+	if err := checkOptions(opts); err != nil {
+		return nil, err
+	}
 	return newHandler(opts), nil
+}
+
+// checkOptions refuses the options NewHandler cannot honour.
+func checkOptions(opts Options) error {
+	supplied := ""
+	switch {
+	case opts.Model != nil:
+		supplied = "Model"
+	case opts.ModelFactory != nil:
+		supplied = "ModelFactory"
+	}
+	return handlerkit.CheckMaxRetries("langchainmessages", opts.MaxRetries, supplied)
 }
 
 func newHandler(opts Options) *aiserver.ProviderHandler {
@@ -98,6 +118,9 @@ func LangChainMessages(ctx context.Context, configKey, userInput string, userCtx
 	handlerkit.ReportUsage("langchain-messages.langchainMessages", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &InvokeOptions{}
+	}
+	if err := checkOptions(opts.Handler); err != nil {
+		return aiserver.ProviderResponse{}, err
 	}
 	return sdkapi.Config(aiserver.ConfigArgs{
 		Key: configKey, Handlers: []*aiserver.ProviderHandler{newHandler(opts.Handler)},
@@ -162,7 +185,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 	if enforce {
 		bindSchema = schema
 	}
-	model, err := langchainwire.ResolveModel(r.Context(), h.opts.Model, h.opts.ModelFactory, cfg, bindSchema)
+	model, err := langchainwire.ResolveModel(r.Context(), h.opts.Model, h.opts.ModelFactory, cfg, bindSchema, h.opts.MaxRetries)
 	if err != nil {
 		r.Fail(err)
 		return res, err

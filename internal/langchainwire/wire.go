@@ -14,7 +14,12 @@ import (
 	"sort"
 	"strings"
 
+	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	openaioption "github.com/openai/openai-go/v3/option"
+
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/bedrockwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/llms"
@@ -56,8 +61,9 @@ func ModelConfig(cfg aiserver.AiConfig) aiserver.AiConfig {
 
 // ResolveModel returns model when set, else factory(cfg) when set, else the
 // built-in route for cfg's provider (DefaultModel). A non-nil schema binds
-// OpenAI's json_schema response format on the built-in route.
-func ResolveModel(ctx context.Context, model llms.Model, factory func(aiserver.AiConfig) (llms.Model, error), cfg aiserver.AiConfig, schema map[string]any) (llms.Model, error) {
+// OpenAI's json_schema response format on the built-in route, and a non-nil
+// maxRetries sets the built-in model's retry count.
+func ResolveModel(ctx context.Context, model llms.Model, factory func(aiserver.AiConfig) (llms.Model, error), cfg aiserver.AiConfig, schema map[string]any, maxRetries *int) (llms.Model, error) {
 	if model != nil {
 		return model, nil
 	}
@@ -71,25 +77,43 @@ func ResolveModel(ctx context.Context, model llms.Model, factory func(aiserver.A
 		}
 		return m, nil
 	}
-	return DefaultModel(ctx, cfg, schema)
+	return DefaultModel(ctx, cfg, schema, maxRetries)
 }
 
 // DefaultModel builds a model from config.provider.name: "anthropic",
 // "bedrock", or OpenAI Chat Completions for anything else (also any
 // OpenAI-compatible endpoint, through OPENAI_BASE_URL). A non-nil schema binds
-// OpenAI's json_schema response format, sent verbatim.
-func DefaultModel(_ context.Context, cfg aiserver.AiConfig, schema map[string]any) (llms.Model, error) {
+// OpenAI's json_schema response format, sent verbatim. A non-nil maxRetries
+// is the retry count on the client the model builds: option.WithMaxRetries for
+// OpenAI and Anthropic, and maxRetries+1 attempts on the AWS client for Bedrock
+// (never 0 attempts, which the AWS SDK reads as its default).
+func DefaultModel(_ context.Context, cfg aiserver.AiConfig, schema map[string]any, maxRetries *int) (llms.Model, error) {
 	var (
 		m   llms.Model
 		err error
 	)
 	switch ProviderName(cfg) {
 	case "anthropic":
-		m, err = llms.NewAnthropic(llms.AnthropicOptions{Model: cfg.Model.Name})
+		o := llms.AnthropicOptions{Model: cfg.Model.Name}
+		if maxRetries != nil {
+			o.RequestOptions = []anthropicoption.RequestOption{anthropicoption.WithMaxRetries(*maxRetries)}
+		}
+		m, err = llms.NewAnthropic(o)
 	case "bedrock":
-		m, err = llms.NewBedrock(llms.BedrockOptions{Model: cfg.Model.Name})
+		o := llms.BedrockOptions{Model: cfg.Model.Name}
+		if maxRetries != nil {
+			attempts := *maxRetries + 1
+			if o.Client, err = bedrockwire.NewClient("", "", func(c *bedrockruntime.Options) { c.RetryMaxAttempts = attempts }); err != nil {
+				break
+			}
+		}
+		m, err = llms.NewBedrock(o)
 	default:
-		m, err = llms.NewOpenAI(llms.OpenAIOptions{Model: cfg.Model.Name, JSONSchema: schema})
+		o := llms.OpenAIOptions{Model: cfg.Model.Name, JSONSchema: schema}
+		if maxRetries != nil {
+			o.RequestOptions = []openaioption.RequestOption{openaioption.WithMaxRetries(*maxRetries)}
+		}
+		m, err = llms.NewOpenAI(o)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("langchain: build %s model: %w", ProviderName(cfg), err)

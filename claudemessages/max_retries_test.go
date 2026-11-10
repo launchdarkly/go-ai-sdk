@@ -4,7 +4,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,17 +15,8 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
 
-// withMaxRetries returns o with MaxRetries set to n. It goes through reflect so
-// these tests compile before the field exists.
-func withMaxRetries(t *testing.T, o Options, n int) Options {
-	t.Helper()
-	f := reflect.ValueOf(&o).Elem().FieldByName("MaxRetries")
-	if !f.IsValid() {
-		t.Fatal("Options has no MaxRetries field")
-	}
-	f.Set(reflect.ValueOf(&n))
-	return o
-}
+// retries returns a pointer to n, for Options.MaxRetries.
+func retries(n int) *int { return &n }
 
 // failingAnthropic answers every request with a retryable 500 and a 1 ms
 // retry hint, and counts requests: one call makes 1 + its retry count.
@@ -85,12 +75,12 @@ func wantRequests(t *testing.T, f *failingAnthropic, want int32) {
 
 func TestMaxRetriesReachesTheClient(t *testing.T) {
 	f := failingEnv(t)
-	callOnce(mustHandler(t, withMaxRetries(t, Options{}, 7)), false, nil)
+	callOnce(mustHandler(t, Options{MaxRetries: retries(7)}), false, nil)
 	wantRequests(t, f, 8)
 }
 
 func TestMaxRetriesNegativeIsRefusedAtConstruction(t *testing.T) {
-	_, err := NewHandler(withMaxRetries(t, Options{}, -1))
+	_, err := NewHandler(Options{MaxRetries: retries(-1)})
 	if err == nil || !strings.Contains(err.Error(), "MaxRetries") {
 		t.Fatalf("NewHandler(MaxRetries: -1) error = %v, want one naming MaxRetries", err)
 	}
@@ -106,20 +96,20 @@ func TestMaxRetriesUnsetKeepsTheVendorDefault(t *testing.T) {
 
 func TestMaxRetriesZeroIsHonoured(t *testing.T) {
 	f := failingEnv(t)
-	callOnce(mustHandler(t, withMaxRetries(t, Options{}, 0)), false, nil)
+	callOnce(mustHandler(t, Options{MaxRetries: retries(0)}), false, nil)
 	wantRequests(t, f, 1)
 }
 
 func TestMaxRetriesModelParametersCannotSetIt(t *testing.T) {
 	f := failingEnv(t)
-	callOnce(mustHandler(t, withMaxRetries(t, Options{}, 3)), false, map[string]any{"max_retries": 50})
+	callOnce(mustHandler(t, Options{MaxRetries: retries(3)}), false, map[string]any{"max_retries": 50})
 	wantRequests(t, f, 4)
 }
 
 func TestMaxRetriesInvokeAndStreamAgree(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		f := failingEnv(t)
-		callOnce(mustHandler(t, withMaxRetries(t, Options{}, 2)), stream, nil)
+		callOnce(mustHandler(t, Options{MaxRetries: retries(2)}), stream, nil)
 		if got := f.n.Load(); got != 3 {
 			t.Errorf("stream=%v: requests = %d, want 3", stream, got)
 		}
@@ -129,7 +119,7 @@ func TestMaxRetriesInvokeAndStreamAgree(t *testing.T) {
 func TestMaxRetriesConvenienceExportForwardsIt(t *testing.T) {
 	f := failingEnv(t)
 	withLD(t, tracetest.NewInMemoryExporter(), map[string]any{"cfg": variation("sys")})
-	_, _ = ClaudeMessages(bg, "cfg", "q", ldcontext.New("u"), &InvokeOptions{Handler: withMaxRetries(t, Options{}, 4)})
+	_, _ = ClaudeMessages(bg, "cfg", "q", ldcontext.New("u"), &InvokeOptions{Handler: Options{MaxRetries: retries(4)}})
 	wantRequests(t, f, 5)
 }
 
@@ -137,7 +127,7 @@ func TestMaxRetriesConvenienceExportForwardsIt(t *testing.T) {
 // as well is refused rather than silently ignoring the count.
 func TestMaxRetriesWithClientIsRefused(t *testing.T) {
 	c := anthropic.NewClient()
-	_, err := NewHandler(withMaxRetries(t, Options{Client: &c}, 3))
+	_, err := NewHandler(Options{Client: &c, MaxRetries: retries(3)})
 	if err == nil || !strings.Contains(err.Error(), "MaxRetries") {
 		t.Fatalf("NewHandler(Client + MaxRetries) error = %v, want one naming MaxRetries", err)
 	}
@@ -148,7 +138,7 @@ func TestMaxRetriesWithClientIsRefused(t *testing.T) {
 func TestMaxRetriesConvenienceExportReturnsTheRefusal(t *testing.T) {
 	f := failingEnv(t)
 	withLD(t, tracetest.NewInMemoryExporter(), map[string]any{"cfg": variation("sys")})
-	_, err := ClaudeMessages(bg, "cfg", "q", ldcontext.New("u"), &InvokeOptions{Handler: withMaxRetries(t, Options{}, -1)})
+	_, err := ClaudeMessages(bg, "cfg", "q", ldcontext.New("u"), &InvokeOptions{Handler: Options{MaxRetries: retries(-1)}})
 	if err == nil || !strings.Contains(err.Error(), "MaxRetries") {
 		t.Fatalf("ClaudeMessages(MaxRetries: -1) error = %v, want one naming MaxRetries", err)
 	}

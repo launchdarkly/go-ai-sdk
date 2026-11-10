@@ -148,7 +148,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 	defer r.EndOnPanic()
 
 	var res runResult
-	model, err := langchainwire.ResolveModel(r.Context(), h.opts.Model, h.opts.ModelFactory, cfg, nil)
+	model, err := langchainwire.ResolveModel(r.Context(), h.opts.Model, h.opts.ModelFactory, cfg, nil, nil)
 	if err != nil {
 		r.Fail(err)
 		return res, err

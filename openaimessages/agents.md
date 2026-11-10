@@ -23,11 +23,13 @@ lives in `internal/openaiwire`, also used by `openaiagents`.
 ```go
 const PackageName, PackageVersion, SpanName
 var ErrMaxSteps error
-type Options struct{ Client *openai.Client; APIKey string; CaptureContent aiserver.ContentCapture }
+type Options struct{ Client *openai.Client; APIKey string; MaxRetries *int; CaptureContent aiserver.ContentCapture }
 func NewHandler(Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func OpenAIMessages(ctx, configKey, userInput string, userCtx ldcontext.Context, *InvokeOptions) (aiserver.ProviderResponse, error)
 ```
+
+`Options.MaxRetries` is the retry count on the client `NewHandler` builds (`option.WithMaxRetries`); nil keeps the SDK default, 0 means one attempt. `NewHandler` and the convenience function refuse a negative count, or `MaxRetries` with `Client`, with an error naming `MaxRetries`.
 
 `Options.CaptureContent` gates prompt, completion, tool and judge-explanation content on spans:
 `aiserver.CaptureDefault` (the zero value) follows `aiserver.Configure`, else on;

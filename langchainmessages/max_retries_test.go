@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -18,17 +17,8 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
-// withMaxRetries returns o with MaxRetries set to n. It goes through reflect so
-// these tests compile before the field exists.
-func withMaxRetries(t *testing.T, o Options, n int) Options {
-	t.Helper()
-	f := reflect.ValueOf(&o).Elem().FieldByName("MaxRetries")
-	if !f.IsValid() {
-		t.Fatal("Options has no MaxRetries field")
-	}
-	f.Set(reflect.ValueOf(&n))
-	return o
-}
+// retries returns a pointer to n, for Options.MaxRetries.
+func retries(n int) *int { return &n }
 
 // failingProvider answers every request with a retryable 500 and a 1 ms retry
 // hint, and counts requests: one call makes 1 + its retry count. One server
@@ -116,7 +106,7 @@ func TestMaxRetriesReachesTheModel(t *testing.T) {
 				n = 1
 			}
 			f := failingEnv(t)
-			callOnce(mustHandler(t, withMaxRetries(t, Options{}, n)), providerCfg(route, nil), false)
+			callOnce(mustHandler(t, Options{MaxRetries: retries(n)}), providerCfg(route, nil), false)
 			wantRequests(t, f, int32(n)+1)
 		})
 	}
@@ -141,14 +131,14 @@ func TestMaxRetriesZeroIsHonoured(t *testing.T) {
 	for _, route := range routes {
 		t.Run(route, func(t *testing.T) {
 			f := failingEnv(t)
-			callOnce(mustHandler(t, withMaxRetries(t, Options{}, 0)), providerCfg(route, nil), false)
+			callOnce(mustHandler(t, Options{MaxRetries: retries(0)}), providerCfg(route, nil), false)
 			wantRequests(t, f, 1)
 		})
 	}
 }
 
 func TestMaxRetriesNegativeIsRefusedAtConstruction(t *testing.T) {
-	_, err := NewHandler(withMaxRetries(t, Options{}, -1))
+	_, err := NewHandler(Options{MaxRetries: retries(-1)})
 	if err == nil || !strings.Contains(err.Error(), "MaxRetries") {
 		t.Fatalf("NewHandler(MaxRetries: -1) error = %v, want one naming MaxRetries", err)
 	}
@@ -156,14 +146,14 @@ func TestMaxRetriesNegativeIsRefusedAtConstruction(t *testing.T) {
 
 func TestMaxRetriesModelParametersCannotSetIt(t *testing.T) {
 	f := failingEnv(t)
-	callOnce(mustHandler(t, withMaxRetries(t, Options{}, 3)), providerCfg("OpenAI", map[string]any{"max_retries": 50}), false)
+	callOnce(mustHandler(t, Options{MaxRetries: retries(3)}), providerCfg("OpenAI", map[string]any{"max_retries": 50}), false)
 	wantRequests(t, f, 4)
 }
 
 func TestMaxRetriesInvokeAndStreamAgree(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		f := failingEnv(t)
-		callOnce(mustHandler(t, withMaxRetries(t, Options{}, 2)), providerCfg("OpenAI", nil), stream)
+		callOnce(mustHandler(t, Options{MaxRetries: retries(2)}), providerCfg("OpenAI", nil), stream)
 		if got := f.n.Load(); got != 3 {
 			t.Errorf("stream=%v: requests = %d, want 3", stream, got)
 		}
@@ -193,7 +183,7 @@ func installRetryLD(t *testing.T) {
 func TestMaxRetriesConvenienceExportForwardsIt(t *testing.T) {
 	f := failingEnv(t)
 	installRetryLD(t)
-	_, _ = LangChainMessages(bg, "cfg", "q", ldcontext.New("u"), &InvokeOptions{Handler: withMaxRetries(t, Options{}, 4)})
+	_, _ = LangChainMessages(bg, "cfg", "q", ldcontext.New("u"), &InvokeOptions{Handler: Options{MaxRetries: retries(4)}})
 	wantRequests(t, f, 5)
 }
 
@@ -205,7 +195,8 @@ func TestMaxRetriesWithModelOrFactoryIsRefused(t *testing.T) {
 		"ModelFactory": {ModelFactory: func(aiserver.AiConfig) (llms.Model, error) { return &fakeModel{}, nil }},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := NewHandler(withMaxRetries(t, o, 3))
+			o.MaxRetries = retries(3)
+			_, err := NewHandler(o)
 			if err == nil || !strings.Contains(err.Error(), "MaxRetries") {
 				t.Fatalf("NewHandler(%s + MaxRetries) error = %v, want one naming MaxRetries", name, err)
 			}
@@ -218,7 +209,7 @@ func TestMaxRetriesWithModelOrFactoryIsRefused(t *testing.T) {
 func TestMaxRetriesConvenienceExportReturnsTheRefusal(t *testing.T) {
 	f := failingEnv(t)
 	installRetryLD(t)
-	_, err := LangChainMessages(bg, "cfg", "q", ldcontext.New("u"), &InvokeOptions{Handler: withMaxRetries(t, Options{}, -1)})
+	_, err := LangChainMessages(bg, "cfg", "q", ldcontext.New("u"), &InvokeOptions{Handler: Options{MaxRetries: retries(-1)}})
 	if err == nil || !strings.Contains(err.Error(), "MaxRetries") {
 		t.Fatalf("LangChainMessages(MaxRetries: -1) error = %v, want one naming MaxRetries", err)
 	}

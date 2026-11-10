@@ -107,6 +107,7 @@ var ErrMaxSteps error
 type Options struct {
 	Client         *openai.Client // used for every call when set
 	APIKey         string         // used when Client is nil; else OPENAI_API_KEY
+	MaxRetries     *int           // retries on the client NewHandler builds; nil = SDK default; refused with Client or < 0
 	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 }
 
@@ -123,7 +124,7 @@ type InvokeOptions struct {
 func OpenAIMessages(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 ```
 
-`NewHandler` returns a `*aiserver.ProviderHandler` (with both `Invoke` and `Stream` set) and an `error` for an invalid option; the error is nil for now.
+`NewHandler` returns a `*aiserver.ProviderHandler` (with both `Invoke` and `Stream` set) and an `error` for an invalid option: a negative `MaxRetries`, or `MaxRetries` with `Client`.
 
 Behavior:
 
