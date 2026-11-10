@@ -79,6 +79,7 @@ type execArgs struct {
 	configKey string
 	config    AiConfig
 	meta      VariationMeta
+	value     ldvalue.Value // the evaluated variation; Null when unknown
 	userCtx   ldcontext.Context
 	handler   *ProviderHandler
 	userInput string
@@ -156,6 +157,11 @@ func (a execArgs) prepare() (TrackData, HandlerRequest, *trajectory.Recorder) {
 	vars[kitbase.VarLDContext] = kitbase.ContextToMap(a.userCtx) // always overwrites a caller's ldContext
 	vars[varLDContextTyped] = a.userCtx
 	vars[kitbase.VarLD] = td
+	// The variation holds the prompt, so only a handler that captures content gets it.
+	delete(vars, varLDValue)
+	if !a.value.IsNull() && a.handler.CaptureContent.enabled() {
+		vars[varLDValue] = flagValue{a.value}
+	}
 	if len(a.run.SpanAttributes) > 0 {
 		vars[varLDSpanAttributes] = spanAttributes(a.run.SpanAttributes)
 	}

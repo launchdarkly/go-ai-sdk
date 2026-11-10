@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
+	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/judging"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
@@ -89,13 +90,13 @@ func activeJudges(cfg AiConfig) []JudgeRef {
 // already produced and paid for, so a judge that cannot be resolved (most
 // often one toggled off in LaunchDarkly) is logged and skipped rather than
 // failing the call, as in the JavaScript SDK.
-func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context) (AiConfig, VariationMeta, bool) {
-	cfg, meta, err := extractVariation(ctx, key, userCtx, nil, false)
+func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context) (AiConfig, VariationMeta, ldvalue.Value, bool) {
+	cfg, meta, value, err := extractVariation(ctx, key, userCtx, nil, false)
 	if err != nil {
 		sdkLogger().Error("judge skipped: its config could not be resolved", "judge", key, "error", err)
-		return AiConfig{}, VariationMeta{}, false
+		return AiConfig{}, VariationMeta{}, ldvalue.Null(), false
 	}
-	return cfg, meta, true
+	return cfg, meta, value, true
 }
 
 // runJudges executes the configured judges inline. Judges never get
@@ -104,7 +105,7 @@ func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context) (A
 func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error) {
 	results := map[string]JudgeResult{}
 	for _, j := range activeJudges(a.cfg) {
-		jcfg, jmeta, ok := resolveJudge(ctx, j.Key, a.userCtx)
+		jcfg, jmeta, jvalue, ok := resolveJudge(ctx, j.Key, a.userCtx)
 		if !ok {
 			continue
 		}
@@ -119,7 +120,7 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 		history := judging.BuildMessageHistory(a.userInput, a.trajectory, a.output)
 		err := withJudgeEvaluation(ctx, j.Key, a.parentTD, func(ctx context.Context, record func(float64, string)) error {
 			res, err := executeAndTrack(ctx, execArgs{
-				configKey: j.Key, config: effective, meta: jmeta, userCtx: a.userCtx, handler: h,
+				configKey: j.Key, config: effective, meta: jmeta, value: jvalue, userCtx: a.userCtx, handler: h,
 				userInput: a.output, graphKey: a.graphKey,
 				// input is always sent ("" when there is none), so a rubric's {{input}}
 				// never renders as the literal placeholder.
@@ -180,7 +181,7 @@ func buildJudgeTasksFromArgs(ctx context.Context, args buildJudgeTasksArgs) ([]J
 func buildJudgeTasks(ctx context.Context, a judgeArgs) ([]JudgeTask, error) {
 	tasks := []JudgeTask{}
 	for _, j := range activeJudges(a.cfg) {
-		jcfg, jmeta, ok := resolveJudge(ctx, j.Key, a.userCtx)
+		jcfg, jmeta, jvalue, ok := resolveJudge(ctx, j.Key, a.userCtx)
 		if !ok {
 			continue
 		}
@@ -190,7 +191,7 @@ func buildJudgeTasks(ctx context.Context, a judgeArgs) ([]JudgeTask, error) {
 			continue
 		}
 		tasks = append(tasks, JudgeTask{
-			ConfigKey: j.Key, JudgeConfig: jcfg, JudgeMeta: jmeta, ActualOutput: a.output,
+			ConfigKey: j.Key, JudgeConfig: jcfg, JudgeMeta: jmeta, JudgeValue: jvalue, ActualOutput: a.output,
 			UserInput: a.userInput, Trajectory: a.trajectory, UserContext: a.userCtx,
 			JudgeProvider: jcfg.Provider.Name, JudgeMode: mode, CollapseMessages: collapse,
 			EvaluationMetricKey: jcfg.EvaluationMetricKey, ParentTrackData: a.parentTD,
@@ -243,7 +244,7 @@ func RunJudge(ctx context.Context, task JudgeTask, handlers []*ProviderHandler) 
 	var out *JudgeRunResult
 	err := withJudgeEvaluation(ctx, task.ConfigKey, task.ParentTrackData, func(ctx context.Context, record func(float64, string)) error {
 		res, err := executeAndTrack(ctx, execArgs{
-			configKey: task.ConfigKey, config: cfg, meta: task.JudgeMeta, userCtx: task.UserContext,
+			configKey: task.ConfigKey, config: cfg, meta: task.JudgeMeta, value: task.JudgeValue, userCtx: task.UserContext,
 			handler: h, userInput: task.ActualOutput, variables: vars,
 		})
 		if err != nil {

@@ -163,6 +163,11 @@ started under that context get `gen_ai.conversation.id`.
 > One gate controls all of it: the handler's `CaptureContent` (`CaptureOn` /
 > `CaptureOff`), else the process default set with
 > `aiserver.Configure(aiserver.SDKOptions{CaptureContent: ...})`, else on.
+> The same gate covers the AI Config variation itself, which holds the prompt:
+> with capture on, the `feature_flag` span event's `feature_flag.result.value`
+> is the evaluated variation as JSON; with capture off it is the variation key as
+> a JSON string, and it is left off when there is no key. The graph span has no
+> handler, so it follows the process default.
 > Model, provider, usage, status and tool names are written either way.
 > After the first handler call, `Configure` accepts only options with the same
 > effect (`CaptureDefault` and `CaptureOn` both mean on) and returns

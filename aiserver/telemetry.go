@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
+	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -115,6 +116,12 @@ const varLDNoFlagEvent = "__ldNoFlagEvent"
 
 type noFlagEvent struct{}
 
+// varLDValue holds the evaluated variation for feature_flag.result.value. Its
+// unexported value type keeps template variables from setting it.
+const varLDValue = "__ldValue"
+
+type flagValue struct{ v ldvalue.Value }
+
 // setLDSpanAttributesFromVars writes the LaunchDarkly config-association and context
 // identity attributes on a handler's root span from variables. Without an
 // `__ld` entry (a handler called directly) only launchdarkly.operation.type
@@ -127,7 +134,8 @@ func setLDSpanAttributesFromVars(span trace.Span, variables map[string]any) {
 	}
 	c, _ := variables[varLDContextTyped].(ldcontext.Context)
 	_, skipFlagEvent := variables[varLDNoFlagEvent].(noFlagEvent)
-	setLDSpanAttributes(span, td, c, !skipFlagEvent)
+	value, _ := variables[varLDValue].(flagValue)
+	setLDSpanAttributes(span, td, c, !skipFlagEvent, value.v)
 	if extra, ok := variables[varLDSpanAttributes].(spanAttributes); ok {
 		span.SetAttributes(extra...)
 	}
@@ -137,10 +145,11 @@ func setLDSpanAttributesFromVars(span trace.Span, variables map[string]any) {
 // handler variables, such as a native graph runner's graph span. A zero
 // Context writes no identity.
 func kitSetLDSpanAttributesFor(span trace.Span, td TrackData, userCtx ldcontext.Context) {
-	setLDSpanAttributes(span, td, userCtx, true)
+	setLDSpanAttributes(span, td, userCtx, true, ldvalue.Null())
 }
 
-func setLDSpanAttributes(span trace.Span, td TrackData, userCtx ldcontext.Context, flagEvent bool) {
+// value is the evaluated variation, or Null when the span may not carry it.
+func setLDSpanAttributes(span trace.Span, td TrackData, userCtx ldcontext.Context, flagEvent bool, value ldvalue.Value) {
 	attrs := []attribute.KeyValue{
 		attribute.String("launchdarkly.operation.type", "gen_ai"),
 		attribute.String("launchdarkly.config.key", td.ConfigKey),
@@ -156,6 +165,17 @@ func setLDSpanAttributes(span trace.Span, td TrackData, userCtx ldcontext.Contex
 	}
 	if td.EnvironmentID != "" {
 		eventAttrs = append(eventAttrs, attribute.String("feature_flag.set.id", td.EnvironmentID))
+	}
+	if td.VariationKey != "" {
+		eventAttrs = append(eventAttrs, attribute.String("feature_flag.result.variant", td.VariationKey))
+	}
+	// Serialized as the SDK tracing hook does with value inclusion on; without
+	// the variation, the key stands in as a JSON string.
+	switch {
+	case !value.IsNull():
+		eventAttrs = append(eventAttrs, attribute.String("feature_flag.result.value", value.JSONString()))
+	case td.VariationKey != "":
+		eventAttrs = append(eventAttrs, attribute.String("feature_flag.result.value", ldvalue.String(td.VariationKey).JSONString()))
 	}
 	if userCtx.IsDefined() {
 		if canonical, perKind, ok := kitbase.ContextIdentity(userCtx); ok {
