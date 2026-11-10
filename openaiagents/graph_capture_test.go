@@ -43,7 +43,7 @@ func TestToOpenAIAgentsCaptureContent(t *testing.T) {
 				response("r3", textOutput("refunded"), 5, 0, 3))
 			var calls []string
 			opts := &NativeGraphOptions{ToolHandlers: handlersFor(&calls), Context: user, Handler: Options{Client: c, CaptureContent: tc.capture}}
-			if _, err := ToOpenAIAgents(resolve(t, ld, "g"), opts).Invoke(bg, "hello"); err != nil {
+			if _, err := must(ToOpenAIAgents(resolve(t, ld, "g"), opts)).Invoke(bg, "hello"); err != nil {
 				t.Fatal(err)
 			}
 			got := contentOnSpans(exp)

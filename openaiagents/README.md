@@ -100,10 +100,14 @@ def, err := aiserver.ResolveGraph(ctx, "support-graph", userCtx, aiserver.GraphO
 if err != nil {
 	log.Fatal(err)
 }
-out, err := openaiagents.ToOpenAIAgents(def, &openaiagents.NativeGraphOptions{
+g, err := openaiagents.ToOpenAIAgents(def, &openaiagents.NativeGraphOptions{
 	ToolHandlers: tools,
 	Context:      userCtx, // omit to track no events
-}).Invoke(ctx, "I was double charged")
+})
+if err != nil {
+	log.Fatal(err)
+}
+out, err := g.Invoke(ctx, "I was double charged")
 ```
 
 Hosted (built-in) tools: register a `NativeTool` under the config tool's key. Its `ToolName` is
@@ -154,7 +158,7 @@ type NativeGraphOptions struct {
 	Context      ldcontext.Context
 	Handler      Options
 }
-func ToOpenAIAgents(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *NativeGraph
+func ToOpenAIAgents(def *aiserver.GraphDefinition, opts *NativeGraphOptions) (*NativeGraph, error)
 func (g *NativeGraph) Invoke(ctx context.Context, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 ```
 

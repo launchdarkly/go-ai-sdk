@@ -36,7 +36,7 @@ func OpenAIAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, *
 func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error)
 type NativeGraphOptions struct{ ToolHandlers; Context ldcontext.Context; Handler Options }
 type NativeGraph struct{ /* unexported */ }
-func ToOpenAIAgents(*aiserver.GraphDefinition, *NativeGraphOptions) *NativeGraph
+func ToOpenAIAgents(*aiserver.GraphDefinition, *NativeGraphOptions) (*NativeGraph, error)
 func (*NativeGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 ```
 

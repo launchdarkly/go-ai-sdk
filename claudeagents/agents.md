@@ -43,7 +43,7 @@ type GraphOptions struct{ ToolHandlers; GraphJudge; Registry }
 func ClaudeGraph(key string, GraphOptions, Options) (*aiserver.AgentGraph, error)
 type AdapterOptions struct{ ToolHandlers; Handler Options }
 type GraphRunner struct{ /* unexported */ }
-func ToClaudeAgents(*aiserver.GraphDefinition, *AdapterOptions) *GraphRunner
+func ToClaudeAgents(*aiserver.GraphDefinition, *AdapterOptions) (*GraphRunner, error)
 func (*GraphRunner) Invoke(ctx, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 var ClaudeBash, ClaudeRead, ClaudeEdit, ClaudeWrite, ClaudeGlob, ClaudeGrep, ClaudeWebFetch, ClaudeWebSearch, ClaudeTodoWrite, ClaudeNotebookEdit *aiserver.NativeTool
 ```

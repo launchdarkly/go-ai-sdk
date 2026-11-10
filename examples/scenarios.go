@@ -185,8 +185,11 @@ func nativeGraph(ctx context.Context, key, input string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := claudeagents.ToClaudeAgents(def, &claudeagents.AdapterOptions{ToolHandlers: exampleTools}).
-		Invoke(ctx, input, aiserver.WithVariables(map[string]any{"user_id": "user-123"}))
+	runner, err := claudeagents.ToClaudeAgents(def, &claudeagents.AdapterOptions{ToolHandlers: exampleTools})
+	if err != nil {
+		return err
+	}
+	resp, err := runner.Invoke(ctx, input, aiserver.WithVariables(map[string]any{"user_id": "user-123"}))
 	if err != nil {
 		return err
 	}
@@ -203,8 +206,11 @@ func nativeGraphLangChain(ctx context.Context, key, input string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := langchainagents.ToLangGraph(def, &langchainagents.NativeGraphOptions{ToolHandlers: exampleTools, Context: user}).
-		Invoke(ctx, input, aiserver.WithVariables(map[string]any{"user_id": "user-123"}))
+	g, err := langchainagents.ToLangGraph(def, &langchainagents.NativeGraphOptions{ToolHandlers: exampleTools, Context: user})
+	if err != nil {
+		return err
+	}
+	resp, err := g.Invoke(ctx, input, aiserver.WithVariables(map[string]any{"user_id": "user-123"}))
 	if err != nil {
 		return err
 	}

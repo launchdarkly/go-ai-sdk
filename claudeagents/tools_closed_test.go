@@ -69,7 +69,7 @@ func TestUnattachedNativeToolNotSent(t *testing.T) {
 
 	t.Run("graph", func(t *testing.T) {
 		e := setup(t, graphFlags(map[string]any{"tools": readerTools()}), textResp("done", 1, 1))
-		if _, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts, ToolHandlers: handlers}).Invoke(bg, "q"); err != nil {
+		if _, err := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts, ToolHandlers: handlers})).Invoke(bg, "q"); err != nil {
 			t.Fatal(err)
 		}
 		check(t, e.api.reqs()[0])

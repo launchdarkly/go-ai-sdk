@@ -70,7 +70,7 @@ func TestToOpenAIAgentsTopology(t *testing.T) {
 	ld := twoNode(nil)
 	installClient(t, ld)
 	var calls []string
-	g := ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{ToolHandlers: handlersFor(&calls)})
+	g := must(ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{ToolHandlers: handlersFor(&calls)}))
 	agents, err := g.buildAgents(bg, map[string]any{"tone": "calm"}, "run", false)
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +105,7 @@ func TestToOpenAIAgentsRun(t *testing.T) {
 		response("r3", textOutput("refunded"), 5, 0, 3))
 	var calls []string
 	def := resolve(t, ld, "g")
-	res, err := ToOpenAIAgents(def, &NativeGraphOptions{ToolHandlers: handlersFor(&calls), Context: user, Handler: Options{Client: c}}).Invoke(bg, "hello", aiserver.WithVariables(map[string]any{"tone": "calm"}))
+	res, err := must(ToOpenAIAgents(def, &NativeGraphOptions{ToolHandlers: handlersFor(&calls), Context: user, Handler: Options{Client: c}})).Invoke(bg, "hello", aiserver.WithVariables(map[string]any{"tone": "calm"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestToOpenAIAgentsHandoffFailure(t *testing.T) {
 	installClient(t, ld)
 	exp := tracer(t)
 	_, c := fakeClient(t, toolResp("r1", "transfer_to_billing", "{}"), "STATUS400")
-	if _, err := ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{Context: user, Handler: Options{Client: c}}).Invoke(bg, "q"); err == nil {
+	if _, err := must(ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{Context: user, Handler: Options{Client: c}})).Invoke(bg, "q"); err == nil {
 		t.Fatal("want error")
 	}
 	if hs := ld.events("$ld:ai:graph:handoff_success"); len(hs) != 0 {
@@ -259,7 +259,7 @@ func TestToOpenAIAgentsNodeOnce(t *testing.T) {
 	exp := tracer(t)
 	_, c := fakeClient(t,
 		toolResp("r1", "transfer_to_billing", "{}"), toolResp("r2", "transfer_to_triage", "{}"), textResp("back", 1, 1))
-	if _, err := ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{Context: user, Handler: Options{Client: c}}).Invoke(bg, "q"); err != nil {
+	if _, err := must(ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{Context: user, Handler: Options{Client: c}})).Invoke(bg, "q"); err != nil {
 		t.Fatal(err)
 	}
 	var keys []any
@@ -281,7 +281,7 @@ func TestToOpenAIAgentsErrors(t *testing.T) {
 		installClient(t, ld)
 		exp := tracer(t)
 		_, c := fakeClient(t, "STATUS400")
-		_, err := ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{Context: user, Handler: Options{Client: c}}).Invoke(bg, "q")
+		_, err := must(ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{Context: user, Handler: Options{Client: c}})).Invoke(bg, "q")
 		var apiErr *openai.Error
 		if !errors.As(err, &apiErr) {
 			t.Fatalf("err = %v", err)
@@ -300,7 +300,7 @@ func TestToOpenAIAgentsErrors(t *testing.T) {
 		installClient(t, ld)
 		_, c := fakeClient(t, toolResp("r1", "transfer_to_billing", "{}"), textResp("ok", 1, 1))
 		var calls []string
-		if _, err := ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{ToolHandlers: handlersFor(&calls), Handler: Options{Client: c}}).Invoke(bg, "q"); err != nil {
+		if _, err := must(ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{ToolHandlers: handlersFor(&calls), Handler: Options{Client: c}})).Invoke(bg, "q"); err != nil {
 			t.Fatal(err)
 		}
 		if got := ld.aiEvents(); len(got) != 0 {
@@ -311,15 +311,15 @@ func TestToOpenAIAgentsErrors(t *testing.T) {
 	t.Run("disabled, rootless and nil definitions", func(t *testing.T) {
 		ld := &fakeLD{variations: map[string]map[string]any{}}
 		installClient(t, ld)
-		_, err := ToOpenAIAgents(resolve(t, ld, "off-graph"), nil).Invoke(bg, "q")
+		_, err := must(ToOpenAIAgents(resolve(t, ld, "off-graph"), nil)).Invoke(bg, "q")
 		if !errors.Is(err, aiserver.ErrGraphDisabled) || !strings.Contains(err.Error(), "off-graph") {
 			t.Errorf("disabled err = %v", err)
 		}
-		_, err = ToOpenAIAgents(&aiserver.GraphDefinition{Key: "rootless", Enabled: true}, nil).Invoke(bg, "q")
+		_, err = must(ToOpenAIAgents(&aiserver.GraphDefinition{Key: "rootless", Enabled: true}, nil)).Invoke(bg, "q")
 		if !errors.Is(err, ErrNoRoot) || !strings.Contains(err.Error(), "rootless") {
 			t.Errorf("rootless err = %v", err)
 		}
-		if _, err = ToOpenAIAgents(nil, nil).Invoke(bg, "q"); !errors.Is(err, ErrNilGraph) {
+		if _, err = must(ToOpenAIAgents(nil, nil)).Invoke(bg, "q"); !errors.Is(err, ErrNilGraph) {
 			t.Errorf("nil err = %v", err)
 		}
 	})
@@ -331,8 +331,8 @@ func TestToOpenAIAgentsHistoryAndNativeTool(t *testing.T) {
 	installClient(t, ld)
 	f, c := fakeClient(t, toolResp("r1", "transfer_to_billing", "{}"), textResp("ok", 1, 1))
 	history := []aiserver.Message{{Role: "user", Blocks: []aiserver.ContentBlock{{Type: "image", Source: &aiserver.ImageSource{Type: "base64", MediaType: "image/png", Data: "AAA"}}}}}
-	_, err := ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{Handler: Options{Client: c},
-		ToolHandlers: map[string]aiserver.ToolHandler{"search": &aiserver.NativeTool{ToolName: "web_search"}}}).Invoke(bg, "what is it?", aiserver.WithHistory(history))
+	_, err := must(ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{Handler: Options{Client: c},
+		ToolHandlers: map[string]aiserver.ToolHandler{"search": &aiserver.NativeTool{ToolName: "web_search"}}})).Invoke(bg, "what is it?", aiserver.WithHistory(history))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +391,7 @@ func TestToOpenAIAgentsSdkUsage(t *testing.T) {
 	def := resolve(t, ld, "g")
 	ld.resetTracks() // drop client.resolveGraph from the resolve above
 	_, c := fakeClient(t, toolResp("r1", "transfer_to_billing", "{}"), textResp("ok", 1, 1))
-	if _, err := ToOpenAIAgents(def, &NativeGraphOptions{Context: user, Handler: Options{Client: c}}).Invoke(bg, "q"); err != nil {
+	if _, err := must(ToOpenAIAgents(def, &NativeGraphOptions{Context: user, Handler: Options{Client: c}})).Invoke(bg, "q"); err != nil {
 		t.Fatal(err)
 	}
 	if got := ld.usageHelpers(); !reflect.DeepEqual(got, []string{"openai-agents.toOpenAIAgents"}) {
@@ -413,7 +413,7 @@ func TestToOpenAIAgentsToolPanicEndsSpans(t *testing.T) {
 				t.Errorf("panic = %v", p)
 			}
 		}()
-		_, _ = ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{ToolHandlers: tools, Context: user, Handler: Options{Client: c}}).Invoke(bg, "q")
+		_, _ = must(ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{ToolHandlers: tools, Context: user, Handler: Options{Client: c}})).Invoke(bg, "q")
 	}()
 	byName := spansByName(exp)
 	for _, name := range []string{kitbase.GraphSpanName, SpanName, "execute_tool lookup"} {

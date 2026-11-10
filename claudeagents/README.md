@@ -112,8 +112,11 @@ def, err := aiserver.ResolveGraph(ctx, "support-graph", ldcontext.New("user-123"
 if err != nil {
 	log.Fatal(err)
 }
-out, err := claudeagents.ToClaudeAgents(def, &claudeagents.AdapterOptions{ToolHandlers: tools}).
-	Invoke(ctx, "I was double charged")
+runner, err := claudeagents.ToClaudeAgents(def, &claudeagents.AdapterOptions{ToolHandlers: tools})
+if err != nil {
+	log.Fatal(err)
+}
+out, err := runner.Invoke(ctx, "I was double charged")
 ```
 
 ## Built-in tools
@@ -185,7 +188,7 @@ type GraphOptions struct { ToolHandlers; GraphJudge string; Registry } // no Han
 func ClaudeGraph(key string, opts GraphOptions, handler Options) (*aiserver.AgentGraph, error)
 
 type AdapterOptions struct { ToolHandlers map[string]aiserver.ToolHandler; Handler Options }
-func ToClaudeAgents(def *aiserver.GraphDefinition, opts *AdapterOptions) *GraphRunner
+func ToClaudeAgents(def *aiserver.GraphDefinition, opts *AdapterOptions) (*GraphRunner, error)
 func (*GraphRunner) Invoke(ctx, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 
 var ClaudeBash, ClaudeRead, ClaudeEdit, ClaudeWrite, ClaudeGlob, ClaudeGrep,

@@ -112,10 +112,14 @@ def, err := aiserver.ResolveGraph(ctx, "support-graph", user, aiserver.GraphOpti
 if err != nil {
 	log.Fatal(err)
 }
-out, err := langchainagents.ToLangGraph(def, &langchainagents.NativeGraphOptions{
+g, err := langchainagents.ToLangGraph(def, &langchainagents.NativeGraphOptions{
 	ToolHandlers: tools,
 	Context:      user, // without it, no LaunchDarkly events are tracked
-}).Invoke(ctx, "I was double charged", aiserver.WithHistory(history))
+})
+if err != nil {
+	log.Fatal(err)
+}
+out, err := g.Invoke(ctx, "I was double charged", aiserver.WithHistory(history))
 ```
 
 ## API
@@ -129,7 +133,7 @@ type Options struct {
 }
 func LangChainAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error)
-func ToLangGraph(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *LangGraph
+func ToLangGraph(def *aiserver.GraphDefinition, opts *NativeGraphOptions) (*LangGraph, error)
 func (g *LangGraph) Invoke(ctx context.Context, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 ```
 

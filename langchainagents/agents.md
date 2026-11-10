@@ -36,7 +36,7 @@ func LangChainAgents(ctx, configKey, userInput string, userCtx ldcontext.Context
 func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error)
 type NativeGraphOptions struct{ ToolHandlers; ModelFactory func(*aiserver.GraphNode) (llms.Model, error); Context ldcontext.Context }
 type LangGraph struct{ ... }
-func ToLangGraph(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *LangGraph
+func ToLangGraph(def *aiserver.GraphDefinition, opts *NativeGraphOptions) (*LangGraph, error)
 func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 ```
 

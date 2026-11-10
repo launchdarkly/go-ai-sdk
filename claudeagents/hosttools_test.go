@@ -617,8 +617,8 @@ func TestToClaudeAgentsHostTool(t *testing.T) {
 	e := setup(t, graphFlags(map[string]any{"tools": readerTools()}),
 		toolResp("Read", `{"file_path":"a.txt"}`), textResp("done", 1, 1))
 	e.opts.WorkDir = dir
-	res, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts,
-		ToolHandlers: map[string]aiserver.ToolHandler{"reader": ClaudeRead}}).Invoke(bg, "q")
+	res, err := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts,
+		ToolHandlers: map[string]aiserver.ToolHandler{"reader": ClaudeRead}})).Invoke(bg, "q")
 	if err != nil || res.Response != "done" {
 		t.Fatalf("%v %v", res, err)
 	}

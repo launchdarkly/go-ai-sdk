@@ -57,12 +57,13 @@ type NativeGraph struct {
 // ToOpenAIAgents translates def into an agent tree run natively on the
 // Responses API (toOpenAIAgents). opts may be nil. Errors for
 // a nil, disabled or rootless definition are returned by Invoke.
-func ToOpenAIAgents(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *NativeGraph {
+// The error is for an invalid option, and nil for now.
+func ToOpenAIAgents(def *aiserver.GraphDefinition, opts *NativeGraphOptions) (*NativeGraph, error) {
 	handlerkit.ReportUsage("openai-agents.toOpenAIAgents", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &NativeGraphOptions{}
 	}
-	return &NativeGraph{def: def, opts: *opts, client: opts.Handler.client()}
+	return &NativeGraph{def: def, opts: *opts, client: opts.Handler.client()}, nil
 }
 
 // buildAgents makes one agent per reachable node, then wires a handoff for
