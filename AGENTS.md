@@ -14,7 +14,8 @@ Tier 0  aiserver                 core: no provider SDK imports
         internal/handlerkit  typed access to the handler kit that stays unexported in aiserver; imports aiserver, never imported by it
 Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         claudeagents   openaiagents   bedrockagents
-        internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers shared by a pair
+        internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers, each shared by one provider's messages/agents pair
+        internal/langchainwire  LangChain wire helper for langchainmessages/langchainagents; imports the anthropic/openai option packages and bedrockruntime (built-in model retries)
         skills         Agent Skills (core; imports aiserver and golang.org/x/sys, no provider SDK)
         evaluations    Evaluations from Code (core; imports aiserver and golang.org/x/text, no provider SDK)
 ```
