@@ -15,7 +15,7 @@ Materialization is POSIX only.
 ```go
 store, err := skills.NewLaunchDarklySkillStore(os.Getenv("LD_SDK_KEY"), nil) // server-side sdk- key only
 if err != nil { log.Fatal(err) }
-if _, err := store.Start(); err != nil { log.Fatal(err) }
+if err := store.Start(); err != nil { log.Fatal(err) }
 defer store.Close()
 // Gate boot on the first payload. Before it, WriteAllSkills reports
 // "unavailable" and deletes nothing.

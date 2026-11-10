@@ -169,7 +169,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 
 func start(t *testing.T, s *LaunchDarklySkillStore) {
 	t.Helper()
-	if _, err := s.Start(); err != nil {
+	if err := s.Start(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -696,7 +696,7 @@ func TestCloseInterruptsAParkedRead(t *testing.T) {
 		t.Fatal("Close did not interrupt the read promptly")
 	}
 	s.Close() // idempotent
-	if _, err := s.Start(); !errors.Is(err, ErrStoreClosed) {
+	if err := s.Start(); !errors.Is(err, ErrStoreClosed) {
 		t.Fatalf("Start after Close: %v", err)
 	}
 }
@@ -709,15 +709,14 @@ func TestStreamReadTimeoutReconnects(t *testing.T) {
 	eventually(t, "a reconnect after the read timeout", func() bool { return len(ft.requests()) >= 2 })
 }
 
-func TestStartChainsAndIsIdempotent(t *testing.T) {
+func TestStartIsIdempotent(t *testing.T) {
 	_, _ = setup(t)
 	ft := &fakeTransport{}
 	s := newTestStore(t, LaunchDarklySkillStoreModeStream, ft, nil)
-	got, err := s.Start()
-	if err != nil || got != s {
-		t.Fatal("Start must return the store")
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
 	}
-	_, _ = s.Start()
+	_ = s.Start()
 	time.Sleep(20 * time.Millisecond)
 	if n := len(ft.requests()); n != 1 {
 		t.Fatalf("a second Start began a second delivery loop: %d requests", n)
