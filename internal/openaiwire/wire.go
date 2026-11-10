@@ -138,10 +138,12 @@ func reasoning(v any) map[string]any {
 
 // Usage reports one response's usage for a span. input_tokens already
 // includes cached tokens, so cache reads are detail and are not added again.
+// A response without usage is Unreported.
 func Usage(u responses.ResponseUsage) kitbase.SpanUsage {
 	return kitbase.SpanUsage{
 		Input: float64(u.InputTokens), Output: float64(u.OutputTokens),
-		CacheRead: float64(u.InputTokensDetails.CachedTokens),
+		CacheRead:  float64(u.InputTokensDetails.CachedTokens),
+		Unreported: !u.JSON.InputTokens.Valid(),
 	}
 }
 
