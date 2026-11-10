@@ -36,16 +36,25 @@ var (
 )
 
 // GenAISystem is gen_ai.system on every LangChain span. The provider that
-// serves the request goes in gen_ai.provider.name (ProviderName).
+// serves the request goes in gen_ai.provider.name (SpanProviderName).
 const GenAISystem = "langchain"
 
-// ProviderName is the lowercased config provider for gen_ai.provider.name. An
+// ProviderName is the lowercased config provider, which picks the model. An
 // empty name falls back to "openai", as in JavaScript.
 func ProviderName(cfg aiserver.AiConfig) string {
 	if cfg.Provider.Name == "" {
 		return "openai"
 	}
 	return strings.ToLower(cfg.Provider.Name)
+}
+
+// SpanProviderName is gen_ai.provider.name: ProviderName, except the Bedrock
+// route, which is "aws.bedrock" as on the Bedrock handlers' spans.
+func SpanProviderName(cfg aiserver.AiConfig) string {
+	if p := ProviderName(cfg); p != "bedrock" {
+		return p
+	}
+	return "aws.bedrock"
 }
 
 // ModelConfig applies the Bedrock inference-profile prefix so the

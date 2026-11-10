@@ -45,7 +45,7 @@ func LangChainMessages(ctx, configKey, userInput string, userCtx ldcontext.Conte
 ## Implementation details
 
 - **`config`** — `langchainwire.ModelConfig` applies the Bedrock `model.region` prefix. `provider.name`
-  (lowercased, `openai` when empty) is `gen_ai.provider.name` (`gen_ai.system` is always `langchain`) and picks the built-in model.
+  (lowercased, `openai` when empty, `aws.bedrock` for `bedrock`) is `gen_ai.provider.name` (`gen_ai.system` is always `langchain`) and picks the built-in model.
   `model.parameters` maps to `llms.CallOption`s; `model.custom` is never read. `tools` are
   filtered by `handlerkit.CallableTools` and sent with `llms.WithTools`, sorted by name.
   `outputFormat` (blocking only) adds `llms.WithJSONMode()` plus the schema instruction on the
