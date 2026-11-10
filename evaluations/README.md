@@ -79,7 +79,16 @@ if !res.Passed { os.Exit(1) }
 | `PollInterval` / `PollTimeout` | Summary polling (default 2s / 3m). Large datasets need a longer timeout. |
 
 The SDK never computes a verdict: it reports scores, and LaunchDarkly rules on them against the
-thresholds pinned on the evaluation. `Passed` is true only when no row errored or failed.
+thresholds pinned on the evaluation. Once the run's rows are all accounted for and the summary
+reports a criterion with a pass rate threshold, `Run` reads the run's `Verdict` (waiting up to 30s
+for it to be recorded). A run fails when any criterion's pass rate (passed rows over all rows, so
+errored rows count against it) is below its threshold. `Passed` follows the verdict when there is
+one. Without one, `Passed` is true only when no row errored or failed. Every criterion sends a pass
+rate threshold, 0.95 by default, so a run that sets none passes when 95% of each criterion's rows
+pass. Set `PassRateThreshold: new(1.0)` in every criterion's `JudgeOptions` or `ScorerOptions` to
+require every row to pass. Where
+LaunchDarkly does not serve verdicts for the project, `Verdict` is `""` and `Passed` uses the row
+counts.
 Management API requests go to `APIBaseURI`, then `LD_API_BASE_URI`, then `https://app.launchdarkly.com`.
 The run link uses `UIBaseURI`, then `LD_UI_BASE_URI`, then the same default. At either level a
 blank value counts as unset, and a trailing `/` is stripped. Both hosts are resolved once, at
@@ -99,8 +108,10 @@ func NewScorer(name string, fn ScorerFunc, opts *ScorerOptions) (*Scorer, error)
 | Type | Key fields |
 | --- | --- |
 | `InitEvaluationsOptions` | `ProjectKey` (default `LD_PROJECT_KEY`), `APIToken` (default `LD_API_TOKEN`), `SDKKey` (default `LD_SDK_KEY`), `HTTPClient` (default `http.DefaultClient`), `RequestTimeout` (30s per attempt), `MaxAttempts` (4), `Logger`, `APIBaseURI` (default `LD_API_BASE_URI`, then `https://app.launchdarkly.com`), `UIBaseURI` (default `LD_UI_BASE_URI`, then `https://app.launchdarkly.com`) |
-| `EvalRunResult` | `Passed` (true iff the final summary has no error and no failed rows), `URL` (the run in the LaunchDarkly UI), `RunID`, `Summary` |
-| `RunSummary` | `TotalRows`, `PassedRows`, `FailedRows`, `ErrorRows`, `PendingRows` |
+| `EvalRunResult` | `Passed` (follows `Verdict`; without one, true iff the final summary has no error and no failed rows), `URL` (the run in the LaunchDarkly UI), `RunID`, `Summary`, `Verdict` |
+| `RunSummary` | `TotalRows`, `PassedRows`, `FailedRows`, `ErrorRows`, `PendingRows`, `Criteria` |
+| `CriterionSummary` | `CriterionType`, `PassRateThreshold` (`*float64`), `PassedRows`, `FailedRows`, `ErrorRows`, `PassRate` (`*float64`), `PassRateVerdict` |
+| `EvalVerdict` | `EvalVerdictPass`, `EvalVerdictFail`, or `""` (none recorded, not served, or a value this release does not recognise) |
 
 Errors are sentinels for `errors.Is`: `ErrInvalidArgument` (validation, before any I/O),
 `ErrMissingCredential`, `ErrNoClient`, `ErrAPI` (non-2xx; `*APIError` carries the

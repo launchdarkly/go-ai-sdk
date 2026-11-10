@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math"
 	"strings"
 	"time"
 
@@ -452,7 +453,7 @@ func nilIfEmpty(m map[string]any) any {
 
 func parseSummary(raw any) (RunSummary, error) {
 	if raw == nil {
-		return RunSummary{}, nil
+		return RunSummary{Criteria: []CriterionSummary{}}, nil
 	}
 	obj, err := asObject(raw, "evaluation run summary")
 	if err != nil {
@@ -470,7 +471,65 @@ func parseSummary(raw any) (RunSummary, error) {
 		return v
 	}
 	return RunSummary{TotalRows: get("total", "total_rows"), PassedRows: get("passed", "passed_rows"),
-		FailedRows: get("failed", "failed_rows"), ErrorRows: get("error", "error_rows"), PendingRows: get("pending", "pending_rows")}, nil
+		FailedRows: get("failed", "failed_rows"), ErrorRows: get("error", "error_rows"), PendingRows: get("pending", "pending_rows"),
+		Criteria: parseCriterionSummaries(obj["criterionSummaries"])}, nil
+}
+
+// parseCriterionSummaries keeps the object entries in order. A missing or
+// non-list value is an empty list, which is also how LaunchDarkly says it
+// does not serve verdicts for the project.
+func parseCriterionSummaries(raw any) []CriterionSummary {
+	list, _ := raw.([]any)
+	out := []CriterionSummary{}
+	for _, item := range list {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		count := func(k string) int { n, _ := asInt(m[k]); return n }
+		typ, _ := m["criterionType"].(string)
+		out = append(out, CriterionSummary{
+			CriterionType:     typ,
+			PassRateThreshold: asOptionalFloat(m["criterionPassRateThreshold"]),
+			PassedRows:        count("passed"),
+			FailedRows:        count("failed"),
+			ErrorRows:         count("error"),
+			PassRate:          asOptionalFloat(m["passRate"]),
+			PassRateVerdict:   parseVerdict(m["passRateVerdict"]),
+		})
+	}
+	return out
+}
+
+func asOptionalFloat(v any) *float64 {
+	f, ok := v.(float64)
+	if !ok || math.IsNaN(f) || math.IsInf(f, 0) {
+		return nil
+	}
+	return &f
+}
+
+// parseVerdict closes the verdict to pass and fail: any other value, which
+// LaunchDarkly may add later, is no verdict rather than a coerced one.
+func parseVerdict(v any) EvalVerdict {
+	switch s, _ := v.(string); EvalVerdict(s) {
+	case EvalVerdictPass, EvalVerdictFail:
+		return EvalVerdict(s)
+	}
+	return ""
+}
+
+// expectsVerdict reports whether LaunchDarkly will rule on the run: some
+// criterion pinned on its evaluation has a pass rate threshold. It reads the
+// summary, not the caller's criteria, because those are the thresholds
+// LaunchDarkly rules on, and an empty list means no verdicts are served.
+func (s RunSummary) expectsVerdict() bool {
+	for _, c := range s.Criteria {
+		if c.PassRateThreshold != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (s RunSummary) accounted() int { return s.PassedRows + s.FailedRows + s.ErrorRows }
@@ -520,4 +579,86 @@ func (r *runState) timeoutError(s RunSummary) error {
 		fmt.Fprintf(&b, " The run has %d criteria; a row is counted only once results for all of them have landed.", n)
 	}
 	return fmt.Errorf("evaluations: %w: %s", ErrPollTimeout, b.String())
+}
+
+// --- run verdict ---------------------------------------------------------
+
+// unjudgedStates are the terminal states besides COMPLETE: a run in one
+// never completes, so it never gets a verdict. TEMPORARY_ERROR and STALLED
+// can still reach COMPLETE and are waited on.
+var unjudgedStates = map[string]bool{"CANCELLED": true, "PERMANENT_ERROR": true}
+
+// runStatus is one read of the run resource. recognized is the verdict when
+// it is pass or fail; present is set for any non-null verdict, so an
+// unrecognised one (which LaunchDarkly writes once and never changes) ends
+// the wait while a missing one does not.
+type runStatus struct {
+	state      string
+	verdict    any
+	present    bool
+	recognized EvalVerdict
+}
+
+func (r *runState) readRun(ctx context.Context) (runStatus, error) {
+	raw, err := r.m.api.get(ctx, r.runsPath()+"/"+segment(r.runID))
+	if err != nil {
+		return runStatus{}, err
+	}
+	obj, err := asObject(raw, "evaluation run")
+	if err != nil {
+		return runStatus{}, err
+	}
+	var st runStatus
+	for _, k := range []string{"id", "evaluationId", "state"} {
+		s, err := requireString(obj, k, "evaluation run")
+		if err != nil {
+			return runStatus{}, err
+		}
+		if k == "state" {
+			st.state = s
+		}
+	}
+	st.verdict = obj["verdict"]
+	st.present = st.verdict != nil
+	st.recognized = parseVerdict(st.verdict)
+	return st, nil
+}
+
+// awaitVerdict reads the run until LaunchDarkly has recorded its verdict.
+// The verdict is written just after the run completes, so the first read
+// can miss it. Any outcome but pass or fail is "", and Passed then falls
+// back to the row rule: the rows are already accounted for, so only a
+// cancelled context makes this an error.
+func (r *runState) awaitVerdict(ctx context.Context) (EvalVerdict, error) {
+	deadline := time.Now().Add(verdictWaitTimeout)
+	for {
+		st, err := r.readRun(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return "", fmt.Errorf("evaluations: verdict read: %w", ctx.Err())
+			}
+			r.m.logger.Warn("could not read the evaluation run verdict; the result is judged on row counts instead",
+				"runId", r.runID, "error", err)
+			return "", nil
+		}
+		switch {
+		case st.recognized != "":
+			return st.recognized, nil
+		case st.present:
+			r.m.logger.Warn("evaluation run has a verdict this SDK does not recognise; the result is judged on row counts instead",
+				"runId", r.runID, "verdict", fmt.Sprintf("%#v", st.verdict))
+			return "", nil
+		case unjudgedStates[st.state]:
+			return "", nil
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			r.m.logger.Warn("evaluation run has a pass rate threshold but no verdict was recorded in time; the result is judged on row counts instead",
+				"runId", r.runID, "deadline", verdictWaitTimeout, "state", st.state)
+			return "", nil
+		}
+		if err := r.m.api.sleep(ctx, min(r.interval, remaining)); err != nil {
+			return "", fmt.Errorf("evaluations: verdict polling: %w", err)
+		}
+	}
 }

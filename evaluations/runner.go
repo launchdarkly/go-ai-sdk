@@ -271,14 +271,26 @@ func (r *runState) execute(ctx context.Context) (*EvalRunResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	var verdict EvalVerdict
+	if summary.expectsVerdict() {
+		if verdict, err = r.awaitVerdict(ctx); err != nil {
+			return nil, err
+		}
+	}
+	// The verdict is the pass rate gate the caller set, so it wins over the
+	// row counts. Without one, a failed row is one LaunchDarkly ruled against
+	// its criteria, so it fails the gate as an error row does.
+	passed := summary.ErrorRows == 0 && summary.FailedRows == 0
+	if verdict != "" {
+		passed = verdict == EvalVerdictPass
+	}
 	return &EvalRunResult{
-		// A failed row is one LaunchDarkly ruled against its criteria, so it
-		// fails the gate as an error row does.
-		Passed: summary.ErrorRows == 0 && summary.FailedRows == 0,
+		Passed: passed,
 		URL: fmt.Sprintf("%s/projects/%s/ai/evaluations/%s/runs/%s", r.m.uiBase, r.project(),
 			segment(r.evaluationID), segment(r.runID)),
 		RunID:   r.runID,
 		Summary: summary,
+		Verdict: verdict,
 	}, nil
 }
 

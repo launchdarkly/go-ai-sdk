@@ -1,7 +1,9 @@
 // Package evaluations implements Evaluations from Code: it
 // runs a dataset through caller-supplied handlers, scores the outputs against
 // judges and scorers, reports every result to LaunchDarkly as custom events,
-// and polls the run summary for a verdict.
+// and polls the run summary until every row is accounted for. When the
+// summary reports a pass rate threshold, it then reads LaunchDarkly's verdict
+// from the run itself.
 //
 // Import it as github.com/launchdarkly/go-ai-sdk/evaluations. Start with
 // InitEvaluations, then call EvaluationsModule.Run.
@@ -404,20 +406,59 @@ type RunOptions struct {
 	PollTimeout  time.Duration
 }
 
-// RunSummary are the run's row counts.
+// EvalVerdict is LaunchDarkly's ruling on a run, or on one criterion, against a
+// pass rate threshold. The zero value means no verdict: none was recorded,
+// none was served, or LaunchDarkly returned a value this release does not
+// recognise.
+type EvalVerdict string
+
+// The verdicts this release recognises.
+const (
+	EvalVerdictPass EvalVerdict = "pass"
+	EvalVerdictFail EvalVerdict = "fail"
+)
+
+// CriterionSummary is one criterion's row counts and pass-rate outcome.
+// Errored rows count against the pass rate.
+type CriterionSummary struct {
+	// CriterionType is the judge key or scorer name.
+	CriterionType string
+	// PassRateThreshold is the threshold pinned on the run's evaluation, or nil.
+	PassRateThreshold *float64
+	PassedRows        int
+	FailedRows        int
+	ErrorRows         int
+	// PassRate is the criterion's passed rows over all rows, or nil.
+	PassRate *float64
+	// PassRateVerdict is the criterion's verdict, or "" when there is none.
+	PassRateVerdict EvalVerdict
+}
+
+// RunSummary are the run's row counts and per-criterion summaries.
 type RunSummary struct {
 	TotalRows   int
 	PassedRows  int
 	FailedRows  int
 	ErrorRows   int
 	PendingRows int
+	// Criteria hold one entry per criterion on the run's evaluation, in the
+	// order LaunchDarkly returned them. Empty when LaunchDarkly does not
+	// serve them for the project.
+	Criteria []CriterionSummary
 }
 
 // EvalRunResult is the outcome of a run.
 type EvalRunResult struct {
-	// Passed is true iff the terminal summary has no error and no failed rows.
+	// Passed follows Verdict when there is one. Without one, it is true iff
+	// the terminal summary has no error and no failed rows.
 	Passed  bool
 	URL     string
 	RunID   string
 	Summary RunSummary
+	// Verdict is LaunchDarkly's ruling on the run: EvalVerdictFail when any
+	// criterion missed its pass rate threshold, EvalVerdictPass otherwise. It is
+	// "" when no criterion on the run's evaluation has a pass rate threshold,
+	// when LaunchDarkly does not serve verdicts for the project, or when the
+	// verdict could not be read in time.
+	Verdict EvalVerdict
 }
