@@ -2,7 +2,8 @@
 
 Architectural contract for contributors and coding agents. Behaviour follows
 the LaunchDarkly AI SDK contract shared with the JavaScript and Python SDKs;
-where it leaves a detail open, the JavaScript SDK decides, then the Python SDK.
+where it leaves a public detail open, follow the JavaScript SDK, then Python.
+Internals follow Go idiom (see [Language idioms](#language-idioms)).
 
 ## Package hierarchy
 
@@ -116,6 +117,100 @@ One module (`go.mod`); each package imports only what it needs.
 | `github.com/aws/aws-sdk-go-v2` (+ `config`, `credentials`, `service/bedrockruntime`, `eventstream`), `github.com/aws/smithy-go` | `bedrockmessages`, `bedrockagents`, `llms` | Bedrock Converse / ConverseStream |
 | `golang.org/x/sys` | `skills` | `*at()` filesystem calls for skill materialization |
 | `golang.org/x/text` | `evaluations` | Unicode case folding for the tool key collision check |
+
+## Language idioms
+
+The public contract is shared with the JavaScript and Python SDKs. Everything
+else is written the way a Go developer expects: see [Effective Go](https://go.dev/doc/effective_go)
+and [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments). Do not port
+another SDK's shape into Go. If the contract and a Go idiom conflict, the contract
+wins: raise the conflict instead of bending either one.
+
+### What never varies
+
+Public behaviour, defaults, telemetry (span names, attributes, events), wire
+payloads, usage IDs and error *conditions* (what fails, and before or after which
+I/O). A name is the contract's name in Go casing. A Go-only exported name is fine
+when Go needs a named type for a field, parameter or result.
+
+### Errors
+
+- Return `error` last. SDK code does not panic. A panic in caller code
+  (handlers, tools, scorers) is recorded and re-raised when it ran on the
+  caller's goroutine, and recovered and returned as an error when the SDK ran
+  it on its own goroutine.
+- Export `ErrXxx` sentinels for conditions callers branch on, and a struct type
+  (`evaluations.APIError`) when they need fields. Wrap with
+  `fmt.Errorf("…: %w", err)` so `errors.Is` / `errors.As` work. Callers never
+  match error strings.
+- Where the other SDKs raise one error class, Go exports sentinels instead.
+- Return an error where the other SDKs return a safe fallback only when the
+  contract says so. Then the result returned with the error is still safe to
+  use: `ResolveGraph` returns a non-nil, disabled `*GraphDefinition`.
+
+### Layout
+
+One module. A core feature may be its own package next to `aiserver` (for
+example `skills`, `evaluations`) that imports `aiserver`. Experimental names live
+only in an `experimental/<feature>` package (today `experimental/shadowrequests`).
+Shared code goes in `internal/`. The tier rules are in Package hierarchy above.
+
+### Naming
+
+MixedCaps with Go initialisms (`AIConfig`, `URL`, `ID`); `AiConfig`,
+`ParseAiConfig` and `RegisterAiSdkPackage` are existing exceptions, not a
+pattern to copy. Handler constructors are `NewHandler(Options)`; an entry point
+the contract names keeps that name (`Graph`, `ClaudeGraph`). An exported name may
+repeat its package name when that keeps it aligned with the other SDKs. A name
+that would collide with a core type gets a suffix (`AIConfigRef`), never a
+different meaning.
+
+### Concurrency
+
+A call that makes or waits on a network request takes `ctx context.Context`
+first and honours cancellation. The exception is `skills.LaunchDarklySkillStore`,
+which streams in the background from `Start` until `Close`; `WaitForSkills`
+takes a timeout. Calls block until done; callers add goroutines. A goroutine
+that outlives its call has an owner the caller can stop: `Close`
+(`skills.SkillWatcher`, `LaunchDarklySkillStore`) or `aiserver.Shutdown` (shadow
+requests). Streams are `iter.Seq2[T, error]` and stop cleanly when the consumer
+breaks.
+
+### Options
+
+An `XxxOptions` struct, with zero values meaning the default; a `*XxxOptions`
+parameter may be nil for all defaults. Per-call extras on `Config` and `Graph`
+runs are `...CallOption` (`WithVariables`, `WithHistory`). Durations are
+`time.Duration`. Use a pointer field (`*float64`) only when zero is a valid
+explicit value. A closed set is a named type with constants (`GenerationMode`).
+A one-of-several argument is a sealed interface (`Dataset`), not `any`.
+
+### Testing
+
+Standard `testing`, table tests, hand-written fakes (`fake_test.go`); no network
+(`httptest` for HTTP). Core packages pin their exported names in a surface test
+(`surface_test.go`; `shadow_requests_surface_test.go` for shadow requests). CI runs
+`go test -race -shuffle=on ./...`, so a test of a once-per-process effect (usage
+reporting, the global tracer) must not depend on test order: reset the global
+first (`aiserver.Shutdown` clears the usage records and the SDK's tracer provider).
+
+### Docs
+
+Every new exported name gets a doc comment that starts with the name. Each
+package has a package comment (in `doc.go` or its main file). A feature or
+handler package also has a `README.md` and an `agents.md`. Reuse the other SDKs'
+wording for the same concept.
+
+### Dependencies
+
+Standard library first, then `golang.org/x`. A new module needs a row in the
+Dependencies table above saying why. A provider SDK is imported only by that
+provider's Tier 1 packages, their `internal/*wire` helper and `llms`.
+
+### References
+
+`make lint` (gofmt check and `go vet`), `make test` (`go test -race ./...`),
+`make build`, `make vulncheck`.
 
 ## Common pitfalls
 
