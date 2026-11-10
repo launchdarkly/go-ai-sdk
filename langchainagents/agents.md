@@ -82,7 +82,7 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
 - **Tracking (ToLangGraph, only with `NativeGraphOptions.Context`)** — per first node visit
   `$ld:ai:graph:node {nodeKey, index}`; per node run `$ld:ai:duration:total`,
   `$ld:ai:generation:success` (or `:error`), `$ld:ai:tokens:{total,input,output}` when > 0;
-  `$ld:ai:tool_call` through `handlerkit.WrapToolHandlers` (NativeTools via `Track()`);
+  `$ld:ai:tool_call` through `handlerkit.WrapToolHandlers` (NativeTools via `handlerkit.TrackNativeTool`);
   for every hop into a node (a handoff or the single static edge), after that node has run,
   `$ld:ai:graph:handoff_success {sourceKey, targetKey}` or `:handoff_failure` when it failed;
   `$ld:ai:graph:duration:total` on every path; on success `$ld:ai:graph:total_tokens` (when > 0)

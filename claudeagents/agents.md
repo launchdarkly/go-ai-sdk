@@ -69,8 +69,8 @@ The handler receives `aiserver.HandlerRequest{Config, UserInput, ToolHandlers, V
   `WebFetch` → `web_fetch`) or, for the eight names in `hostTools`, a plain function tool named
   `ToolName` with Claude Code's input schema, executed by `toolset.runHost`. Any other
   `ToolName` fails the run with `ErrUnsupportedNativeTool` before the first call. A
-  `server_tool_use` block, or a `tool_use` for a host built-in, calls the wrapped NativeTool's
-  `Track()`, so `$ld:ai:tool_call` carries the LaunchDarkly map key. A `tool_use` for a name
+  `server_tool_use` block, or a `tool_use` for a host built-in, passes the wrapped NativeTool to
+  `handlerkit.TrackNativeTool`, so `$ld:ai:tool_call` carries the LaunchDarkly map key. A `tool_use` for a name
   with no executor fails with `ErrToolNotFound`, naming the tool.
 
 Host built-ins: `buildTools` opens a `workspace` per run (`os.OpenRoot(WorkDir)`, closed when the
