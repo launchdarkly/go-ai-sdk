@@ -317,13 +317,18 @@ func TestVerdictWait(t *testing.T) {
 			}
 		})
 	}
-	t.Run("recoverable state", func(t *testing.T) {
-		e, args := verdictEnv(t, thresholdSummary(), runRead("TEMPORARY_ERROR", nil), runRead("COMPLETE", "pass"))
-		res := mustRun(t, e.module(), args)
-		if e.runReads() != 2 || res.Verdict != EvalVerdictPass {
-			t.Fatalf("result %+v, %v", res, e.sequence())
-		}
-	})
+	// Neither state is terminal on the server: TEMPORARY_ERROR can still reach
+	// COMPLETE, and STALLED resumes to PENDING. Adding either to
+	// unjudgedStates would end the wait after one read.
+	for _, state := range []string{"TEMPORARY_ERROR", "STALLED"} {
+		t.Run("recoverable state "+state, func(t *testing.T) {
+			e, args := verdictEnv(t, thresholdSummary(), runRead(state, nil), runRead("COMPLETE", "pass"))
+			res := mustRun(t, e.module(), args)
+			if e.runReads() != 2 || res.Verdict != EvalVerdictPass {
+				t.Fatalf("result %+v, %v", res, e.sequence())
+			}
+		})
+	}
 	for name, v := range map[string]any{"maybe": "maybe", "non-string": 1} {
 		t.Run("unrecognised verdict "+name, func(t *testing.T) {
 			e, args := verdictEnv(t, thresholdSummary(), runRead("COMPLETE", v), runRead("COMPLETE", "pass"))
