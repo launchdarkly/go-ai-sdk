@@ -115,3 +115,72 @@ func TestNoSkillsNameOnRoot(t *testing.T) {
 		}
 	}
 }
+
+// handlerKitNames are the handler-kit and drift names that are not public
+// API. Handler packages reach the kit through internal/handlerkit and
+// internal/kitbase; none of these may come back onto the root.
+var handlerKitNames = []string{
+	"BuildJudgeTasks", "BuildJudgeTasksArgs", "CallableTools", "ComposePrompt", "ContentText",
+	"ContextIdentity", "ContextToMap", "DefaultOTLPEndpoint", "FormattingInstructions", "GraphSpanName",
+	"GraphTopology", "GraphTopologyEdge", "HandlerRun", "HandlerSpanOptions", "ImageURL", "NormalizeMode",
+	"OutputFormatInstruction", "ParseAiConfig", "ParseJSONWithPossibleFences", "ParseUsage", "Prompt",
+	"RegisterAiSdkPackage", "ReportUsage", "SelectHandler", "SetLDSpanAttributes", "SetLDSpanAttributesFor",
+	"SetUsageSpanAttributes", "SpanUsage", "StartHandlerRun", "TracerPrefix", "TrackGraphEvent", "VarLD",
+	"VarLDContext", "WildcardProvider", "WithOutputFormat", "WrapToolHandlers",
+}
+
+// handlerKitMethods are methods of public types that are not public API.
+var handlerKitMethods = []string{
+	"GraphDefinition.TrackData", "GraphDefinition.UserContext", "GraphNode.TrackData",
+	"NativeTool.Track", "ProvidesFor.IsZero",
+}
+
+// exportedMethods returns "Type.Method" for every exported method declared in
+// the non-test .go files matching glob.
+func exportedMethods(t *testing.T, glob string) []string {
+	t.Helper()
+	files, _ := filepath.Glob(glob)
+	fset := token.NewFileSet()
+	var out []string
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, file, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range f.Decls {
+			fd, ok := d.(*ast.FuncDecl)
+			if !ok || fd.Recv == nil || !fd.Name.IsExported() {
+				continue
+			}
+			rt := fd.Recv.List[0].Type
+			if s, ok := rt.(*ast.StarExpr); ok {
+				rt = s.X
+			}
+			if id, ok := rt.(*ast.Ident); ok {
+				out = append(out, id.Name+"."+fd.Name.Name)
+			}
+		}
+	}
+	return out
+}
+
+func TestNoHandlerKitNameOnRoot(t *testing.T) {
+	root := exportedNames(t, "*.go")
+	for _, n := range handlerKitNames {
+		if slices.Contains(root, n) {
+			t.Errorf("handler-kit name %s is on the aiserver root", n)
+		}
+	}
+	methods := exportedMethods(t, "*.go")
+	if !slices.Contains(methods, "AIConfig.Invoke") {
+		t.Fatal("method listing lost AIConfig.Invoke; the method check would be vacuous")
+	}
+	for _, m := range handlerKitMethods {
+		if slices.Contains(methods, m) {
+			t.Errorf("handler-kit method %s is exported from aiserver", m)
+		}
+	}
+}
