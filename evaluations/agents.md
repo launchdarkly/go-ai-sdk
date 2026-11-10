@@ -34,8 +34,8 @@ type ToolsClient                 // method: Get(ctx, key string, impl aiserver.T
 type EvalTool                    // methods: Source() ToolSource, Version() int, ProjectKey() string
 type InitEvaluationsOptions RunOptions GenerationConfig GenerationMode GenerationOverrides AIConfigRef ToolSource
 type DatasetRow Dataset DatasetKey InlineRows Criterion Judge JudgeOptions Scorer ScorerOptions
-type ScorerFunc SuccessDirection EvalRunResult RunSummary CriterionSummary Verdict APIError
-const GenerationModeCompletion GenerationModeAgent ToolSourceInline ToolSourceLibrary HigherIsBetter LowerIsBetter VerdictPass VerdictFail
+type ScorerFunc SuccessDirection EvalRunResult RunSummary CriterionSummary EvalVerdict APIError
+const GenerationModeCompletion GenerationModeAgent ToolSourceInline ToolSourceLibrary HigherIsBetter LowerIsBetter EvalVerdictPass EvalVerdictFail
 var ErrInvalidArgument ErrMissingCredential ErrNoClient ErrAPI ErrTransport
 var ErrInvalidResponse ErrNotFound ErrInvalidConfig ErrJudgeResolution
 var ErrUploadFailed ErrPollTimeout

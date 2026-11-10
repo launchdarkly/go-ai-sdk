@@ -270,7 +270,7 @@ func (r *runState) execute(ctx context.Context) (*EvalRunResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	var verdict Verdict
+	var verdict EvalVerdict
 	if summary.expectsVerdict() {
 		if verdict, err = r.awaitVerdict(ctx); err != nil {
 			return nil, err
@@ -281,7 +281,7 @@ func (r *runState) execute(ctx context.Context) (*EvalRunResult, error) {
 	// its criteria, so it fails the gate as an error row does.
 	passed := summary.ErrorRows == 0 && summary.FailedRows == 0
 	if verdict != "" {
-		passed = verdict == VerdictPass
+		passed = verdict == EvalVerdictPass
 	}
 	return &EvalRunResult{
 		Passed: passed,

@@ -453,7 +453,7 @@ func nilIfEmpty(m map[string]any) any {
 
 func parseSummary(raw any) (RunSummary, error) {
 	if raw == nil {
-		return RunSummary{CriterionSummaries: []CriterionSummary{}}, nil
+		return RunSummary{Criteria: []CriterionSummary{}}, nil
 	}
 	obj, err := asObject(raw, "evaluation run summary")
 	if err != nil {
@@ -472,7 +472,7 @@ func parseSummary(raw any) (RunSummary, error) {
 	}
 	return RunSummary{TotalRows: get("total", "total_rows"), PassedRows: get("passed", "passed_rows"),
 		FailedRows: get("failed", "failed_rows"), ErrorRows: get("error", "error_rows"), PendingRows: get("pending", "pending_rows"),
-		CriterionSummaries: parseCriterionSummaries(obj["criterionSummaries"])}, nil
+		Criteria: parseCriterionSummaries(obj["criterionSummaries"])}, nil
 }
 
 // parseCriterionSummaries keeps the object entries in order. A missing or
@@ -511,10 +511,10 @@ func asOptionalFloat(v any) *float64 {
 
 // parseVerdict closes the verdict to pass and fail: any other value, which
 // LaunchDarkly may add later, is no verdict rather than a coerced one.
-func parseVerdict(v any) Verdict {
-	switch s, _ := v.(string); Verdict(s) {
-	case VerdictPass, VerdictFail:
-		return Verdict(s)
+func parseVerdict(v any) EvalVerdict {
+	switch s, _ := v.(string); EvalVerdict(s) {
+	case EvalVerdictPass, EvalVerdictFail:
+		return EvalVerdict(s)
 	}
 	return ""
 }
@@ -524,7 +524,7 @@ func parseVerdict(v any) Verdict {
 // summary, not the caller's criteria, because those are the thresholds
 // LaunchDarkly rules on, and an empty list means no verdicts are served.
 func (s RunSummary) expectsVerdict() bool {
-	for _, c := range s.CriterionSummaries {
+	for _, c := range s.Criteria {
 		if c.PassRateThreshold != nil {
 			return true
 		}
@@ -596,7 +596,7 @@ type runStatus struct {
 	state      string
 	verdict    any
 	present    bool
-	recognized Verdict
+	recognized EvalVerdict
 }
 
 func (r *runState) readRun(ctx context.Context) (runStatus, error) {
@@ -629,7 +629,7 @@ func (r *runState) readRun(ctx context.Context) (runStatus, error) {
 // can miss it. Any outcome but pass or fail is "", and Passed then falls
 // back to the row rule: the rows are already accounted for, so only a
 // cancelled context makes this an error.
-func (r *runState) awaitVerdict(ctx context.Context) (Verdict, error) {
+func (r *runState) awaitVerdict(ctx context.Context) (EvalVerdict, error) {
 	deadline := time.Now().Add(verdictWaitTimeout)
 	for {
 		st, err := r.readRun(ctx)

@@ -25,7 +25,7 @@ var surface = []string{
 	"GenerationOverrides", "HigherIsBetter", "InitEvaluations", "InitEvaluationsOptions", "InlineRows", "Judge",
 	"JudgeOptions", "LowerIsBetter", "NewJudge", "NewScorer", "RunOptions", "RunSummary", "Scorer", "ScorerFunc",
 	"ScorerOptions", "SuccessDirection", "ToolSource", "ToolSourceInline", "ToolSourceLibrary", "ToolsClient",
-	"Verdict", "VerdictFail", "VerdictPass",
+	"EvalVerdict", "EvalVerdictFail", "EvalVerdictPass",
 }
 
 // parseDir parses the non-test .go files matching glob.

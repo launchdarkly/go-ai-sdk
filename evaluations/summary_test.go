@@ -29,7 +29,7 @@ func TestSummaryParsing(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			s, err := parseSummary(roundTrip(tc.body))
-			tc.want.CriterionSummaries = []CriterionSummary{}
+			tc.want.Criteria = []CriterionSummary{}
 			if err != nil || !reflect.DeepEqual(s, tc.want) || s.terminal() != tc.term {
 				t.Fatalf("summary %+v terminal=%v err=%v", s, s.terminal(), err)
 			}
@@ -158,13 +158,13 @@ func TestCriterionSummaries(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := []CriterionSummary{
-			{CriterionType: "judge-a", PassRateThreshold: ptr(0.8), PassedRows: 9, FailedRows: 1, PassRate: ptr(0.9), PassRateVerdict: VerdictPass},
+			{CriterionType: "judge-a", PassRateThreshold: ptr(0.8), PassedRows: 9, FailedRows: 1, PassRate: ptr(0.9), PassRateVerdict: EvalVerdictPass},
 			{CriterionType: "scorer-b", PassedRows: 4},
 		}
-		if !reflect.DeepEqual(s.CriterionSummaries, want) {
-			t.Fatalf("got %+v", s.CriterionSummaries)
+		if !reflect.DeepEqual(s.Criteria, want) {
+			t.Fatalf("got %+v", s.Criteria)
 		}
-		if b := s.CriterionSummaries[1]; b.PassRateThreshold != nil || b.PassRate != nil || b.PassRateVerdict != "" {
+		if b := s.Criteria[1]; b.PassRateThreshold != nil || b.PassRate != nil || b.PassRateVerdict != "" {
 			t.Fatalf("second entry must have null threshold, pass rate and verdict: %+v", b)
 		}
 	})
@@ -174,7 +174,7 @@ func TestCriterionSummaries(t *testing.T) {
 	} {
 		t.Run(name+" gives an empty list", func(t *testing.T) {
 			s, err := parseSummary(roundTrip(body))
-			if err != nil || s.CriterionSummaries == nil || len(s.CriterionSummaries) != 0 || !s.terminal() {
+			if err != nil || s.Criteria == nil || len(s.Criteria) != 0 || !s.terminal() {
 				t.Fatalf("%+v %v", s, err)
 			}
 		})
@@ -182,8 +182,8 @@ func TestCriterionSummaries(t *testing.T) {
 	t.Run("unknown verdict is none", func(t *testing.T) {
 		s, _ := parseSummary(roundTrip(map[string]any{"criterionSummaries": []any{
 			map[string]any{"criterionType": "x", "passRateVerdict": "maybe"}}}))
-		if s.CriterionSummaries[0].PassRateVerdict != "" {
-			t.Fatalf("%+v", s.CriterionSummaries[0])
+		if s.Criteria[0].PassRateVerdict != "" {
+			t.Fatalf("%+v", s.Criteria[0])
 		}
 	})
 }
@@ -234,9 +234,9 @@ func (e *fakeEnv) runReads() int {
 
 func TestRunResultVerdict(t *testing.T) {
 	for _, tc := range []struct {
-		verdict Verdict
+		verdict EvalVerdict
 		passed  bool
-	}{{VerdictPass, true}, {VerdictFail, false}} {
+	}{{EvalVerdictPass, true}, {EvalVerdictFail, false}} {
 		t.Run("passed follows verdict "+string(tc.verdict), func(t *testing.T) {
 			e, args := verdictEnv(t, thresholdSummary(), runRead("COMPLETE", string(tc.verdict)))
 			res := mustRun(t, e.module(), args)
@@ -293,7 +293,7 @@ func TestVerdictWait(t *testing.T) {
 		e, args := verdictEnv(t, thresholdSummary(),
 			runRead("EVALUATED", nil), runRead("COMPLETE", nil), runRead("COMPLETE", "pass"))
 		res := mustRun(t, e.module(), args)
-		if e.runReads() != 3 || res.Verdict != VerdictPass || !res.Passed {
+		if e.runReads() != 3 || res.Verdict != EvalVerdictPass || !res.Passed {
 			t.Fatalf("result %+v, %v", res, e.sequence())
 		}
 	})
@@ -320,7 +320,7 @@ func TestVerdictWait(t *testing.T) {
 	t.Run("recoverable state", func(t *testing.T) {
 		e, args := verdictEnv(t, thresholdSummary(), runRead("TEMPORARY_ERROR", nil), runRead("COMPLETE", "pass"))
 		res := mustRun(t, e.module(), args)
-		if e.runReads() != 2 || res.Verdict != VerdictPass {
+		if e.runReads() != 2 || res.Verdict != EvalVerdictPass {
 			t.Fatalf("result %+v, %v", res, e.sequence())
 		}
 	})

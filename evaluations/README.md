@@ -108,9 +108,9 @@ func NewScorer(name string, fn ScorerFunc, opts *ScorerOptions) (*Scorer, error)
 | --- | --- |
 | `InitEvaluationsOptions` | `ProjectKey` (default `LD_PROJECT_KEY`), `APIToken` (default `LD_API_TOKEN`), `SDKKey` (default `LD_SDK_KEY`), `HTTPClient` (default `http.DefaultClient`), `RequestTimeout` (30s per attempt), `MaxAttempts` (4), `Logger`, `APIBaseURI` (default `LD_API_BASE_URI`, then `https://app.launchdarkly.com`), `UIBaseURI` (default `LD_UI_BASE_URI`, then `https://app.launchdarkly.com`) |
 | `EvalRunResult` | `Passed` (follows `Verdict`; without one, true iff the final summary has no error and no failed rows), `URL` (the run in the LaunchDarkly UI), `RunID`, `Summary`, `Verdict` |
-| `RunSummary` | `TotalRows`, `PassedRows`, `FailedRows`, `ErrorRows`, `PendingRows`, `CriterionSummaries` |
+| `RunSummary` | `TotalRows`, `PassedRows`, `FailedRows`, `ErrorRows`, `PendingRows`, `Criteria` |
 | `CriterionSummary` | `CriterionType`, `PassRateThreshold` (`*float64`), `PassedRows`, `FailedRows`, `ErrorRows`, `PassRate` (`*float64`), `PassRateVerdict` |
-| `Verdict` | `VerdictPass`, `VerdictFail`, or `""` (none recorded, not served, or a value this release does not recognise) |
+| `EvalVerdict` | `EvalVerdictPass`, `EvalVerdictFail`, or `""` (none recorded, not served, or a value this release does not recognise) |
 
 Errors are sentinels for `errors.Is`: `ErrInvalidArgument` (validation, before any I/O),
 `ErrMissingCredential`, `ErrNoClient`, `ErrAPI` (non-2xx; `*APIError` carries the
