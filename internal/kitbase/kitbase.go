@@ -14,7 +14,7 @@ import (
 )
 
 // GraphSpanName is the graph-level span.
-const GraphSpanName = "ld.ai.graph"
+const GraphSpanName = "launchdarkly.graph"
 
 // OutputFormatInstruction is the best-effort structured-output suffix
 // appended to a system prompt by handlers without native structured output.

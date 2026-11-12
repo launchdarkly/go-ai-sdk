@@ -103,7 +103,7 @@ func (g *GraphRunner) Invoke(ctx context.Context, input string, opts ...aiserver
 	ctx = sdkapi.StartInvocation(ctx, g.capture)
 	ctx, span := otel.Tracer(PackageName).Start(ctx, kitbase.GraphSpanName)
 	defer span.End()
-	span.SetAttributes(attribute.String("ld.ai.graph.key", g.def.Key))
+	span.SetAttributes(attribute.String("launchdarkly.graph.key", g.def.Key))
 	handlerkit.SetLDSpanAttributesFor(span, run.runTD, ldcontext.Context{}) // identity belongs on handler root spans only
 	start := time.Now()
 

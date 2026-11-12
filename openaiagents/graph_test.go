@@ -164,17 +164,17 @@ func TestToOpenAIAgentsRun(t *testing.T) {
 		t.Error("$ld:ai:graph:path tracked")
 	}
 
-	spans := spansByName(exp)[kitbase.GraphSpanName]
+	spans := spansByName(exp)["launchdarkly.graph"]
 	if len(spans) != 1 {
 		t.Fatalf("graph spans = %v", spansByName(exp))
 	}
 	a := attrs(spans[0])
 	for k := range a {
 		if strings.HasPrefix(k, "context.contextKeys.") {
-			t.Errorf("ld.ai.graph carries context identity %s; it belongs on handler root spans only", k)
+			t.Errorf("launchdarkly.graph carries context identity %s; it belongs on handler root spans only", k)
 		}
 	}
-	if a["ld.ai.graph.key"] != "g" || a["launchdarkly.graph.path"] != "triage->billing" || a["gen_ai.usage.total_tokens"] != "18" ||
+	if a["launchdarkly.graph.key"] != "g" || a["launchdarkly.graph.path"] != "triage->billing" || a["gen_ai.usage.total_tokens"] != "18" ||
 		spans[0].Status().Code != codes.Ok {
 		t.Errorf("graph span attrs = %v status %v", a, spans[0].Status())
 	}

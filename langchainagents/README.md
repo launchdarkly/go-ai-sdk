@@ -158,7 +158,7 @@ is sent; an unset value is left to the provider's default. `config.model.custom`
 
 The handler's root span is `invoke_agent` (blocking and streaming), with `chat <model>` and
 `execute_tool <name>` children. `gen_ai.system` is `langchain` on every span, and
-`gen_ai.provider.name` is the lowercased `provider.name` (`openai` when empty). `ToLangGraph` opens one `ld.ai.graph` span carrying `ld.ai.graph.key`, with one
+`gen_ai.provider.name` is the lowercased `provider.name` (`openai` when empty). `ToLangGraph` opens one `launchdarkly.graph` span carrying `launchdarkly.graph.key`, with one
 `invoke_agent` span per node run under it.
 
 ## Environment variables

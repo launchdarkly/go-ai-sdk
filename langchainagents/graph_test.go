@@ -352,12 +352,12 @@ func TestToLangGraphRun(t *testing.T) {
 		t.Error("$ld:ai:graph:path tracked")
 	}
 
-	spans := spansByName(exp)[kitbase.GraphSpanName]
+	spans := spansByName(exp)["launchdarkly.graph"]
 	if len(spans) != 1 {
 		t.Fatalf("graph spans = %d", len(spans))
 	}
 	a := spanAttrs(spans[0])
-	if a["ld.ai.graph.key"] != "g" || a["gen_ai.usage.total_tokens"] != "13" || a["launchdarkly.graph.path"] != "triage->billing" ||
+	if a["launchdarkly.graph.key"] != "g" || a["gen_ai.usage.total_tokens"] != "13" || a["launchdarkly.graph.path"] != "triage->billing" ||
 		spans[0].Status().Code != codes.Ok || spans[0].EndTime().IsZero() {
 		t.Errorf("graph span = %v %v", a, spans[0].Status())
 	}

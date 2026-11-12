@@ -12,7 +12,7 @@ exports the `LangChainGraph` wrapper and the `ToLangGraph` native adapter.
 |---|---|
 | `handler.go` | Factory, options, convenience wrapper, the handler run (prompt, spans, model, tools) for blocking and streaming. |
 | `react.go` | `createReactAgent`: the create_react_agent equivalent on a `stategraph.Graph` (agent node, tools node, tools condition), the `messages` append schema, the `stateGraph` test seam. |
-| `graph.go` | `LangChainGraph`, `ToLangGraph` / `LangGraph.Invoke`: one outer `stategraph.Graph` node per `GraphNode`, handoff tools returning `stategraph.Command`, per-node and graph tracking, the `ld.ai.graph` span. |
+| `graph.go` | `LangChainGraph`, `ToLangGraph` / `LangGraph.Invoke`: one outer `stategraph.Graph` node per `GraphNode`, handoff tools returning `stategraph.Command`, per-node and graph tracking, the `launchdarkly.graph` span. |
 | `handler_test.go` | Handler tests: factory, prompt, tools, tool loop, telemetry, errors, streaming, structured output, history, model routing, usage reporting. |
 | `graph_test.go` | `LangChainGraph` and `ToLangGraph` tests, including one against the real `stategraph` runner. |
 | `fake_test.go` | Fake `llms.Model` (scripted turns, records calls), recording fake LD client, tracer setup. |
@@ -90,8 +90,8 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
   `$ld:ai:graph:*` events carry the graph's `TrackData` (as `aiserver.Graph`), per-node events the
   node's. `$ld:ai:graph:path` is never tracked.
 - **Spans** — handler: root `invoke_agent` (`gen_ai.operation.name = invoke_agent`),
-  `chat <model>` / `execute_tool <name>` children. ToLangGraph: `ld.ai.graph` with
-  `ld.ai.graph.key`, LD association attributes without context identity, usage,
+  `chat <model>` / `execute_tool <name>` children. ToLangGraph: `launchdarkly.graph` with
+  `launchdarkly.graph.key`, LD association attributes without context identity, usage,
   `launchdarkly.graph.path`; ended on every path. Under it, one `invoke_agent` span per node
   run with the node's association and the context identity, and `chat` / `execute_tool` children
   (handoff and NativeTool calls included).
@@ -122,7 +122,7 @@ to pre-warm.
 | `github.com/launchdarkly/go-ai-sdk/llms` | `llms.Model`, message and tool types, built-in models (routed via langchainwire). Replaces langchaingo. |
 | `github.com/launchdarkly/go-ai-sdk/internal/stategraph` | `Graph`, `Command`, `END`: the state-graph runner (replaces langgraphgo). |
 | `github.com/google/uuid` | Per-run id for graph tracking. |
-| `go.opentelemetry.io/otel` | `ld.ai.graph` span. |
+| `go.opentelemetry.io/otel` | `launchdarkly.graph` span. |
 | `github.com/launchdarkly/go-sdk-common/v3/ldcontext` | Context arguments. |
 
 ## Common pitfalls

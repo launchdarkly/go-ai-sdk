@@ -98,17 +98,17 @@ func TestToClaudeAgentsRun(t *testing.T) {
 		t.Errorf("total tokens = %+v", tt)
 	}
 
-	g := e.spans(kitbase.GraphSpanName)
+	g := e.spans("launchdarkly.graph")
 	if len(g) != 1 || g[0].Status().Code != codes.Ok || g[0].EndTime().IsZero() {
 		t.Fatal("graph span not ended OK")
 	}
 	ga := attrs(g[0])
 	for k := range ga {
 		if strings.HasPrefix(k, "context.contextKeys.") {
-			t.Errorf("ld.ai.graph carries context identity %s; it belongs on handler root spans only", k)
+			t.Errorf("launchdarkly.graph carries context identity %s; it belongs on handler root spans only", k)
 		}
 	}
-	if ga["ld.ai.graph.key"] != "g" || ga["launchdarkly.graph.path"] != "root->leaf" || ga["gen_ai.usage.total_tokens"] != "16" {
+	if ga["launchdarkly.graph.key"] != "g" || ga["launchdarkly.graph.path"] != "root->leaf" || ga["gen_ai.usage.total_tokens"] != "16" {
 		t.Errorf("graph span attrs = %v", ga)
 	}
 	q := e.spans(SpanName)

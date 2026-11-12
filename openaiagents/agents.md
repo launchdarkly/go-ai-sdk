@@ -88,7 +88,7 @@ its target's node run ends: `$ld:ai:graph:handoff_success`, or `:handoff_failure
 (`sourceKey` / `targetKey`). `$ld:ai:graph:duration:total` on every path; success adds
 `total_tokens` (> 0) and `invocation_success`, failure `invocation_failure`. `$ld:ai:graph:*`
 events carry the graph's `TrackData` (as `aiserver.Graph`). Function tools are wrapped with
-`handlerkit.WrapToolHandlers` for `$ld:ai:tool_call`. The `ld.ai.graph` span has `ld.ai.graph.key`,
+`handlerkit.WrapToolHandlers` for `$ld:ai:tool_call`. The `launchdarkly.graph` span has `launchdarkly.graph.key`,
 `launchdarkly.graph.path` and usage; it is ended on every path.
 
 ## OTel setup
@@ -115,7 +115,7 @@ the connection.
 | `github.com/openai/openai-go/v3` | Responses API client and types. |
 | `github.com/launchdarkly/go-sdk-common/v3` | `ldcontext.Context` for the wrapper and the native adapter. |
 | `github.com/google/uuid` | Per-run ids for native graph events. |
-| `go.opentelemetry.io/otel` | The native adapter's `ld.ai.graph` span. |
+| `go.opentelemetry.io/otel` | The native adapter's `launchdarkly.graph` span. |
 
 ## Common pitfalls
 

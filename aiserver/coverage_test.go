@@ -688,7 +688,7 @@ func TestGraphStreamParity(t *testing.T) {
 }
 
 // Graph().Invoke handler spans and the graph judge's span all
-// descend from ld.ai.graph in its trace.
+// descend from launchdarkly.graph in its trace.
 func TestGraphInvokeSpanParenting(t *testing.T) {
 	withFake(t, twoNode(map[string]any{"gj": enabledConfig("P", "judge", nil)}))
 	exp := withSpans(t)
@@ -745,7 +745,7 @@ func TestGraphSpanCarriesConversationID(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("ld.ai.graph lacks gen_ai.conversation.id")
+		t.Error("launchdarkly.graph lacks gen_ai.conversation.id")
 	}
 }
 
