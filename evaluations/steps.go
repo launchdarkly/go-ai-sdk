@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
+
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
@@ -22,12 +24,23 @@ type variationTool struct {
 	version int
 }
 
-// readAIConfig reads the AI Config, its latest variation version and any
-// linked model config, running each check as soon as its input arrives.
+// readAIConfig reads the AI Config, the variation version this run uses, and
+// any linked model config, running each check as soon as its input arrives.
+// An empty Variation is the variation served to {kind: "evaluation", key:
+// <evaluation key>}. A missing served _ldMeta.version fails here, before any
+// management write.
 func (r *runState) readAIConfig(ctx context.Context) error {
 	ref, ov := r.args.AIConfig, r.args.Overrides
 	if ov == nil {
 		ov = &GenerationOverrides{}
+	}
+	variation := ref.Variation
+	var servedVersion int
+	if strings.TrimSpace(variation) == "" {
+		var err error
+		if variation, servedVersion, err = r.servedVariation(ctx); err != nil {
+			return err
+		}
 	}
 	base := "projects/" + r.project() + "/ai-configs/"
 	raw, err := r.m.api.get(ctx, base+segment(ref.Key))
@@ -52,17 +65,22 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 			ErrInvalidConfig, ref.Key, modeName, mode, describePool(r.pool))
 	}
 
-	raw, err = r.m.api.get(ctx, base+segment(ref.Key)+"/variations/"+segment(ref.Variation))
+	raw, err = r.m.api.get(ctx, base+segment(ref.Key)+"/variations/"+segment(variation))
 	if err != nil {
-		return notFound(err, "variation %q of AI Config %q was not found in project %q", ref.Variation, ref.Key, r.m.projectKey)
+		return notFound(err, "variation %q of AI Config %q was not found in project %q", variation, ref.Key, r.m.projectKey)
 	}
 	varObj, err := asObject(raw, "AI Config variation")
 	if err != nil {
 		return err
 	}
-	latest, err := latestVersion(varObj)
+	var latest map[string]any
+	if servedVersion != 0 {
+		latest, err = versionByNumber(varObj, servedVersion)
+	} else {
+		latest, err = latestVersion(varObj)
+	}
 	if err != nil {
-		return fmt.Errorf("evaluations: %w: AI Config variation %q/%q %w", ErrInvalidResponse, ref.Key, ref.Variation, err)
+		return fmt.Errorf("evaluations: %w: AI Config variation %q/%q %w", ErrInvalidResponse, ref.Key, variation, err)
 	}
 
 	// The mode decides which prompt field to read; the other field is kept
@@ -83,7 +101,7 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 			needs = "instructions"
 		}
 		return fmt.Errorf("evaluations: %w: AI Config %q variation %q is in %q mode and needs %s: %s",
-			ErrInvalidConfig, ref.Key, ref.Variation, modeName, needs, p)
+			ErrInvalidConfig, ref.Key, variation, modeName, needs, p)
 	}
 
 	model, _ := latest["model"].(map[string]any)
@@ -94,7 +112,7 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 		key, ok := mck.(string)
 		if !ok {
 			return fmt.Errorf("evaluations: %w: AI Config variation %q/%q has a non-string modelConfigKey %#v",
-				ErrInvalidResponse, ref.Key, ref.Variation, mck)
+				ErrInvalidResponse, ref.Key, variation, mck)
 		}
 		if key != "" {
 			var version any
@@ -148,16 +166,16 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 			keys[i] = t.key
 		}
 		return fmt.Errorf("evaluations: %w: AI Config variation %q/%q uses tools with no implementation: %q; pass Tools with an EvalTool for each",
-			ErrInvalidConfig, ref.Key, ref.Variation, keys)
+			ErrInvalidConfig, ref.Key, variation, keys)
 	}
 	for _, t := range tools {
 		rt := r.findTool(t.key)
 		switch {
 		case rt == nil:
-			r.m.logger.Warn("AI Config variation attaches a tool this run does not use", "aiConfig", ref.Key, "variation", ref.Variation, "tool", t.key)
+			r.m.logger.Warn("AI Config variation attaches a tool this run does not use", "aiConfig", ref.Key, "variation", variation, "tool", t.key)
 		case !rt.inline && rt.version != t.version:
 			r.m.logger.Warn("AI Config variation pins a different tool version; the run uses the version Tools().Get pinned",
-				"aiConfig", ref.Key, "variation", ref.Variation, "tool", t.key, "pinnedVersion", t.version, "runVersion", rt.version)
+				"aiConfig", ref.Key, "variation", variation, "tool", t.key, "pinnedVersion", t.version, "runVersion", rt.version)
 		}
 	}
 	if r.args.Criteria == nil {
@@ -172,7 +190,34 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 			return err
 		}
 	}
+	ver, ok := asInt(latest["version"])
+	if !ok {
+		return fmt.Errorf("evaluations: %w: AI Config variation %q/%q has no integer version", ErrInvalidResponse, ref.Key, variation)
+	}
+	// variationVersion is that variation's version, not the evaluation's.
+	r.configKey, r.variationKey, r.variationVersion = ref.Key, variation, ver
 	return nil
+}
+
+// servedVariation asks flag delivery which variation and version this
+// evaluation key is served. It does not call the management API.
+func (r *runState) servedVariation(ctx context.Context) (string, int, error) {
+	key := r.args.AIConfig.Key
+	user := ldcontext.NewBuilder(r.args.Key).Kind("evaluation").Build()
+	res, err := aiserver.InspectConfig(ctx, key, user)
+	if err != nil {
+		if errors.Is(err, aiserver.ErrConfigNotFound) {
+			return "", 0, fmt.Errorf("evaluations: %w: AI Config %q is not delivered for evaluation %q: %w", ErrNotFound, key, r.args.Key, err)
+		}
+		return "", 0, fmt.Errorf("evaluations: %w: AI Config %q could not be evaluated for evaluation %q: %w", ErrInvalidConfig, key, r.args.Key, err)
+	}
+	if res.Meta == nil || !res.Enabled || res.Config == nil || strings.TrimSpace(res.Meta.VariationKey) == "" {
+		return "", 0, fmt.Errorf("evaluations: %w: AI Config %q is not delivered for evaluation %q", ErrInvalidConfig, key, r.args.Key)
+	}
+	if res.Meta.Version < 1 {
+		return "", 0, fmt.Errorf("evaluations: %w: AI Config %q served variation %q has no _ldMeta.version", ErrInvalidConfig, key, res.Meta.VariationKey)
+	}
+	return res.Meta.VariationKey, res.Meta.Version, nil
 }
 
 func (r *runState) findTool(key string) *runTool {
@@ -202,6 +247,22 @@ func latestVersion(obj map[string]any) (map[string]any, error) {
 		return nil, fmt.Errorf("has no versions")
 	}
 	return latest, nil
+}
+
+// versionByNumber returns the variation version the run was served. A served
+// version older than the newest item is valid.
+func versionByNumber(obj map[string]any, version int) (map[string]any, error) {
+	items, _ := obj["items"].([]any)
+	for _, it := range items {
+		m, ok := it.(map[string]any)
+		if !ok {
+			continue
+		}
+		if v, ok := asInt(m["version"]); ok && v == version {
+			return m, nil
+		}
+	}
+	return nil, fmt.Errorf("has no version %d", version)
 }
 
 func decodeMessages(v any) []aiserver.Message {
@@ -372,6 +433,11 @@ func (r *runState) evaluationConfigBody(includeKey bool) map[string]any {
 		criteria = append(criteria, c.wire())
 	}
 	body["criteria"] = criteria
+	if r.configKey != "" {
+		body["configKey"] = r.configKey
+		body["variationKey"] = r.variationKey
+		body["variationVersion"] = r.variationVersion
+	}
 	return body
 }
 

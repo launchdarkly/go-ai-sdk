@@ -127,6 +127,11 @@ func TestPublicNamesAreCallable(t *testing.T) {
 	if err != nil || scorer.Name() != "exact" {
 		t.Fatalf("NewScorer: %v %v", scorer, err)
 	}
+	// An empty Variation is the served-variation form. No new exported name.
+	served := evaluations.AIConfigRef{Key: "cfg"}
+	if served.Key != "cfg" || served.Variation != "" {
+		t.Fatalf("AIConfigRef served form = %+v", served)
+	}
 	gen := evaluations.GenerationConfig{Provider: "OpenAI", Model: "m", Mode: evaluations.GenerationModeAgent}
 	if criteria := []evaluations.Criterion{judge, scorer}; len(criteria) != 2 || gen.Mode != "agent" {
 		t.Fatal("judge and scorer must both be criteria, and the mode constant typed")

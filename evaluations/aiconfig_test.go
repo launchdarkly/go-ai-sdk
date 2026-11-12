@@ -71,6 +71,9 @@ func TestAIConfigHappyPathSequence(t *testing.T) {
 	if _, has := body["mode"]; has {
 		t.Fatal("mode must not be sent to LaunchDarkly")
 	}
+	if body["configKey"] != "cfg" || body["variationKey"] != "v1" || body["variationVersion"] != 2.0 {
+		t.Fatalf("link %s", toJSON(body))
+	}
 }
 
 func TestAIConfigWithoutModelConfig(t *testing.T) {
@@ -228,6 +231,10 @@ func TestAIConfigOverrides(t *testing.T) {
 	if cfg.Provider.Name != "Anthropic" || cfg.Model.Name != "claude" || cfg.Instructions != "NEW" ||
 		!reflect.DeepEqual(cfg.Model.Parameters, map[string]any{"max_tokens": 100.0, "temperature": 0.1}) {
 		t.Fatalf("config %+v", cfg)
+	}
+	body := e.body("POST", "projects/proj/offline-evaluations").(map[string]any)
+	if body["generationModel"] != "claude" || body["configKey"] != "cfg" || body["variationKey"] != "v1" || body["variationVersion"] != 2.0 {
+		t.Fatalf("override must replace the model and keep the link: %s", toJSON(body))
 	}
 }
 
