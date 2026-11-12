@@ -35,3 +35,17 @@ func TestModelParametersSnakeCaseOnly(t *testing.T) {
 		}
 	}
 }
+
+// stop is another name for stop_sequences; when both are set, stop_sequences wins.
+func TestModelParametersStopSequencesWinsOverStop(t *testing.T) {
+	h, f, _ := setup(t, textTurn("ok", 1, 1))
+	c := cfg(func(c *aiserver.AiConfig) {
+		c.Model.Parameters = map[string]any{"stop": []any{"A"}, "stop_sequences": []any{"B"}}
+	})
+	if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "q"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.calls[0].opts.StopWords; !reflect.DeepEqual(got, []string{"B"}) {
+		t.Errorf("stop words = %v, want [B] (stop_sequences wins)", got)
+	}
+}
