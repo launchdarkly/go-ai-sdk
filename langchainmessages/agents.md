@@ -24,11 +24,13 @@ no official Go SDK, and the community ports were removed.
 const PackageName, PackageVersion, SpanName
 var ErrMaxSteps, ErrNoToolHandler, ErrEmptyResponse
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
-type Options struct{ Model llms.Model; ModelFactory ModelFactory; CaptureContent aiserver.ContentCapture }
+type Options struct{ Model llms.Model; ModelFactory ModelFactory; MaxRetries *int; CaptureContent aiserver.ContentCapture }
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func LangChainMessages(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 ```
+
+`Options.MaxRetries` is the retry count on the built-in model the handler builds: `option.WithMaxRetries` through `RequestOptions` for OpenAI and Anthropic, and `MaxRetries+1` attempts on the AWS client for Bedrock (never 0, which the AWS SDK reads as its default). nil keeps each SDK's default. `NewHandler` and `LangChainMessages` refuse a negative count, or `MaxRetries` with `Model` or `ModelFactory`, with an error naming `MaxRetries`.
 
 `Options.CaptureContent` gates prompt, completion, tool and judge-explanation content on spans:
 `aiserver.CaptureDefault` (the zero value) follows `aiserver.Configure`, else on;

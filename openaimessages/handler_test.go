@@ -101,7 +101,7 @@ func setup(t *testing.T, responses ...string) (*aiserver.ProviderHandler, *fakeO
 	prev := otel.GetTracerProvider()
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp)))
 	t.Cleanup(func() { otel.SetTracerProvider(prev) })
-	return newHandler(Options{Client: c}), f, exp
+	return must(newHandler(Options{Client: c})), f, exp
 }
 
 func fakeClient(t *testing.T, responses ...string) (*fakeOpenAI, *openai.Client) {
@@ -199,7 +199,7 @@ func funcTool(desc string, params map[string]any) aiserver.Tool {
 }
 
 func TestFactoryMetadata(t *testing.T) {
-	a, b := newHandler(Options{}), newHandler(Options{CaptureContent: aiserver.CaptureOn})
+	a, b := must(newHandler(Options{})), must(newHandler(Options{CaptureContent: aiserver.CaptureOn}))
 	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeMessages}) || a.ProvidesFor != providesFor {
 		t.Errorf("providesFor = %+v", a.ProvidesFor)
 	}
@@ -914,7 +914,7 @@ func TestThroughConfig(t *testing.T) {
 	toolVariation := maps.Clone(variation)
 	toolVariation["tools"] = map[string]any{"a": map[string]any{"name": "a", "type": "function", "parameters": map[string]any{"type": "object"}}}
 	installClient(t, &fakeLD{variation: toolVariation}, exp)
-	h := newHandler(Options{Client: client})
+	h := must(newHandler(Options{Client: client}))
 
 	ran := false
 	multi := ldcontext.NewMulti(ldcontext.New("u-1"), ldcontext.NewWithKind("org", "o-1"))

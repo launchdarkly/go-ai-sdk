@@ -52,8 +52,8 @@ var ErrMaxSteps = errors.New("bedrock: tool loop exceeded the maximum number of 
 // NewClient builds a Bedrock Runtime client from the default AWS
 // configuration. region, when set, is the endpoint / SigV4 region. The SDK
 // applies AWS_BEARER_TOKEN_BEDROCK itself; the option function runs after
-// that, so a non-empty apiKey wins.
-func NewClient(apiKey, region string) (*bedrockruntime.Client, error) {
+// that, so a non-empty apiKey wins. optFns run last.
+func NewClient(apiKey, region string, optFns ...func(*bedrockruntime.Options)) (*bedrockruntime.Client, error) {
 	var load []func(*awsconfig.LoadOptions) error
 	if region != "" {
 		load = append(load, awsconfig.WithRegion(region))
@@ -66,6 +66,9 @@ func NewClient(apiKey, region string) (*bedrockruntime.Client, error) {
 		if apiKey != "" {
 			o.BearerAuthTokenProvider = bearer.StaticTokenProvider{Token: bearer.Token{Value: apiKey}}
 			o.AuthSchemePreference = []string{"httpBearerAuth"}
+		}
+		for _, fn := range optFns {
+			fn(o)
 		}
 	}), nil
 }

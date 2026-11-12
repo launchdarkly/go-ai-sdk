@@ -14,7 +14,8 @@ Tier 0  aiserver                 core: no provider SDK imports
         internal/handlerkit  typed access to the handler kit that stays unexported in aiserver; imports aiserver, never imported by it
 Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         claudeagents   openaiagents   bedrockagents
-        internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers shared by a pair
+        internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers for each provider's messages/agents pair; bedrockwire is also used by llms and langchainwire
+        internal/langchainwire  LangChain wire helper for langchainmessages/langchainagents; builds the built-in llms models (imports llms and internal/bedrockwire, plus the anthropic/openai option packages and bedrockruntime for retries)
         skills         Agent Skills (core; imports aiserver and golang.org/x/sys, no provider SDK)
         evaluations    Evaluations from Code (core; imports aiserver and golang.org/x/text, no provider SDK)
 ```
@@ -115,9 +116,9 @@ One module (`go.mod`); each package imports only what it needs.
 | `github.com/launchdarkly/go-sdk-common/v3` | all | `ldcontext`, `ldvalue` |
 | `go.opentelemetry.io/otel` (+ `sdk`, `trace`, `otlptracehttp`) | `aiserver`, handlers | Tracer provider, spans, OTLP export |
 | `github.com/google/uuid` | `aiserver` | Run ids |
-| `github.com/anthropics/anthropic-sdk-go` | `claudemessages`, `claudeagents`, `llms` | Anthropic Messages API |
-| `github.com/openai/openai-go/v3` | `openaimessages`, `openaiagents`, `llms` | OpenAI Responses API; Chat Completions in `llms` |
-| `github.com/aws/aws-sdk-go-v2` (+ `config`, `credentials`, `service/bedrockruntime`, `eventstream`), `github.com/aws/smithy-go` | `bedrockmessages`, `bedrockagents`, `llms` | Bedrock Converse / ConverseStream |
+| `github.com/anthropics/anthropic-sdk-go` | `claudemessages`, `claudeagents`, `llms`, `internal/langchainwire` (`option` only) | Anthropic Messages API; `internal/langchainwire` sets `option.WithMaxRetries` on the built-in Anthropic model |
+| `github.com/openai/openai-go/v3` | `openaimessages`, `openaiagents`, `llms`, `internal/langchainwire` (`option` only) | OpenAI Responses API; Chat Completions in `llms`; `internal/langchainwire` sets `option.WithMaxRetries` on the built-in OpenAI model |
+| `github.com/aws/aws-sdk-go-v2` (+ `config`, `credentials`, `service/bedrockruntime`, `eventstream`), `github.com/aws/smithy-go` | `bedrockmessages`, `bedrockagents`, `llms`, `internal/langchainwire` (`service/bedrockruntime` only) | Bedrock Converse / ConverseStream; `internal/langchainwire` sets `RetryMaxAttempts` on the AWS client for the built-in Bedrock model |
 | `golang.org/x/sys` | `skills` | `*at()` filesystem calls for skill materialization |
 | `golang.org/x/text` | `evaluations` | Unicode case folding for the tool key collision check |
 

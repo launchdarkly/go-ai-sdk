@@ -39,7 +39,7 @@ func TestBedrockExplicitZeroTemperatureReachesTheModel(t *testing.T) {
 	} {
 		t.Setenv(k, v)
 	}
-	h := newHandler(Options{})
+	h := must(newHandler(Options{}))
 	for _, temp := range []float64{0, 0.4} {
 		params := map[string]any{"temperature": temp}
 		if temp != 0 {

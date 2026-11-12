@@ -256,7 +256,7 @@ func (r *graphRun) model(ctx context.Context, n *aiserver.GraphNode, cfg aiserve
 		}
 		return m, nil
 	}
-	return langchainwire.DefaultModel(ctx, cfg, nil)
+	return langchainwire.DefaultModel(ctx, cfg, nil, nil)
 }
 
 // nodeFunc is the function registered for n: it runs n as a ReAct agent over

@@ -100,7 +100,7 @@ func sse(deltas []string, tool string, in, out int) string {
 func setup(t *testing.T, responses ...string) (*aiserver.ProviderHandler, *fakeAnthropic, *tracetest.InMemoryExporter) {
 	t.Helper()
 	opts, f, exp := setupClient(t, responses...)
-	return newHandler(opts), f, exp
+	return must(newHandler(opts)), f, exp
 }
 
 // setupClient starts the fake Anthropic server and an in-memory span exporter
@@ -153,11 +153,11 @@ func lastText(req map[string]any) string {
 }
 
 func TestFactoryMetadata(t *testing.T) {
-	a, b := newHandler(Options{}), newHandler(Options{})
+	a, b := must(newHandler(Options{})), must(newHandler(Options{}))
 	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeMessages}) || a.CaptureContent != aiserver.CaptureDefault || a == b || a.Stream == nil {
 		t.Errorf("factory metadata wrong: %+v", a)
 	}
-	if newHandler(Options{CaptureContent: aiserver.CaptureOn}).CaptureContent != aiserver.CaptureOn {
+	if must(newHandler(Options{CaptureContent: aiserver.CaptureOn})).CaptureContent != aiserver.CaptureOn {
 		t.Error("captureContent not passed through")
 	}
 }

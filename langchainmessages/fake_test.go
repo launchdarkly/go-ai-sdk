@@ -116,7 +116,7 @@ func setup(t *testing.T, turns ...scripted) (*aiserver.ProviderHandler, *fakeMod
 	t.Helper()
 	exp := withTracer(t)
 	f := &fakeModel{turns: turns}
-	return newHandler(Options{Model: f}), f, exp
+	return must(newHandler(Options{Model: f})), f, exp
 }
 
 type trackEvent struct {
