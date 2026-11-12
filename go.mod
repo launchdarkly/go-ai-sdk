@@ -3,7 +3,7 @@ module github.com/launchdarkly/go-ai-sdk
 go 1.26.0
 
 require (
-	github.com/anthropics/anthropic-sdk-go v1.80.0
+	github.com/anthropics/anthropic-sdk-go v1.84.0
 	github.com/aws/aws-sdk-go-v2 v1.47.6
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.26
 	github.com/aws/aws-sdk-go-v2/config v1.33.14
