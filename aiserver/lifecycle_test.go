@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 // withLDFactory replaces the LD client constructor for one test.
@@ -206,8 +207,8 @@ func TestBYOCAndSdkInfoLifecycle(t *testing.T) {
 		t.Errorf("sdk:info = %v", byoc.events("$ld:ai:sdk:info"))
 	}
 	// Late registration reports on the next init, including the idempotent path.
-	RegisterAiSdkPackage("late-pkg", "1.2.3")
-	RegisterAiSdkPackage("late-pkg", "1.2.3")
+	kitRegisterAiSdkPackage("late-pkg", "1.2.3")
+	kitRegisterAiSdkPackage("late-pkg", "1.2.3")
 	_, _ = InitClient(bg, InitOptions{})
 	info := byoc.events("$ld:ai:sdk:info")
 	if len(info) != 2 || info[1].Data["aiSdkName"] != "late-pkg" {
@@ -371,7 +372,7 @@ func (l lockedWriter) Write(p []byte) (int, error) {
 func TestConversationID(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(ConversationIDSpanProcessor{}), sdktrace.WithSyncer(exp))
-	sdkTracer, other := tp.Tracer(TracerPrefix+"/x"), tp.Tracer("db.postgres")
+	sdkTracer, other := tp.Tracer(kitbase.TracerPrefix+"/x"), tp.Tracer("db.postgres")
 
 	ctx := WithConversationID(bg, "conv-1")
 	_, s := sdkTracer.Start(ctx, "sdk")
@@ -415,7 +416,7 @@ func TestContextIdentityEmitPath(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
 	c := ldcontext.NewBuilder("a%b:c").Kind("org").Name("Acme").SetString("email", "x@y.z").Build()
 	_, span := tp.Tracer("t").Start(bg, "root")
-	SetLDSpanAttributes(span, map[string]any{VarLD: TrackData{ConfigKey: "k"}, varLDContextTyped: c})
+	setLDSpanAttributesFromVars(span, map[string]any{kitbase.VarLD: TrackData{ConfigKey: "k"}, varLDContextTyped: c})
 	span.End()
 	s := exp.GetSpans().Snapshots()[0]
 	ev := map[string]string{}
@@ -437,7 +438,7 @@ func TestContextIdentityEmitPath(t *testing.T) {
 	// No context → no identity, no panic.
 	exp.Reset()
 	_, span = tp.Tracer("t").Start(bg, "root")
-	SetLDSpanAttributes(span, map[string]any{VarLD: TrackData{ConfigKey: "k"}})
+	setLDSpanAttributesFromVars(span, map[string]any{kitbase.VarLD: TrackData{ConfigKey: "k"}})
 	span.End()
 	for _, a := range exp.GetSpans().Snapshots()[0].Attributes() {
 		if a.Key == "context.contextKeys.user" {
@@ -574,7 +575,7 @@ func TestFeatureFlagEventAndEnvironmentID(t *testing.T) {
 		return out
 	}
 	_, span := otel.Tracer("t").Start(bg, "bare")
-	SetLDSpanAttributes(span, nil)
+	setLDSpanAttributesFromVars(span, nil)
 	span.End()
 	s := exp.GetSpans()[0]
 	if len(s.Attributes) != 1 || s.Attributes[0] != attribute.String("launchdarkly.operation.type", "gen_ai") || len(s.Events) != 0 {
@@ -583,7 +584,7 @@ func TestFeatureFlagEventAndEnvironmentID(t *testing.T) {
 
 	exp.Reset()
 	_, span = otel.Tracer("t").Start(bg, "no-env")
-	SetLDSpanAttributes(span, map[string]any{VarLD: TrackData{ConfigKey: "k"}})
+	setLDSpanAttributesFromVars(span, map[string]any{kitbase.VarLD: TrackData{ConfigKey: "k"}})
 	span.End()
 	if ev := ffEvent(); ev["feature_flag.provider.name"] != "LaunchDarkly" || ev["feature_flag.key"] != "k" {
 		t.Errorf("feature_flag event = %v", ev)
@@ -602,7 +603,7 @@ func TestFeatureFlagEventAndEnvironmentID(t *testing.T) {
 	}
 	exp.Reset()
 	_, span = otel.Tracer("t").Start(bg, "env")
-	SetLDSpanAttributes(span, seen.Variables)
+	setLDSpanAttributesFromVars(span, seen.Variables)
 	span.End()
 	if ev := ffEvent(); ev["feature_flag.set.id"] != "env-1" {
 		t.Errorf("feature_flag event = %v", ev)

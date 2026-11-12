@@ -18,6 +18,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 	"github.com/launchdarkly/go-ai-sdk/internal/trajectory"
 )
@@ -29,7 +31,7 @@ import (
 const (
 	// spanTracer is the SDK client tracer, so the processor treats these as
 	// SDK spans.
-	spanTracer   = aiserver.TracerPrefix + "/aiserver"
+	spanTracer   = kitbase.TracerPrefix + "/aiserver"
 	rowSpanName  = "launchdarkly.dataset_row"
 	attrRunID    = "launchdarkly.evaluation_run.id"
 	attrRowIndex = "launchdarkly.evaluation_run.row_index"
@@ -170,12 +172,12 @@ func (c handlerCall) writeChat(call chatCall, attrs []attribute.KeyValue) {
 	content := promptContent(cfg, call.variables, call.finalUser)
 	if call.err == nil {
 		if call.usage != nil {
-			n := aiserver.ParseUsage(call.usage)
-			u := aiserver.SpanUsage{Input: n.Input, Output: n.Output}
+			n := handlerkit.ParseUsage(call.usage)
+			u := kitbase.SpanUsage{Input: n.Input, Output: n.Output}
 			if n.InputDetails != nil {
 				u.CacheRead, u.CacheCreation = n.InputDetails.CacheRead, n.InputDetails.CacheCreation
 			}
-			aiserver.SetUsageSpanAttributes(span, u)
+			kitbase.SetUsageSpanAttributes(span, u)
 		}
 		var parts []telemetry.MessagePart
 		for i, inv := range call.toolCalls {
@@ -254,7 +256,7 @@ func promptContent(cfg aiserver.AiConfig, variables map[string]any, finalUser *s
 	}
 	var input []telemetry.ChatMessage
 	for _, m := range cfg.Messages {
-		text := aiserver.ParseTemplate(aiserver.ContentText(m), variables)
+		text := aiserver.ParseTemplate(handlerkit.ContentText(m), variables)
 		if m.Role == "system" {
 			system = append(system, text)
 			continue

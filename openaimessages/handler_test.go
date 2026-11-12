@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
 )
 
@@ -199,7 +200,7 @@ func funcTool(desc string, params map[string]any) aiserver.Tool {
 
 func TestFactoryMetadata(t *testing.T) {
 	a, b := newHandler(Options{}), newHandler(Options{CaptureContent: aiserver.CaptureOn})
-	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeMessages}) || a.ProvidesFor != ProvidesFor {
+	if a.ProvidesFor != (aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeMessages}) || a.ProvidesFor != providesFor {
 		t.Errorf("providesFor = %+v", a.ProvidesFor)
 	}
 	if a.CaptureContent != aiserver.CaptureDefault || b.CaptureContent != aiserver.CaptureOn {
@@ -329,7 +330,7 @@ func TestToolLoop(t *testing.T) {
 		if !reflect.DeepEqual(calls, []string{"a", "b"}) || gotArgs["city"] != "Paris" || res.Output != `{"done":true}` {
 			t.Errorf("calls=%v args=%v out=%v", calls, gotArgs, res.Output)
 		}
-		if u := aiserver.ParseUsage(res.Usage); u.Input != 4 || u.Output != 5 {
+		if u := handlerkit.ParseUsage(res.Usage); u.Input != 4 || u.Output != 5 {
 			t.Errorf("usage summed across turns = %+v", u)
 		}
 		if len(f.requests) != 3 {
@@ -556,7 +557,7 @@ func TestStream(t *testing.T) {
 		if len(events) != 3 || events[0].Text != "Hel" || events[1].Text != "lo" || events[2].Type != "done" || *events[2].Output != "Hello" {
 			t.Fatalf("events = %+v", events)
 		}
-		if u := aiserver.ParseUsage(events[2].Usage); u.Input != 3 || u.Output != 2 {
+		if u := handlerkit.ParseUsage(events[2].Usage); u.Input != 3 || u.Output != 2 {
 			t.Errorf("usage = %+v", u)
 		}
 		assertRootTelemetry(t, exp, 3, 2, 1, 1, "Hello")
@@ -588,7 +589,7 @@ func TestStream(t *testing.T) {
 		if !reflect.DeepEqual(order, []string{"Let me ", "check. ", "tool", "Sunny."}) || gotArgs["city"] != "Paris" {
 			t.Errorf("order = %v args = %v", order, gotArgs)
 		}
-		if *done.Output != "Let me check. Sunny." || aiserver.ParseUsage(done.Usage).Input != 5 {
+		if *done.Output != "Let me check. Sunny." || handlerkit.ParseUsage(done.Usage).Input != 5 {
 			t.Errorf("done = %+v", done)
 		}
 		if f.requests[0]["stream"] != true || f.requests[0]["tools"] == nil {

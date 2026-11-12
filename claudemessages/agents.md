@@ -23,7 +23,6 @@ Shared Anthropic wire mapping (turns, tools, max_tokens, finish reasons, usage) 
 
 ```go
 const PackageName, PackageVersion, SpanName
-var ProvidesFor aiserver.ProvidesFor
 var ErrToolNotFound error
 type Options struct{ Client *anthropic.Client; APIKey string; CaptureContent aiserver.ContentCapture }
 func NewHandler(Options) *aiserver.ProviderHandler
@@ -36,7 +35,7 @@ func ClaudeMessages(ctx, configKey, userInput string, userCtx ldcontext.Context,
 `aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
 `gen_ai.tool.name` are written either way.
 
-`init()` calls `aiserver.RegisterAiSdkPackage(PackageName, PackageVersion)`. `NewHandler` reports
+`init()` calls `handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion)`. `NewHandler` reports
 `claude-messages.createClaudeMessagesHandler` and `ClaudeMessages` reports
 `claude-messages.claudeMessages`; the wrapper builds its handler through the
 non-reporting internal path, so one call emits only its own helper.
@@ -45,20 +44,20 @@ non-reporting internal path, so one call emits only its own helper.
 
 The handler receives `aiserver.HandlerRequest{Config, UserInput, ToolHandlers, Variables, History}`.
 
-- **`Config`**: `aiserver.ComposePrompt(req, ModeMessages)` builds the system prompt and turns
+- **`Config`**: `handlerkit.ComposePrompt(req, ModeMessages)` builds the system prompt and turns
   (`messages` win over `instructions`). On the blocking path `OutputFormat` is appended with
-  `aiserver.WithOutputFormat`. `Model.Name` is the request model. `max_tokens` is read from
+  `kitbase.WithOutputFormat`. `Model.Name` is the request model. `max_tokens` is read from
   `Model.Parameters`; the allowlisted parameters in `forwardedParameters` and the rebuilt
   `typedShapes` objects are sent as extra request fields, with `output_config` reduced to `effort`
   and a top-level `effort` moved into it.
-- **`UserInput`**: appended by `ComposePrompt`; never absent, `""` when empty.
+- **`UserInput`**: appended by `handlerkit.ComposePrompt`; never absent, `""` when empty.
 - **`ToolHandlers`**: `anthropicwire.Tools` offers each `Config.Tools` entry whose key has a
   `ToolFunc`, named by its key, with the JSON Schema rebuilt field for field. A
   `tool_use` block for a name that was not offered fails the run with `ErrToolNotFound`, naming
   the tool; its `execute_tool <name>` span ends ERROR with the root. A tool error fails the run. Tool results go back as `tool_result` blocks.
 - **`Variables`**: template values for `ParseTemplate`, plus the `__ld` / `ldContext` entries that
-  `aiserver.StartHandlerRun` writes onto the root span.
-- **`History`**: spliced by `ComposePrompt` as structured turns; images map to native Anthropic
+  `handlerkit.StartHandlerRun` writes onto the root span.
+- **`History`**: spliced by `handlerkit.ComposePrompt` as structured turns; images map to native Anthropic
   image blocks.
 
 Loop: at most 10 provider turns (the JS and Python bound). One `chat <model>` span per turn and

@@ -17,6 +17,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
 )
 
@@ -84,7 +86,7 @@ func newAgent(name, instructions string, cfg aiserver.AiConfig, handlers map[str
 	a := &agent{
 		name: name, instructions: instructions, model: cfg.Model.Name,
 		parameters: snakeParameters(cfg.Model.Parameters),
-		tools:      aiserver.CallableTools(cfg, handlers),
+		tools:      handlerkit.CallableTools(cfg, handlers),
 		native:     map[string]aiserver.Tool{},
 		handlers:   handlers,
 	}
@@ -213,7 +215,7 @@ type runner struct {
 	maxTurns int
 	hooks    hooks
 	// span records chat / execute_tool child spans; nil records none.
-	span *aiserver.HandlerRun
+	span kitbase.Run
 	// onText streams text deltas; nil makes blocking calls.
 	onText func(string) bool
 }
@@ -347,7 +349,7 @@ func (r *runner) runCalls(ctx context.Context, a *agent, calls []responses.Respo
 		}
 		res, err := callTool(ctx, a, call)
 		if err != nil {
-			return nil, nil, err // HandlerRun.Fail ends the open tool span
+			return nil, nil, err // Run.Fail ends the open tool span
 		}
 		if r.span != nil {
 			r.span.ToolResult(span, res)
@@ -395,7 +397,7 @@ func trackNative(a *agent, resp *responses.Response) {
 		}
 		for _, key := range slices.Sorted(maps.Keys(a.native)) {
 			if nt := a.handlers[key].(*aiserver.NativeTool); strings.HasPrefix(nt.ToolName, kind) {
-				nt.Track()
+				handlerkit.TrackNativeTool(nt)
 				break
 			}
 		}

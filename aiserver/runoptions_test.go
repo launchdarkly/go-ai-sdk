@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 func TestZeroRunOptionsAreAPlainConfigRun(t *testing.T) {
@@ -37,7 +38,7 @@ func TestRunOptionsReplaceTheVariationAndExtendTracking(t *testing.T) {
 	var seen HandlerRequest
 	h := &ProviderHandler{ProvidesFor: ProvidesFor{"openai", ModeMessages}, Invoke: func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
 		seen = req
-		StartHandlerRun(ctx, HandlerSpanOptions{Tracer: TracerPrefix + "/test", Name: "test"}, req, Prompt{}).Finish("", "ok")
+		kitStartHandlerRun(ctx, kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/test", Name: "test"}, req, prompt{}).Finish("", "ok")
 		return HandlerResult{Output: "ok", Usage: map[string]any{"input": 1, "output": 2}}, nil
 	}}
 	value := ldvalue.FromJSONMarshal(enabledConfig("openai", "completion", nil))
@@ -54,7 +55,7 @@ func TestRunOptionsReplaceTheVariationAndExtendTracking(t *testing.T) {
 	if err != nil || f.calls["cfg"] != 0 {
 		t.Fatalf("err %v, JSONVariation calls %v", err, f.calls)
 	}
-	if resp.TrackData.RunID != "run-1" || seen.Variables[VarLD].(TrackData).RunID != "run-1" {
+	if resp.TrackData.RunID != "run-1" || seen.Variables[kitbase.VarLD].(TrackData).RunID != "run-1" {
 		t.Fatalf("run id %q", resp.TrackData.RunID)
 	}
 	for _, name := range []string{"$ld:ai:duration:total", "$ld:ai:generation:success", "$ld:ai:tokens:total"} {

@@ -127,7 +127,7 @@ unset.
 
 `InitClient` registers a global OpenTelemetry tracer provider: OTLP/HTTP with
 gzip to `InitOptions.OTLPEndpoint`, else `OTEL_EXPORTER_OTLP_ENDPOINT`, else
-`aiserver.DefaultOTLPEndpoint`; resource attributes `launchdarkly.project_id` (SDK
+`https://otel.observability.app.launchdarkly.com`; resource attributes `launchdarkly.project_id` (SDK
 key), `service.name` (`LD_SERVICE_NAME`, default `go-sdk`) and
 `deployment.environment` (`LD_ENVIRONMENT`, when set); W3C propagators; and a span
 processor that stamps `gen_ai.conversation.id` from

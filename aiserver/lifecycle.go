@@ -247,9 +247,9 @@ func sdkKey(opts InitOptions) string {
 	return envValue("LD_SDK_KEY")
 }
 
-// DefaultOTLPEndpoint is LaunchDarkly's observability backend, used when
+// defaultOTLPEndpoint is LaunchDarkly's observability backend, used when
 // neither InitOptions.OTLPEndpoint nor OTEL_EXPORTER_OTLP_ENDPOINT is set.
-const DefaultOTLPEndpoint = "https://otel.observability.app.launchdarkly.com"
+const defaultOTLPEndpoint = "https://otel.observability.app.launchdarkly.com"
 
 // envValue reads an environment variable, treating a blank value as unset so
 // a copied .env with empty entries keeps the built-in defaults.
@@ -288,7 +288,7 @@ func setupTelemetry(ctx context.Context, sdkKey string, opts InitOptions) error 
 	opts = withEnvDefaults(opts)
 	endpoint := opts.OTLPEndpoint
 	if endpoint == "" {
-		endpoint = DefaultOTLPEndpoint
+		endpoint = defaultOTLPEndpoint
 	}
 	exporterOpts := []otlptracehttp.Option{
 		otlptracehttp.WithCompression(otlptracehttp.GzipCompression),
@@ -332,9 +332,9 @@ var (
 
 type usageRecord struct{ helper, pkg, version string }
 
-// RegisterAiSdkPackage records a package for `$ld:ai:sdk:info`. Handler
+// kitRegisterAiSdkPackage records a package for `$ld:ai:sdk:info`. Handler
 // packages call it from init().
-func RegisterAiSdkPackage(name, version string) {
+func kitRegisterAiSdkPackage(name, version string) {
 	reportMu.Lock()
 	defer reportMu.Unlock()
 	id := pkgID{name, version}
@@ -346,11 +346,11 @@ func RegisterAiSdkPackage(name, version string) {
 	knownPkgs = append(knownPkgs, id)
 }
 
-func init() { RegisterAiSdkPackage(PackageName, PackageVersion) }
+func init() { kitRegisterAiSdkPackage(PackageName, PackageVersion) }
 
-// ReportUsage records a public helper call once per client. An empty
+// kitReportUsage records a public helper call once per client. An empty
 // pkg defaults to the core identity.
-func ReportUsage(helper, pkg, version string) { reportUsage(helper, pkg, version) }
+func kitReportUsage(helper, pkg, version string) { reportUsage(helper, pkg, version) }
 
 func reportUsage(helper, pkg, version string) {
 	if pkg == "" {

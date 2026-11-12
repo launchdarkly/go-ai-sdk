@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
@@ -56,9 +57,9 @@ func TestWithSpanAttributesStampsSDKSpansWriteIfAbsent(t *testing.T) {
 		attribute.Bool("example.flag", true), attribute.Float64("example.ratio", 0.5)) // dropped: not string/int
 	ctx = telemetry.WithSpanAttributes(ctx, attribute.String("example.label", "inner"), attribute.String("example.extra", "x"))
 
-	_, sdk := tracerFor(TracerPrefix+"/test").Start(ctx, "sdk")
+	_, sdk := tracerFor(kitbase.TracerPrefix+"/test").Start(ctx, "sdk")
 	sdk.End()
-	_, preset := tracerFor(TracerPrefix+"/test").Start(ctx, "preset", trace.WithAttributes(attribute.String("example.label", "own")))
+	_, preset := tracerFor(kitbase.TracerPrefix+"/test").Start(ctx, "preset", trace.WithAttributes(attribute.String("example.label", "own")))
 	preset.End()
 	_, foreign := tracerFor("example.com/other").Start(ctx, "foreign")
 	foreign.End()
@@ -84,7 +85,7 @@ func TestWithSpanAttributesAndConversationIDCompose(t *testing.T) {
 	exp := processorSpans(t)
 	ctx := WithConversationID(bg, "outer-conv")
 	ctx = telemetry.WithSpanAttributes(WithConversationID(ctx, "inner-conv"), attribute.String("example.label", "v"))
-	_, s := tracerFor(TracerPrefix+"/test").Start(ctx, "sdk")
+	_, s := tracerFor(kitbase.TracerPrefix+"/test").Start(ctx, "sdk")
 	s.End()
 	a := spanAttrMap(t, exp, "sdk")
 	if a["gen_ai.conversation.id"].AsString() != "inner-conv" || a["example.label"].AsString() != "v" {
@@ -94,7 +95,7 @@ func TestWithSpanAttributesAndConversationIDCompose(t *testing.T) {
 
 func TestNoBindingLeavesSpansUnchanged(t *testing.T) {
 	exp := processorSpans(t)
-	_, s := tracerFor(TracerPrefix+"/test").Start(bg, "sdk")
+	_, s := tracerFor(kitbase.TracerPrefix+"/test").Start(bg, "sdk")
 	s.End()
 	if a := spanAttrMap(t, exp, "sdk"); len(a) != 0 {
 		t.Errorf("no binding must stamp nothing, got %v", a)
@@ -108,12 +109,12 @@ func TestWithSpanCounterCountsSDKSpans(t *testing.T) {
 		_, s := tracerFor(tracer).Start(ctx, "s")
 		s.End()
 	}
-	start(ctx, TracerPrefix+"/test")
+	start(ctx, kitbase.TracerPrefix+"/test")
 	start(ctx, "example.com/other") // not counted
 	inner, nested := telemetry.WithSpanCounter(ctx)
-	start(inner, TracerPrefix+"/test")
-	start(inner, TracerPrefix+"/test")
-	start(bg, TracerPrefix+"/test") // outside both
+	start(inner, kitbase.TracerPrefix+"/test")
+	start(inner, kitbase.TracerPrefix+"/test")
+	start(bg, kitbase.TracerPrefix+"/test") // outside both
 	if outer.Count() != 3 || nested.Count() != 2 {
 		t.Fatalf("outer %d nested %d, want 3 and 2", outer.Count(), nested.Count())
 	}

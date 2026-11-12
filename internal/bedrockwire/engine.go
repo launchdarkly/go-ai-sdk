@@ -21,6 +21,8 @@ import (
 	"github.com/aws/smithy-go/auth/bearer"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 const (
@@ -95,7 +97,7 @@ func (e *Engine) errorf(format string, args ...any) error {
 }
 
 // runUsage keeps Bedrock's field names with cache buckets unfolded: it is the
-// handler's return value and aiserver.ParseUsage folds once.
+// handler's return value and handlerkit.ParseUsage folds once.
 type runUsage struct{ input, output, total, cacheRead, cacheWrite int32 }
 
 func (u *runUsage) add(x *types.TokenUsage) {
@@ -116,10 +118,10 @@ func (u runUsage) raw() map[string]any {
 	}
 }
 
-func spanUsage(x *types.TokenUsage) aiserver.SpanUsage {
+func spanUsage(x *types.TokenUsage) kitbase.SpanUsage {
 	var u runUsage
 	u.add(x)
-	return aiserver.SpanUsage{
+	return kitbase.SpanUsage{
 		Input:     float64(u.input + u.cacheRead + u.cacheWrite),
 		Output:    float64(u.output),
 		CacheRead: float64(u.cacheRead), CacheCreation: float64(u.cacheWrite),
@@ -138,7 +140,7 @@ type turnResult struct {
 func (e *Engine) run(ctx context.Context, req aiserver.HandlerRequest, onText func(string) bool) (out string, usage runUsage, abandoned bool, err error) {
 	id := ModelID(req.Config.Model)
 	agent := e.Mode == aiserver.ModeAgent
-	p := aiserver.ComposePrompt(req, e.Mode)
+	p := handlerkit.ComposePrompt(req, e.Mode)
 	var output *types.OutputConfig
 	if onText == nil { // streaming ignores outputFormat
 		if agent {
@@ -146,10 +148,10 @@ func (e *Engine) run(ctx context.Context, req aiserver.HandlerRequest, onText fu
 				err = e.errorf("encode outputFormat: %w", err)
 			}
 		} else {
-			p.System = aiserver.WithOutputFormat(p.System, req.Config.OutputFormat)
+			p.System = kitbase.WithOutputFormat(p.System, req.Config.OutputFormat)
 		}
 	}
-	r := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{
+	r := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
 		Tracer: e.Tracer, Name: SpanName, System: GenAISystem, Operation: SpanName, RequestModel: id,
 	}, req, p)
 	defer r.EndOnPanic()

@@ -22,7 +22,6 @@ lives in `internal/openaiwire`, also used by `openaiagents`.
 
 ```go
 const PackageName, PackageVersion, SpanName
-var ProvidesFor aiserver.ProvidesFor
 var ErrMaxSteps error
 type Options struct{ Client *openai.Client; APIKey string; CaptureContent aiserver.ContentCapture }
 func NewHandler(Options) *aiserver.ProviderHandler
@@ -35,22 +34,22 @@ func OpenAIMessages(ctx, configKey, userInput string, userCtx ldcontext.Context,
 `aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
 `gen_ai.tool.name` are written either way.
 
-`init()` calls `aiserver.RegisterAiSdkPackage(PackageName, PackageVersion)`.
+`init()` calls `handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion)`.
 
 ## Implementation details
 
 The handler receives `aiserver.HandlerRequest{Config, UserInput, ToolHandlers, Variables, History}`.
 
-- **`Config`**: `aiserver.ComposePrompt(req, ModeMessages)` builds the system prompt and turns
+- **`Config`**: `handlerkit.ComposePrompt(req, ModeMessages)` builds the system prompt and turns
   (messages win over instructions; prompt and history rules live there). `Model.Name` is the request
-  model. `Tools` is filtered by `aiserver.CallableTools`. `OutputFormat` becomes `text.format` on
+  model. `Tools` is filtered by `handlerkit.CallableTools`. `OutputFormat` becomes `text.format` on
   the first blocking call. Allowlisted `Model.Parameters` go out as extra JSON fields.
-- **`UserInput`**: appended by `ComposePrompt`; never absent, `""` when empty.
+- **`UserInput`**: appended by `handlerkit.ComposePrompt`; never absent, `""` when empty.
 - **`ToolHandlers`**: only `ToolFunc` values are offered and executed. A model call for a tool that
   was not offered fails the run; the raw map is never consulted for it.
 - **`Variables`**: template values for `ParseTemplate`, plus the `__ld` / `ldContext` entries that
-  `aiserver.StartHandlerRun` writes onto the root span.
-- **`History`**: spliced by `ComposePrompt`; `toInput` maps image blocks to `input_image`.
+  `handlerkit.StartHandlerRun` writes onto the root span.
+- **`History`**: spliced by `handlerkit.ComposePrompt`; `toInput` maps image blocks to `input_image`.
 
 Tool loop: each provider turn gets a `chat <model>` span, each tool call an `execute_tool <name>`
 span, all direct children of the `invoke_agent` root. Follow-ups send only the
@@ -83,7 +82,7 @@ OTLP endpoint, service name), call `aiserver.InitWithClient` to bring your own L
 ## Common pitfalls
 
 - **Cached tokens are already in `input_tokens`.** Do not add `cached_tokens` to the input count
-  or return it as `cache_read_input_tokens`; `aiserver.ParseUsage` would fold it in a second time.
+  or return it as `cache_read_input_tokens`; `handlerkit.ParseUsage` would fold it in a second time.
 - **Follow-up turns rely on `previous_response_id`** for the conversation; `tools` and
   `text.format` are re-sent each turn because the Responses API does not carry them over.
   `store` in `model.parameters`, including `store: false`, is not forwarded; the handler never

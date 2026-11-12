@@ -2,7 +2,7 @@
 
 ## Role and tier
 
-Tier 1 handler package. `ProvidesFor = {Provider: "Bedrock", Mode: "agent"}`. Depends on the Tier 0 core
+Tier 1 handler package. The handler's `ProvidesFor` field is `{Provider: "Bedrock", Mode: "agent"}`. Depends on the Tier 0 core
 `aiserver` and the internal Converse engine `internal/bedrockwire` (shared with `bedrockmessages`); nothing in
 the SDK depends on it.
 
@@ -30,7 +30,6 @@ const (
 	GenAISystem     = "aws.bedrock"
 	DefaultMaxSteps = 10
 )
-var ProvidesFor aiserver.ProvidesFor
 var ErrUnsupportedContent error
 var ErrToolNotFound error
 type Options struct{ Client *bedrockruntime.Client; APIKey, Region string; ModelOptions func(aiserver.AiConfig) *bedrockruntime.ConverseInput; CaptureContent aiserver.ContentCapture; MaxSteps int }
@@ -52,24 +51,24 @@ func BedrockGraph(key string, opts aiserver.GraphOptions, handlerOpts Options) (
 
 ## Implementation details
 
-- **config** — `aiserver.ComposePrompt(req, ModeAgent)`: `instructions` is the system prompt and wins over
+- **config** — `handlerkit.ComposePrompt(req, ModeAgent)`: `instructions` is the system prompt and wins over
   system-role `messages`; non-system config messages, then history (user/assistant only), then `userInput` are
   Converse `messages` (these rules live in the core). `model.name` + `model.region` → `modelId`.
   `model.parameters` → `inferenceConfig` (four documented fields). `model.custom` is never read.
   `outputFormat` → `outputConfig.textFormat {type: json_schema, structure.jsonSchema {name: "output", schema}}`
   on blocking turns only; no system-prompt instruction. The JSON text is returned and the core parses it.
-- **userInput** — appended by `ComposePrompt` as a text block (`""` when empty and appended).
+- **userInput** — appended by `handlerkit.ComposePrompt` as a text block (`""` when empty and appended).
 - **toolHandlers** — only `aiserver.ToolFunc` entries are offered. On `stopReason: tool_use` each
   `toolUse` runs under an `execute_tool <name>` span; the assistant message and a user message of `toolResult`
   blocks are appended and the loop continues, up to `MaxSteps` model turns (default 10). Tool errors abort the
   run and propagate wrapped (`errors.Is` works). A `toolUse` naming a tool that was not offered (not in
   `config.tools`, or without a `ToolFunc`, even when `ToolHandlers` has a function under that name) fails the
   run with `ErrToolNotFound` (the error names the tool) and leaves an ERROR `execute_tool` span.
-- **variables** — template values for `ComposePrompt`, plus `__ld` / `ldContext` written to the root span by
-  `aiserver.StartHandlerRun` (child spans never carry them).
+- **variables** — template values for `handlerkit.ComposePrompt`, plus `__ld` / `ldContext` written to the root span by
+  `handlerkit.StartHandlerRun` (child spans never carry them).
 - **history** — structured Converse turns, never system text; base64 images → `image {format, source.bytes}`.
 - **Result** — blocking `Output` is the final model turn's text (the Strands agent result); streaming
-  `done.Output` is every turn's text. Usage keeps Bedrock's raw keys so `aiserver.ParseUsage` folds once.
+  `done.Output` is every turn's text. Usage keeps Bedrock's raw keys so `handlerkit.ParseUsage` folds once.
 - **Telemetry** — root `invoke_agent` (operation `invoke_agent`, system/provider `aws.bedrock`, request and
   response model = resolved `modelId`), one `chat <modelId>` child per model turn, sibling
   `execute_tool <name>` per tool call. The AWS SDK tracer stays no-op, so there is no duplicate representation.

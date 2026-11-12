@@ -9,6 +9,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
@@ -174,15 +175,15 @@ func contentSpans(t *testing.T) *tracetest.InMemoryExporter {
 // writeAllContent writes a handler span through the kit and a span through
 // the shared helpers, under ctx.
 func writeAllContent(ctx context.Context) {
-	run := StartHandlerRun(ctx, HandlerSpanOptions{Tracer: TracerPrefix + "/test", Name: "handler.span", System: "p", RequestModel: "m"},
-		HandlerRequest{}, Prompt{System: "sys", Turns: []Message{{Role: "user", Text: "hi"}}})
+	run := kitStartHandlerRun(ctx, kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/test", Name: "handler.span", System: "p", RequestModel: "m"},
+		HandlerRequest{}, prompt{System: "sys", Turns: []Message{{Role: "user", Text: "hi"}}})
 	tool := run.StartTool("lookup", "call_1")
 	run.ToolArguments(tool, map[string]any{"q": "x"})
 	run.ToolResult(tool, "found")
 	run.EndTool(tool, nil)
 	run.Finish("m", "answer")
 
-	_, span := tracerFor(TracerPrefix+"/test").Start(ctx, "chat m")
+	_, span := tracerFor(kitbase.TracerPrefix+"/test").Start(ctx, "chat m")
 	telemetry.SetChatContent(ctx, span, telemetry.ChatContent{
 		SystemInstructions: "sys",
 		InputMessages:      []telemetry.ChatMessage{{Role: "user", Parts: []telemetry.MessagePart{telemetry.TextPart("hi")}}},
@@ -286,7 +287,7 @@ func TestChatContentShape(t *testing.T) {
 func TestToolDefinitionsOmitEmptyMembers(t *testing.T) {
 	freshOptions(t)
 	exp := contentSpans(t)
-	_, span := tracerFor(TracerPrefix+"/test").Start(bg, "chat m")
+	_, span := tracerFor(kitbase.TracerPrefix+"/test").Start(bg, "chat m")
 	telemetry.SetChatContent(bg, span, telemetry.ChatContent{ToolDefinitions: []telemetry.ToolDefinition{{Name: "bare"}}})
 	span.End()
 	for _, a := range exp.GetSpans().Snapshots()[0].Attributes() {
@@ -311,7 +312,7 @@ func TestJudgeExplanationFollowsConfiguredDefault(t *testing.T) {
 		if req.Variables["response_to_evaluate"] == nil {
 			return HandlerResult{Output: "answer"}, nil
 		}
-		run := StartHandlerRun(ctx, HandlerSpanOptions{Tracer: TracerPrefix + "/test", Name: "judge.span", System: "p", RequestModel: "m"}, req, Prompt{})
+		run := kitStartHandlerRun(ctx, kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/test", Name: "judge.span", System: "p", RequestModel: "m"}, req, prompt{})
 		run.Finish("m", `{"score":0.5,"reasoning":"because"}`)
 		return HandlerResult{Output: `{"score":0.5,"reasoning":"because"}`}, nil
 	}, nil, CaptureDefault)

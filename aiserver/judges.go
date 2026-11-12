@@ -8,10 +8,8 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/judging"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
-
-// FormattingInstructions is appended to every judge message_history.
-const FormattingInstructions = judging.FormattingInstructions
 
 // sampled is a seam so tests can make sampling deterministic.
 var sampled = func(rate float64) bool { return rand.Float64() < rate }
@@ -34,7 +32,7 @@ func collapseMessages(cfg AiConfig) AiConfig {
 	}
 	texts := make([]string, len(cfg.Messages))
 	for i, m := range cfg.Messages {
-		texts[i] = ContentText(m)
+		texts[i] = kitContentText(m)
 	}
 	cfg.Instructions = strings.Join(texts, "\n\n")
 	cfg.Messages = nil
@@ -42,7 +40,7 @@ func collapseMessages(cfg AiConfig) AiConfig {
 }
 
 func providerMatches(p ProvidesFor, provider string) bool {
-	return p.Provider == provider || p.Provider == WildcardProvider
+	return p.Provider == provider || p.Provider == kitbase.WildcardProvider
 }
 
 // pickJudgeHandler applies the judge handler priority: exact provider+mode
@@ -110,7 +108,7 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 		if !ok {
 			continue
 		}
-		h, collapse, ok := pickJudgeHandler(a.handler, a.handlers, jcfg.Provider.Name, NormalizeMode(jmeta.Mode))
+		h, collapse, ok := pickJudgeHandler(a.handler, a.handlers, jcfg.Provider.Name, kitNormalizeMode(jmeta.Mode))
 		if !ok {
 			continue
 		}
@@ -156,9 +154,9 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 	return results, nil
 }
 
-// BuildJudgeTasksArgs are the inputs to BuildJudgeTasks: the parent
+// buildJudgeTasksArgs are the inputs to buildJudgeTasksFromArgs: the parent
 // invocation's config, context, handlers, input, output and track data.
-type BuildJudgeTasksArgs struct {
+type buildJudgeTasksArgs struct {
 	Config      AiConfig
 	UserContext ldcontext.Context
 	Handler     *ProviderHandler
@@ -169,9 +167,9 @@ type BuildJudgeTasksArgs struct {
 	Trajectory  string
 }
 
-// BuildJudgeTasks resolves the configured judges into serialisable tasks
+// buildJudgeTasksFromArgs resolves the configured judges into serialisable tasks
 // without running them (prepareAsyncJudge in JS and Python). Sampling applies.
-func BuildJudgeTasks(ctx context.Context, args BuildJudgeTasksArgs) ([]JudgeTask, error) {
+func buildJudgeTasksFromArgs(ctx context.Context, args buildJudgeTasksArgs) ([]JudgeTask, error) {
 	reportUsage("client.buildJudgeTasks", "", "")
 	return buildJudgeTasks(ctx, judgeArgs{
 		cfg: args.Config, userCtx: args.UserContext, handler: args.Handler, handlers: args.Handlers,
@@ -186,7 +184,7 @@ func buildJudgeTasks(ctx context.Context, a judgeArgs) ([]JudgeTask, error) {
 		if !ok {
 			continue
 		}
-		mode := NormalizeMode(jmeta.Mode)
+		mode := kitNormalizeMode(jmeta.Mode)
 		_, collapse, ok := pickJudgeHandler(a.handler, a.handlers, jcfg.Provider.Name, mode)
 		if !ok {
 			continue

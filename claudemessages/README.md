@@ -14,7 +14,7 @@ go get github.com/launchdarkly/go-ai-sdk/claudemessages
 
 `{Provider: "Anthropic", Mode: "messages"}`. The handler runs for AI Config variations whose
 `provider.name` is `Anthropic` and whose `_ldMeta.mode` is not `agent`: `messages`, or absent,
-since `aiserver.NormalizeMode` maps every other mode to `messages`. Agent-mode Anthropic
+since the SDK maps every other mode to `messages`. Agent-mode Anthropic
 variations go to [`claudeagents`](../claudeagents).
 
 ## Examples
@@ -111,7 +111,6 @@ res, err := claudemessages.ClaudeMessages(ctx, "my-ai-config", "Hello", ldcontex
 const PackageName = "github.com/launchdarkly/go-ai-sdk/claudemessages"
 const PackageVersion = "0.1.0"
 const SpanName = "invoke_agent"
-var ProvidesFor = aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeMessages}
 var ErrToolNotFound error
 
 type Options struct {

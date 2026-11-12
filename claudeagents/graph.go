@@ -2,6 +2,7 @@ package claudeagents
 
 import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
@@ -19,7 +20,7 @@ type GraphOptions struct {
 // ClaudeGraph returns aiserver's model-driven graph runner with exactly one
 // handler, this package's agent handler, pre-bound (claudeGraph).
 func ClaudeGraph(key string, opts GraphOptions, handler Options) *aiserver.AgentGraph {
-	aiserver.ReportUsage("claude-agents.claudeGraph", PackageName, PackageVersion)
+	handlerkit.ReportUsage("claude-agents.claudeGraph", PackageName, PackageVersion)
 	return sdkapi.Graph(key, aiserver.GraphOptions{
 		Handlers:     []*aiserver.ProviderHandler{newHandler(handler)},
 		ToolHandlers: opts.ToolHandlers, GraphJudge: opts.GraphJudge, Registry: opts.Registry,

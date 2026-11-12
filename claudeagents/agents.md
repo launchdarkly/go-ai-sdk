@@ -33,8 +33,7 @@ Shared Anthropic wire mapping (turns, tools, max_tokens, finish reasons, usage) 
 ## Public exports
 
 ```go
-const PackageName, PackageVersion, SpanName, DefaultMaxSteps, SubAgentToolPrefix
-var ProvidesFor aiserver.ProvidesFor
+const PackageName, PackageVersion, SpanName, DefaultMaxSteps
 var ErrToolNotFound, ErrUnsupportedNativeTool, ErrMaxSteps error
 type Options struct{ Client *anthropic.Client; APIKey string; CaptureContent aiserver.ContentCapture; MaxSteps int; WorkDir string }
 func NewHandler(Options) *aiserver.ProviderHandler
@@ -54,24 +53,24 @@ var ClaudeBash, ClaudeRead, ClaudeEdit, ClaudeWrite, ClaudeGlob, ClaudeGrep, Cla
 `aiserver.CaptureOn` and `aiserver.CaptureOff` force it on or off. Model, usage, status and
 `gen_ai.tool.name` are written either way.
 
-`init()` calls `aiserver.RegisterAiSdkPackage(PackageName, PackageVersion)`.
+`init()` calls `handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion)`.
 
 ## Implementation details
 
 The handler receives `aiserver.HandlerRequest{Config, UserInput, ToolHandlers, Variables, History}`.
 
-- **`Config`**: `aiserver.ComposePrompt(req, ModeAgent)` builds the system prompt and turns
+- **`Config`**: `handlerkit.ComposePrompt(req, ModeAgent)` builds the system prompt and turns
   (instructions win over system messages). On the blocking path `OutputFormat` is appended with
-  `aiserver.WithOutputFormat`. `Model.Name` is the request model; `max_tokens` and `max_turns`
+  `kitbase.WithOutputFormat`. `Model.Name` is the request model; `max_tokens` and `max_turns`
   are read from `Model.Parameters`.
-- **`UserInput`**: appended by `ComposePrompt`; never absent, `""` when empty.
+- **`UserInput`**: appended by `handlerkit.ComposePrompt`; never absent, `""` when empty.
 - **`ToolHandlers`**: for each `Config.Tools` key, a `ToolFunc` becomes a custom tool and a
   `*aiserver.NativeTool` becomes either its Anthropic server tool (`WebSearch` → `web_search`,
   `WebFetch` → `web_fetch`) or, for the eight names in `hostTools`, a plain function tool named
   `ToolName` with Claude Code's input schema, executed by `toolset.runHost`. Any other
   `ToolName` fails the run with `ErrUnsupportedNativeTool` before the first call. A
-  `server_tool_use` block, or a `tool_use` for a host built-in, calls the wrapped NativeTool's
-  `Track()`, so `$ld:ai:tool_call` carries the LaunchDarkly map key. A `tool_use` for a name
+  `server_tool_use` block, or a `tool_use` for a host built-in, passes the wrapped NativeTool to
+  `handlerkit.TrackNativeTool`, so `$ld:ai:tool_call` carries the LaunchDarkly map key. A `tool_use` for a name
   with no executor fails with `ErrToolNotFound`, naming the tool.
 
 Host built-ins: `buildTools` opens a `workspace` per run (`os.OpenRoot(WorkDir)`, closed when the
@@ -91,8 +90,8 @@ model sees and the trajectory records, and leave Read/Write/Glob/Grep/TodoWrite/
 without a type anyway. Claude Code itself sends its built-ins as named custom tools, so this
 package does the same.
 - **`Variables`**: template values for `ParseTemplate`, plus the `__ld` / `ldContext` entries that
-  `aiserver.StartHandlerRun` writes onto the root span.
-- **`History`**: spliced by `ComposePrompt` as structured turns; images map to native Anthropic
+  `handlerkit.StartHandlerRun` writes onto the root span.
+- **`History`**: spliced by `handlerkit.ComposePrompt` as structured turns; images map to native Anthropic
   image blocks.
 
 Loop: one `chat <model>` span per provider turn and one `execute_tool <name>` span per tool

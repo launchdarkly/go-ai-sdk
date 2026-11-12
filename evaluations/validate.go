@@ -12,6 +12,7 @@ import (
 	"golang.org/x/text/cases"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 // --- handler pool -------------------------------------------------
@@ -51,15 +52,15 @@ func validatePool(single *aiserver.ProviderHandler, many []*aiserver.ProviderHan
 }
 
 func providesFor(h *aiserver.ProviderHandler) aiserver.ProvidesFor {
-	return aiserver.ProvidesFor{Provider: h.ProvidesFor.Provider, Mode: aiserver.NormalizeMode(string(h.ProvidesFor.Mode))}
+	return aiserver.ProvidesFor{Provider: h.ProvidesFor.Provider, Mode: handlerkit.NormalizeMode(string(h.ProvidesFor.Mode))}
 }
 
-// selectHandler applies the shared config() rule (aiserver.SelectHandler)
+// selectHandler applies the shared config() rule (handlerkit.SelectHandler)
 // to the pool with each handler's mode normalized, as the
 // duplicate and coverage checks see it; nil when no handler serves provider
 // and mode.
 func selectHandler(pool []*aiserver.ProviderHandler, provider string, mode aiserver.Mode) *aiserver.ProviderHandler {
-	h, _ := aiserver.SelectHandler(pool, provider, mode)
+	h, _ := handlerkit.SelectHandler(pool, provider, mode)
 	return h
 }
 
@@ -99,13 +100,13 @@ func promptProblem(mode aiserver.Mode, instructions string, messages []aiserver.
 }
 
 // validateGenerationMode checks the caller's raw value before normalizing:
-// NormalizeMode maps every unknown string, typos included, to messages.
+// handlerkit.NormalizeMode maps every unknown string, typos included, to messages.
 func validateGenerationMode(mode GenerationMode) (aiserver.Mode, error) {
 	switch mode {
 	case "":
 		return "", invalid("generation.mode is required. Set it to 'completion' or 'agent'.")
 	case GenerationModeCompletion, GenerationModeAgent:
-		return aiserver.NormalizeMode(string(mode)), nil
+		return handlerkit.NormalizeMode(string(mode)), nil
 	}
 	return "", invalid("generation.mode must be 'completion' or 'agent', got %q", mode)
 }

@@ -16,6 +16,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
@@ -25,7 +27,7 @@ import (
 // options.Handlers value is replaced, so the graph cannot be bound to a
 // different handler. handler configures that agent handler.
 func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph {
-	aiserver.ReportUsage("openai-agents.openaiGraph", PackageName, PackageVersion)
+	handlerkit.ReportUsage("openai-agents.openaiGraph", PackageName, PackageVersion)
 	options.Handlers = []*aiserver.ProviderHandler{newHandler(handler)}
 	return sdkapi.Graph(key, options)
 }
@@ -55,7 +57,7 @@ type NativeGraph struct {
 // Responses API (toOpenAIAgents). opts may be nil. Errors for
 // a nil, disabled or rootless definition are returned by Invoke.
 func ToOpenAIAgents(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *NativeGraph {
-	aiserver.ReportUsage("openai-agents.toOpenAIAgents", PackageName, PackageVersion)
+	handlerkit.ReportUsage("openai-agents.toOpenAIAgents", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &NativeGraphOptions{}
 	}
@@ -72,9 +74,9 @@ func (g *NativeGraph) buildAgents(ctx context.Context, variables map[string]any,
 	if _, err := g.def.Traverse(ctx, func(_ context.Context, n *aiserver.GraphNode, _ map[string]any) (any, error) {
 		handlers := g.opts.ToolHandlers
 		if tracking {
-			handlers = aiserver.WrapToolHandlers(handlers, g.opts.Context, n.TrackData(g.def.Key, runID))
+			handlers = handlerkit.WrapToolHandlers(handlers, g.opts.Context, handlerkit.NodeTrackData(n, g.def.Key, runID))
 		}
-		system := aiserver.ComposePrompt(aiserver.HandlerRequest{Config: n.Config, Variables: variables}, aiserver.ModeAgent).System
+		system := handlerkit.ComposePrompt(aiserver.HandlerRequest{Config: n.Config, Variables: variables}, aiserver.ModeAgent).System
 		a := newAgent(sanitizeName(n.Key), system, n.Config, handlers)
 		a.key = n.Key
 		agents[n.Key] = a
@@ -114,20 +116,20 @@ func (g *NativeGraph) Invoke(ctx context.Context, input string, opts ...aiserver
 	}
 	userCtx := g.opts.Context
 	runID := uuid.NewString()
-	graphTD := def.TrackData()
+	graphTD := handlerkit.GraphTrackData(def)
 	graphTD.RunID = runID
 
 	// Nodes run the agent loop directly, not through a handler, so the run
 	// binds Handler.CaptureContent itself.
 	ctx = sdkapi.StartInvocation(ctx, g.opts.Handler.CaptureContent)
-	spanCtx, span := otel.Tracer(PackageName).Start(ctx, aiserver.GraphSpanName)
+	spanCtx, span := otel.Tracer(PackageName).Start(ctx, kitbase.GraphSpanName)
 	defer span.End()
 	span.SetAttributes(attribute.String("ld.ai.graph.key", def.Key))
-	aiserver.SetLDSpanAttributesFor(span, graphTD, ldcontext.Context{}) // identity belongs on handler root spans only
+	handlerkit.SetLDSpanAttributesFor(span, graphTD, ldcontext.Context{}) // identity belongs on handler root spans only
 	start := time.Now()
 
 	n := &nativeRun{g: g, ctx: spanCtx, userCtx: userCtx, tracking: userCtx.IsDefined(), graphTD: graphTD, runID: runID}
-	defer func() { // node spans open in hooks, so a panic is caught here, not at StartHandlerRun
+	defer func() { // node spans open in hooks, so a panic is caught here, not at handlerkit.StartHandlerRun
 		if p := recover(); p != nil {
 			if n.seg != nil {
 				n.seg.span.Fail(fmt.Errorf("panic: %v", p))
@@ -150,7 +152,7 @@ func (g *NativeGraph) Invoke(ctx context.Context, input string, opts ...aiserver
 	usage := aiserver.TokenUsage{Input: float64(res.usage.Input), Output: float64(res.usage.Output)}
 	usage.Total = usage.Input + usage.Output
 	span.SetAttributes(attribute.String("launchdarkly.graph.path", strings.Join(n.path, "->")))
-	aiserver.SetUsageSpanAttributes(span, aiserver.SpanUsage{Input: usage.Input, Output: usage.Output})
+	kitbase.SetUsageSpanAttributes(span, kitbase.SpanUsage{Input: usage.Input, Output: usage.Output})
 	if usage.Total > 0 {
 		n.graphEvent("$ld:ai:graph:total_tokens", nil, usage.Total)
 	}
@@ -181,16 +183,16 @@ type nativeRun struct {
 type segment struct {
 	a     *agent
 	from  *agent // nil for the root
-	span  *aiserver.HandlerRun
+	span  kitbase.Run
 	start time.Time
-	usage aiserver.SpanUsage
+	usage kitbase.SpanUsage
 	model string
 	text  string // the last turn's text
 }
 
 func (n *nativeRun) graphEvent(event string, extra map[string]any, metric float64) {
 	if n.tracking {
-		aiserver.TrackGraphEvent(event, n.userCtx, n.graphTD, extra, metric)
+		handlerkit.TrackGraphEvent(event, n.userCtx, n.graphTD, extra, metric)
 	}
 }
 
@@ -224,14 +226,14 @@ func (n *nativeRun) agentStart(a *agent) {
 		n.path = append(n.path, a.key)
 		n.graphEvent("$ld:ai:graph:node", map[string]any{"nodeKey": a.key, "index": len(n.path) - 1}, 1)
 	}
-	p := aiserver.Prompt{System: a.instructions}
+	p := handlerkit.Prompt{System: a.instructions}
 	if n.from == nil {
 		p.Turns = n.rootTurns // a handoff target continues the conversation through previous_response_id
 	}
-	span := aiserver.StartHandlerRun(n.ctx, aiserver.HandlerSpanOptions{
+	span := handlerkit.StartHandlerRun(n.ctx, kitbase.HandlerSpanOptions{
 		Tracer: PackageName, Name: SpanName, System: "openai", Operation: operation, RequestModel: a.model,
 	}, aiserver.HandlerRequest{}, p)
-	aiserver.SetLDSpanAttributesFor(span.Root, def.GetNode(a.key).TrackData(def.Key, n.runID), n.userCtx)
+	handlerkit.SetLDSpanAttributesFor(span.RootSpan(), handlerkit.NodeTrackData(def.GetNode(a.key), def.Key, n.runID), n.userCtx)
 	n.runner.span = span
 	n.seg = &segment{a: a, from: n.from, span: span, start: time.Now()}
 }
@@ -245,7 +247,7 @@ func (n *nativeRun) endSegment(err error, output string) {
 	}
 	n.seg = nil
 	def := n.g.def
-	td := def.GetNode(s.a.key).TrackData(def.Key, n.runID)
+	td := handlerkit.NodeTrackData(def.GetNode(s.a.key), def.Key, n.runID)
 	n.nodeEvent("$ld:ai:duration:total", td, float64(time.Since(s.start).Milliseconds()))
 	handoff := "$ld:ai:graph:handoff_success"
 	if err != nil {
@@ -276,7 +278,7 @@ func (g *NativeGraph) run(ctx context.Context, variables map[string]any, n *nati
 	root := g.def.Root
 	// History seeds the root only; handoff targets see the conversation
 	// through previous_response_id, never the original history array.
-	turns := aiserver.ComposePrompt(aiserver.HandlerRequest{UserInput: input, History: history}, aiserver.ModeAgent).Turns
+	turns := handlerkit.ComposePrompt(aiserver.HandlerRequest{UserInput: input, History: history}, aiserver.ModeAgent).Turns
 	n.rootTurns = turns
 	r := &runner{client: g.client, maxTurns: maxTurns(root.Config.Model.Parameters, g.opts.Handler.MaxTurns)}
 	n.runner, r.hooks = r, n.hooks()

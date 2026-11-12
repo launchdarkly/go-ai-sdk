@@ -20,25 +20,24 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/trajectory"
 )
 
 const (
 	// maxTraversalDepth bounds graph walks and BFS expansion (cycle guard).
 	maxTraversalDepth = 100
-	// GraphSpanName is the graph-level span.
-	GraphSpanName = "ld.ai.graph"
 )
 
-// GraphTopology is a graph flag variation: a root config key and each
+// graphTopology is a graph flag variation: a root config key and each
 // source key's outgoing edges.
-type GraphTopology struct {
+type graphTopology struct {
 	Root  string                         `json:"root"`
-	Edges map[string][]GraphTopologyEdge `json:"edges,omitempty"`
+	Edges map[string][]graphTopologyEdge `json:"edges,omitempty"`
 }
 
-// GraphTopologyEdge is one outgoing edge in a GraphTopology.
-type GraphTopologyEdge struct {
+// graphTopologyEdge is one outgoing edge in a graphTopology.
+type graphTopologyEdge struct {
 	Key     string         `json:"key"`
 	Handoff map[string]any `json:"handoff,omitempty"`
 }
@@ -62,10 +61,10 @@ type GraphNode struct {
 // IsTerminal reports whether the node has no outgoing edges.
 func (n *GraphNode) IsTerminal() bool { return len(n.Edges) == 0 }
 
-// TrackData is the node's tracking payload for one graph run: its config
+// trackData is the node's tracking payload for one graph run: its config
 // identity, graphKey, and runID. For framework-native graph runners, so they
 // track nodes exactly as Graph does.
-func (n *GraphNode) TrackData(graphKey, runID string) TrackData {
+func (n *GraphNode) trackData(graphKey, runID string) TrackData {
 	td := newTrackData(n.Key, n.Config, n.Meta, graphKey)
 	td.RunID = runID
 	return td
@@ -284,12 +283,6 @@ func (d *GraphDefinition) ReverseTraverse(ctx context.Context, fn TraverseVisito
 	return acc[d.Root.Key], nil
 }
 
-// TrackData returns the graph-level track data (graphKey set) for adapters.
-func (d *GraphDefinition) TrackData() TrackData { return d.trackData }
-
-// UserContext is the context the definition was resolved for.
-func (d *GraphDefinition) UserContext() ldcontext.Context { return d.userCtx }
-
 func (d *GraphDefinition) handlers() []*ProviderHandler {
 	return resolveHandlers(d.opts.Registry, d.opts.Handlers)
 }
@@ -308,8 +301,8 @@ func selectNodeHandler(n *GraphNode, handlers []*ProviderHandler) (*ProviderHand
 	if provider == "" {
 		return nil, errorf("provider not found for graph node %s", n.Key)
 	}
-	mode := NormalizeMode(n.Meta.Mode)
-	for _, want := range []ProvidesFor{{provider, mode}, {WildcardProvider, mode}} {
+	mode := kitNormalizeMode(n.Meta.Mode)
+	for _, want := range []ProvidesFor{{provider, mode}, {kitbase.WildcardProvider, mode}} {
 		for _, h := range handlers {
 			if h.ProvidesFor.Provider == want.Provider && handlerMode(h) == want.Mode {
 				return h, nil
@@ -418,9 +411,9 @@ func trackGraph(event string, userCtx ldcontext.Context, td TrackData, extra map
 	safeTrack(c, event, userCtx, metric, ldvalue.Parse(b))
 }
 
-// TrackGraphEvent sends a `$ld:ai:graph:*` event with td merged with extra.
+// kitTrackGraphEvent sends a `$ld:ai:graph:*` event with td merged with extra.
 // For framework-native graph adapters.
-func TrackGraphEvent(event string, userCtx ldcontext.Context, td TrackData, extra map[string]any, metric float64) {
+func kitTrackGraphEvent(event string, userCtx ldcontext.Context, td TrackData, extra map[string]any, metric float64) {
 	trackGraph(event, userCtx, td, extra, metric)
 }
 
@@ -556,7 +549,7 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 		meta = parseMeta(m)
 	}
 	def.trackData = newTrackData(key, AiConfig{}, *meta, key)
-	var topo GraphTopology
+	var topo graphTopology
 	b, err := json.Marshal(raw)
 	if err != nil {
 		return off(), errorf("graph %q: malformed topology: %w", key, err)
@@ -689,10 +682,10 @@ func (g *AgentGraph) stream(ctx context.Context, input string, userCtx ldcontext
 		runTD := def.trackData
 		runTD.RunID = uuid.NewString() // each run gets its own id
 
-		spanCtx, span := otel.Tracer(TracerPrefix+"/aiserver").Start(ctx, GraphSpanName)
+		spanCtx, span := otel.Tracer(kitbase.TracerPrefix+"/aiserver").Start(ctx, kitbase.GraphSpanName)
 		span.SetAttributes(attribute.String("ld.ai.graph.key", g.key))
 		// Context identity goes on the root handler span only, not here.
-		SetLDSpanAttributesFor(span, runTD, ldcontext.Context{})
+		kitSetLDSpanAttributesFor(span, runTD, ldcontext.Context{})
 
 		start := time.Now()
 		usage := TokenUsage{}
@@ -804,7 +797,7 @@ func (g *AgentGraph) stream(ctx context.Context, input string, userCtx ldcontext
 		trackGraph("$ld:ai:graph:invocation_success", userCtx, runTD, nil, 1)
 		finished = true
 		span.SetAttributes(attribute.String("launchdarkly.graph.path", strings.Join(path, "->")))
-		SetUsageSpanAttributes(span, SpanUsage{Input: usage.Input, Output: usage.Output})
+		kitbase.SetUsageSpanAttributes(span, kitbase.SpanUsage{Input: usage.Input, Output: usage.Output})
 		span.SetStatus(codes.Ok, "")
 		span.End()
 		yield(done, nil)

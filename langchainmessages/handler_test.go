@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
 	"github.com/launchdarkly/go-ai-sdk/llms"
 )
@@ -325,7 +326,7 @@ func TestToolLoopAndTelemetry(t *testing.T) {
 	if !reflect.DeepEqual(calls, []string{"a", "b"}) || gotArgs["city"] != "Paris" || res.Output != "final" {
 		t.Errorf("calls=%v args=%v out=%v", calls, gotArgs, res.Output)
 	}
-	if u := aiserver.ParseUsage(res.Usage); u.Input != 4 || u.Output != 5 {
+	if u := handlerkit.ParseUsage(res.Usage); u.Input != 4 || u.Output != 5 {
 		t.Errorf("usage = %+v", u)
 	}
 	// Turn 3 sees: system, user, AI(tool call a), tool result a, AI(tool call b), tool result b.

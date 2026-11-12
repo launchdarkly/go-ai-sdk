@@ -7,7 +7,7 @@ the provider packages do, and `aiserver` never imports it. `public_test.go` exer
 names from outside the package. The names are pinned in `surface_test.go`'s `skillsSurface`, and
 `aiserver/surface_test.go` asserts that none of them is on the `aiserver` root.
 
-**Usage IDs.** The first statement of each public helper is `aiserver.ReportUsage("client.<id>", "", "")`,
+**Usage IDs.** The first statement of each public helper is `handlerkit.ReportUsage("client.<id>", "", "")`,
 before any argument or store check, so a failing call still reports. The IDs match JS and Python:
 
 | ID | Reported by |

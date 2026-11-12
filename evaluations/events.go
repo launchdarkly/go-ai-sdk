@@ -20,6 +20,7 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 // Event names.
@@ -266,7 +267,7 @@ func contentHash(content map[string]any) (string, error) {
 func timestamp(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
 
 func usageWire(u map[string]any) map[string]any {
-	n := aiserver.ParseUsage(u)
+	n := handlerkit.ParseUsage(u)
 	return map[string]any{"inputTokens": n.Input, "outputTokens": n.Output}
 }
 

@@ -15,6 +15,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
@@ -388,10 +390,10 @@ func TestEvaluationSpansWhenGenerationRaises(t *testing.T) {
 func TestEvaluationSpansForAHandlerThatOpensItsOwn(t *testing.T) {
 	judgeCalls := 0
 	e, args := spanRun(t, func(ctx context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
-		run := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{Tracer: aiserver.TracerPrefix + "/test",
-			Name: "invoke_agent test", System: "openai", Operation: "invoke_agent", RequestModel: "gpt-4o"}, req, aiserver.Prompt{})
+		run := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/test",
+			Name: "invoke_agent test", System: "openai", Operation: "invoke_agent", RequestModel: "gpt-4o"}, req, handlerkit.Prompt{})
 		chat := run.StartChat("gpt-4o")
-		run.EndChat(chat, "gpt-4o", aiserver.SpanUsage{Input: 1, Output: 1}, "tool_calls")
+		run.EndChat(chat, "gpt-4o", kitbase.SpanUsage{Input: 1, Output: 1}, "tool_calls")
 		tool := run.StartTool("lookup", "provider_call_9")
 		run.ToolArguments(tool, map[string]any{"q": "2+2"})
 		res, _ := req.ToolHandlers["lookup"].(aiserver.ToolFunc)(run.Context(), map[string]any{"q": "2+2"})
@@ -463,7 +465,7 @@ func TestEvaluationSpansFollowTheContentGate(t *testing.T) {
 			// handler with the same setting, follows the same gate.
 			outside := sdkapi.CreateHandler(aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeMessages},
 				func(ctx context.Context, _ aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
-					_, sp := otel.Tracer(aiserver.TracerPrefix+"/test").Start(ctx, "non-evaluation")
+					_, sp := otel.Tracer(kitbase.TracerPrefix+"/test").Start(ctx, "non-evaluation")
 					telemetry.SetChatContent(ctx, sp, telemetry.ChatContent{SystemInstructions: "s",
 						InputMessages: []telemetry.ChatMessage{{Role: "user", Parts: []telemetry.MessagePart{telemetry.TextPart("hi")}}}})
 					sp.End()

@@ -16,6 +16,8 @@ import (
 	"github.com/openai/openai-go/v3/responses"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
@@ -35,10 +37,10 @@ const (
 // tool-loop bound.
 var ErrMaxSteps = errors.New("openaimessages: tool loop exceeded the maximum number of steps")
 
-// ProvidesFor is the variation provider/mode this handler serves.
-var ProvidesFor = aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeMessages}
+// providesFor is the variation provider/mode this handler serves.
+var providesFor = aiserver.ProvidesFor{Provider: "OpenAI", Mode: aiserver.ModeMessages}
 
-func init() { aiserver.RegisterAiSdkPackage(PackageName, PackageVersion) }
+func init() { handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion) }
 
 // Options configure NewHandler.
 type Options struct {
@@ -54,7 +56,7 @@ type Options struct {
 
 // NewHandler returns the OpenAI messages handler (createOpenAIMessagesHandler).
 func NewHandler(opts Options) *aiserver.ProviderHandler {
-	aiserver.ReportUsage("openai-messages.createOpenAIMessagesHandler", PackageName, PackageVersion)
+	handlerkit.ReportUsage("openai-messages.createOpenAIMessagesHandler", PackageName, PackageVersion)
 	return newHandler(opts)
 }
 
@@ -69,7 +71,7 @@ func newHandler(opts Options) *aiserver.ProviderHandler {
 		c = &nc
 	}
 	h := &handler{client: c}
-	return sdkapi.CreateHandler(ProvidesFor, h.invoke, h.stream, opts.CaptureContent)
+	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent)
 }
 
 // InvokeOptions are the optional arguments to OpenAIMessages.
@@ -86,7 +88,7 @@ type InvokeOptions struct {
 // OpenAIMessages invokes configKey through a fresh OpenAI messages handler.
 // opts may be nil.
 func OpenAIMessages(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error) {
-	aiserver.ReportUsage("openai-messages.openaiMessages", PackageName, PackageVersion)
+	handlerkit.ReportUsage("openai-messages.openaiMessages", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}
@@ -100,7 +102,7 @@ type handler struct{ client *openai.Client }
 
 // toInput maps the composed prompt to Responses input items. The system
 // prompt is a leading system message, as in the JavaScript handler.
-func toInput(p aiserver.Prompt) responses.ResponseInputParam {
+func toInput(p handlerkit.Prompt) responses.ResponseInputParam {
 	var out responses.ResponseInputParam
 	if p.System != "" {
 		out = append(out, responses.ResponseInputItemParamOfMessage(p.System, responses.EasyInputMessageRoleSystem))
@@ -150,7 +152,7 @@ func isToolChoice(v any) bool {
 // runTools executes the function calls in r. A call for a tool that was not
 // offered is an error, never a lookup in the raw handler map: the model must
 // not reach a handler the active config excluded.
-func runTools(r *aiserver.HandlerRun, resp *responses.Response, callable map[string]aiserver.Tool, handlers map[string]aiserver.ToolHandler) (responses.ResponseInputParam, error) {
+func runTools(r kitbase.Run, resp *responses.Response, callable map[string]aiserver.Tool, handlers map[string]aiserver.ToolHandler) (responses.ResponseInputParam, error) {
 	var outputs responses.ResponseInputParam
 	for _, item := range resp.Output {
 		if item.Type != "function_call" {
@@ -190,13 +192,13 @@ func callTool(ctx context.Context, call responses.ResponseFunctionToolCall, call
 // abandoned reports that the stream consumer stopped iterating.
 func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText func(string) bool) (out string, usage openaiwire.RunUsage, abandoned bool, err error) {
 	model := req.Config.Model.Name
-	p := aiserver.ComposePrompt(req, aiserver.ModeMessages)
-	r := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{
+	p := handlerkit.ComposePrompt(req, aiserver.ModeMessages)
+	r := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
 		Tracer: PackageName, Name: SpanName, System: "openai", RequestModel: model,
 	}, req, p)
 	defer r.EndOnPanic()
 
-	callable := aiserver.CallableTools(req.Config, req.ToolHandlers)
+	callable := handlerkit.CallableTools(req.Config, req.ToolHandlers)
 	params := newParams(req.Config, toInput(p))
 	params.Tools = openaiwire.FunctionTools(callable)
 	if onText == nil && req.Config.OutputFormat != nil { // streaming ignores outputFormat

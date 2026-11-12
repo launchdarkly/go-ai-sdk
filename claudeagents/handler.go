@@ -28,6 +28,8 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/anthropicwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
@@ -44,8 +46,8 @@ const (
 	DefaultMaxSteps = 10
 )
 
-// ProvidesFor is the variation provider/mode this handler serves.
-var ProvidesFor = aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeAgent}
+// providesFor is the variation provider/mode this handler serves.
+var providesFor = aiserver.ProvidesFor{Provider: "Anthropic", Mode: aiserver.ModeAgent}
 
 var (
 	// ErrToolNotFound is returned when the model calls a tool that has no
@@ -60,7 +62,7 @@ var (
 	ErrMaxSteps = errors.New("claudeagents: agent loop reached its maximum number of turns")
 )
 
-func init() { aiserver.RegisterAiSdkPackage(PackageName, PackageVersion) }
+func init() { handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion) }
 
 // Options configure NewHandler.
 type Options struct {
@@ -84,13 +86,13 @@ type Options struct {
 
 // NewHandler returns the Anthropic agent handler (createClaudeAgentsHandler).
 func NewHandler(opts Options) *aiserver.ProviderHandler {
-	aiserver.ReportUsage("claude-agents.createClaudeAgentsHandler", PackageName, PackageVersion)
+	handlerkit.ReportUsage("claude-agents.createClaudeAgentsHandler", PackageName, PackageVersion)
 	return newHandler(opts)
 }
 
 func newHandler(opts Options) *aiserver.ProviderHandler {
 	h := newAgent(opts)
-	return sdkapi.CreateHandler(ProvidesFor, h.invoke, h.stream, opts.CaptureContent)
+	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent)
 }
 
 // InvokeOptions are the optional arguments to ClaudeAgents.
@@ -110,7 +112,7 @@ type InvokeOptions struct {
 // ClaudeAgents invokes configKey through a fresh Anthropic agent handler.
 // opts may be nil.
 func ClaudeAgents(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error) {
-	aiserver.ReportUsage("claude-agents.claudeAgents", PackageName, PackageVersion)
+	handlerkit.ReportUsage("claude-agents.claudeAgents", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}
@@ -220,10 +222,10 @@ func buildTools(cfg aiserver.AiConfig, handlers map[string]aiserver.ToolHandler,
 
 // runHost executes a host built-in. Its failures become is_error results the
 // model can react to; only the span records them.
-func (r *toolset) runHost(ctx context.Context, run *aiserver.HandlerRun, b anthropic.ContentBlockUnion) anthropic.ContentBlockParamUnion {
+func (r *toolset) runHost(ctx context.Context, run kitbase.Run, b anthropic.ContentBlockUnion) anthropic.ContentBlockParamUnion {
 	span := run.StartTool(b.Name, b.ID)
 	run.ToolArguments(span, b.Input)
-	r.host[b.Name].Track()
+	handlerkit.TrackNativeTool(r.host[b.Name])
 	out, err := hostTools[b.Name].run(trace.ContextWithSpan(ctx, span), r.ws, b.Input)
 	if err != nil && out == "" {
 		out = err.Error()
@@ -278,16 +280,16 @@ type spanIdentity struct {
 func (a *agent) run(ctx context.Context, req aiserver.HandlerRequest, extra []localTool, ident *spanIdentity, onText func(string) bool) (runResult, error) {
 	var res runResult
 	model := req.Config.Model.Name
-	p := aiserver.ComposePrompt(req, aiserver.ModeAgent)
+	p := handlerkit.ComposePrompt(req, aiserver.ModeAgent)
 	if onText == nil { // streaming ignores outputFormat
-		p.System = aiserver.WithOutputFormat(p.System, req.Config.OutputFormat)
+		p.System = kitbase.WithOutputFormat(p.System, req.Config.OutputFormat)
 	}
-	r := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{
+	r := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
 		Tracer: PackageName, Name: SpanName, System: "anthropic", Operation: "invoke_agent", RequestModel: model,
 	}, req, p)
 	defer r.EndOnPanic()
 	if ident != nil {
-		aiserver.SetLDSpanAttributesFor(r.Root, ident.td, ident.userCtx)
+		handlerkit.SetLDSpanAttributesFor(r.RootSpan(), ident.td, ident.userCtx)
 	}
 
 	ts, err := buildTools(req.Config, req.ToolHandlers, extra, a.workDir)
@@ -349,7 +351,7 @@ func (a *agent) run(ctx context.Context, req aiserver.HandlerRequest, extra []lo
 			case "server_tool_use":
 				// Anthropic ran the tool; record it like the Agent SDK's PreToolUse hook.
 				if n := ts.natives[b.Name]; n != nil {
-					n.Track()
+					handlerkit.TrackNativeTool(n)
 				}
 				span := r.StartTool(b.Name, b.ID)
 				r.ToolArguments(span, b.Input)

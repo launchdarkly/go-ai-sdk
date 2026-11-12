@@ -22,6 +22,8 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 // Shadow requests. Experimental: every name in this file may change in a
@@ -100,7 +102,7 @@ type ShadowResult struct {
 // or when aiserver.Shutdown cancels it. It returns an error for a negative Timeout.
 // Experimental.
 func ShadowConfig(args aiserver.ConfigArgs, opts ShadowOptions) (*ShadowAIConfig, error) {
-	aiserver.ReportUsage("experimental.shadowConfig", "", "")
+	handlerkit.ReportUsage("experimental.shadowConfig", "", "")
 	if opts.Timeout < 0 {
 		return nil, errors.New("ShadowOptions.Timeout must not be negative")
 	}
@@ -115,7 +117,7 @@ func ShadowConfig(args aiserver.ConfigArgs, opts ShadowOptions) (*ShadowAIConfig
 // up and never starts one, so after Shutdown it only returns an error.
 // Experimental.
 func RunShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.ProviderHandler) ShadowResult {
-	aiserver.ReportUsage("experimental.runShadow", "", "")
+	handlerkit.ReportUsage("experimental.runShadow", "", "")
 	return runShadow(ctx, task, handlers)
 }
 
@@ -290,7 +292,7 @@ func parseEntry(raw any) (shadowEntry, bool) {
 }
 
 func inSample(shadowID string, c ldcontext.Context, samplingRate float64) bool {
-	canonical, _, ok := aiserver.ContextIdentity(c)
+	canonical, _, ok := kitbase.ContextIdentity(c)
 	if !ok {
 		return false
 	}
@@ -318,7 +320,7 @@ func shadowVariation(raw any) (aiserver.AiConfig, aiserver.VariationMeta, bool) 
 	for _, k := range []string{"_ldMeta", "tools", "judgeConfiguration", "shadowConfiguration"} {
 		delete(value, k)
 	}
-	cfg, err := aiserver.ParseAiConfig(value)
+	cfg, err := handlerkit.ParseAiConfig(value)
 	return cfg, meta, err == nil
 }
 
@@ -326,7 +328,7 @@ func handlerFor(cfg aiserver.AiConfig, meta aiserver.VariationMeta, handlers []*
 	if cfg.Provider.Name == "" {
 		return nil
 	}
-	h, err := aiserver.SelectHandler(handlers, cfg.Provider.Name, aiserver.NormalizeMode(meta.Mode))
+	h, err := handlerkit.SelectHandler(handlers, cfg.Provider.Name, handlerkit.NormalizeMode(meta.Mode))
 	if err != nil {
 		return nil
 	}

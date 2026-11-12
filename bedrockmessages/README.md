@@ -10,7 +10,7 @@ go get github.com/launchdarkly/go-ai-sdk/bedrockmessages
 
 ## providesFor
 
-`ProvidesFor = {Provider: "Bedrock", Mode: "messages"}`.
+The handler's `ProvidesFor` field is `{Provider: "Bedrock", Mode: "messages"}`.
 The handler serves AI Config variations whose `provider.name` is `Bedrock` and whose
 `_ldMeta.mode` is `messages` (or absent, which normalises to `messages`).
 
@@ -116,7 +116,6 @@ const PackageName = "github.com/launchdarkly/go-ai-sdk/bedrockmessages"
 const PackageVersion = "0.1.0"
 const SpanName = "invoke_agent"
 const GenAISystem = "aws.bedrock"
-var ProvidesFor = aiserver.ProvidesFor{Provider: "Bedrock", Mode: aiserver.ModeMessages}
 var ErrUnsupportedContent error
 var ErrToolNotFound error // the model requested a tool that was not offered
 var ErrMaxSteps error // the model still asked for tools after 10 turns

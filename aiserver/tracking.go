@@ -15,6 +15,7 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 	"github.com/launchdarkly/go-ai-sdk/internal/trajectory"
 )
@@ -46,10 +47,10 @@ func Track(event string, ctx ldcontext.Context, td TrackData, metric float64) {
 	track(event, ctx, td, metric)
 }
 
-// WrapToolHandlers wraps each tool so a call emits `$ld:ai:tool_call`.
-// A NativeTool keeps its ToolName and gains a working Track. Synthetic
+// kitWrapToolHandlers wraps each tool so a call emits `$ld:ai:tool_call`.
+// A NativeTool keeps its ToolName and gains a working trackCall. Synthetic
 // `__handoff_` routing tools are passed through without tracking.
-func WrapToolHandlers(tools map[string]ToolHandler, userCtx ldcontext.Context, td TrackData) map[string]ToolHandler {
+func kitWrapToolHandlers(tools map[string]ToolHandler, userCtx ldcontext.Context, td TrackData) map[string]ToolHandler {
 	out := make(map[string]ToolHandler, len(tools))
 	for name, h := range tools {
 		toolTD := td
@@ -70,18 +71,6 @@ func WrapToolHandlers(tools map[string]ToolHandler, userCtx ldcontext.Context, t
 		}
 	}
 	return out
-}
-
-// ContextToMap is the template view of an LD context, injected as
-// variables.ldContext.
-func ContextToMap(c ldcontext.Context) map[string]any {
-	b, err := json.Marshal(c)
-	if err != nil {
-		return map[string]any{}
-	}
-	var m map[string]any
-	_ = json.Unmarshal(b, &m)
-	return m
 }
 
 type execArgs struct {
@@ -162,9 +151,9 @@ func (a execArgs) prepare() (TrackData, HandlerRequest, *trajectory.Recorder) {
 	if vars == nil {
 		vars = map[string]any{}
 	}
-	vars[VarLDContext] = ContextToMap(a.userCtx) // always overwrites a caller's ldContext
+	vars[kitbase.VarLDContext] = kitbase.ContextToMap(a.userCtx) // always overwrites a caller's ldContext
 	vars[varLDContextTyped] = a.userCtx
-	vars[VarLD] = td
+	vars[kitbase.VarLD] = td
 	if len(a.run.SpanAttributes) > 0 {
 		vars[varLDSpanAttributes] = spanAttributes(a.run.SpanAttributes)
 	}
@@ -174,7 +163,7 @@ func (a execArgs) prepare() (TrackData, HandlerRequest, *trajectory.Recorder) {
 	return td, HandlerRequest{
 		Config:       a.config,
 		UserInput:    a.userInput,
-		ToolHandlers: WrapToolHandlers(recorded, a.userCtx, td),
+		ToolHandlers: kitWrapToolHandlers(recorded, a.userCtx, td),
 		Variables:    vars,
 		History:      a.history,
 	}, rec
@@ -223,7 +212,7 @@ func executeAndTrack(ctx context.Context, a execArgs) (execResult, error) {
 	if err != nil {
 		return execResult{TrackData: td, Trajectory: rec.Render()}, err
 	}
-	usage := ParseUsage(res.Usage)
+	usage := kitParseUsage(res.Usage)
 	trackTokens(a.userCtx, td, usage)
 	if res.Output == nil {
 		res.Output = ""
@@ -316,7 +305,7 @@ func executeAndStream(ctx context.Context, a execArgs, done *streamDone) iter.Se
 			yield(HandlerStreamEvent{}, err)
 			return
 		}
-		usage := ParseUsage(rawUsage)
+		usage := kitParseUsage(rawUsage)
 		trackTokens(a.userCtx, td, usage)
 		*done = streamDone{response: full.String(), usage: usage, td: td, trajectory: rec.Render()}
 	}

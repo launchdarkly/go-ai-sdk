@@ -11,6 +11,7 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 // ConfigArgs are the options for Config.
@@ -100,7 +101,7 @@ func extractVariation(ctx context.Context, key string, userCtx ldcontext.Context
 	if !meta.Enabled {
 		return AiConfig{}, VariationMeta{}, fmt.Errorf("%w: variation %s is not enabled", ErrConfigDisabled, key)
 	}
-	cfg, err := ParseAiConfig(raw)
+	cfg, err := kitParseAiConfig(raw)
 	if err != nil {
 		return AiConfig{}, VariationMeta{}, errorf("invalid AI config for %q: %w", key, err)
 	}
@@ -111,16 +112,16 @@ func selectHandler(cfg AiConfig, meta VariationMeta, handlers []*ProviderHandler
 	if cfg.Provider.Name == "" {
 		return nil, errorf("provider not found")
 	}
-	return SelectHandler(handlers, cfg.Provider.Name, NormalizeMode(meta.Mode))
+	return kitSelectHandler(handlers, cfg.Provider.Name, kitNormalizeMode(meta.Mode))
 }
 
-// SelectHandler is the config() routing rule: the handler whose
+// kitSelectHandler is the config() routing rule: the handler whose
 // ProvidesFor is exactly {provider, mode}, else {"*", mode}, with the
 // handler's mode normalized like the config's ("completion" is messages).
 // Every path that routes a config by provider uses it, so the rule lives in
 // one place.
-func SelectHandler(handlers []*ProviderHandler, provider string, mode Mode) (*ProviderHandler, error) {
-	for _, want := range []ProvidesFor{{provider, mode}, {WildcardProvider, mode}} {
+func kitSelectHandler(handlers []*ProviderHandler, provider string, mode Mode) (*ProviderHandler, error) {
+	for _, want := range []ProvidesFor{{provider, mode}, {kitbase.WildcardProvider, mode}} {
 		for _, h := range handlers {
 			if h.ProvidesFor.Provider == want.Provider && handlerMode(h) == want.Mode {
 				return h, nil
@@ -128,7 +129,7 @@ func SelectHandler(handlers []*ProviderHandler, provider string, mode Mode) (*Pr
 		}
 	}
 	for _, h := range handlers {
-		if h.ProvidesFor.Provider == provider || h.ProvidesFor.Provider == WildcardProvider {
+		if h.ProvidesFor.Provider == provider || h.ProvidesFor.Provider == kitbase.WildcardProvider {
 			return nil, fmt.Errorf("%w %s with mode %s", ErrNoHandler, provider, mode)
 		}
 	}
@@ -162,7 +163,7 @@ func resolveOutputFormat(raw any, outputFormat map[string]any) any {
 	if outputFormat == nil || !isStr {
 		return raw
 	}
-	if v, ok := ParseJSONWithPossibleFences(s); ok {
+	if v, ok := kitbase.ParseJSONWithPossibleFences(s); ok {
 		return v
 	}
 	return s // best effort
@@ -261,7 +262,7 @@ func InspectConfig(ctx context.Context, key string, userCtx ldcontext.Context) (
 	if !meta.Enabled {
 		return res, nil
 	}
-	cfg, err := ParseAiConfig(raw)
+	cfg, err := kitParseAiConfig(raw)
 	if err != nil {
 		return InspectResult{}, errorf("invalid AI config for %q: %w", key, err)
 	}

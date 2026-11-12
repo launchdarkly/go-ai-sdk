@@ -11,7 +11,7 @@ go get github.com/launchdarkly/go-ai-sdk/langchainmessages
 
 ## providesFor
 
-`ProvidesFor = {Provider: "*", Mode: "messages"}`. The `*` wildcard makes this the fallback
+The handler's `ProvidesFor` field is `{Provider: "*", Mode: "messages"}`. The `*` wildcard makes this the fallback
 handler for any variation whose `_ldMeta.mode` is `messages` (or absent): the router picks it
 when no handler names the variation's `provider.name` exactly. Put it last in a handler list
 so exact-provider handlers win.
@@ -132,7 +132,6 @@ core client do.
 const PackageName = "github.com/launchdarkly/go-ai-sdk/langchainmessages"
 const PackageVersion = "0.1.0"
 const SpanName = "invoke_agent" // root span, blocking and streaming
-var ProvidesFor = aiserver.ProvidesFor{Provider: "*", Mode: aiserver.ModeMessages}
 var ErrMaxSteps, ErrNoToolHandler, ErrEmptyResponse error
 
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)

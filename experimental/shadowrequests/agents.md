@@ -22,6 +22,6 @@ never gets tools, judges or `shadowConfiguration`; the deadline wraps the handle
 tracked once; nothing is added to A's events; `aiserver.Shutdown` cancels background shadows through
 `bridge.OnShutdown`. Sampling is
 `sha1("<id>.<canonical key>")[:15] / 0xFFFFFFFFFFFFFFF`, with the canonical key from
-`aiserver.ContextIdentity`.
+`kitbase.ContextIdentity`.
 
 Check: `go vet ./aiserver/... && go test -race ./experimental/shadowrequests/ -run 'Shadow|Sampling'`.

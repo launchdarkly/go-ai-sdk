@@ -34,12 +34,12 @@ func newTestBedrock(t *testing.T, url, model string) *Bedrock {
 func TestBedrockRequest(t *testing.T) {
 	f, url := newFake(t, "application/json", bedrockReply)
 	msgs := []MessageContent{
-		TextParts(ChatMessageTypeSystem, "be brief"),
-		TextParts(ChatMessageTypeSystem, "   "), // blank system text is dropped
+		textParts(ChatMessageTypeSystem, "be brief"),
+		textParts(ChatMessageTypeSystem, "   "), // blank system text is dropped
 		{Role: ChatMessageTypeHuman, Parts: []ContentPart{TextContent{Text: "look"}, TextContent{Text: " "}, BinaryContent{MIMEType: "image/png", Data: []byte{1, 2}}}},
 		{Role: ChatMessageTypeAI, Parts: []ContentPart{ToolCall{ID: "tu_1", FunctionCall: &FunctionCall{Name: "lookup", Arguments: "not json"}}}},
 		{Role: ChatMessageTypeTool, Parts: []ContentPart{ToolCallResponse{ToolCallID: "tu_1", Content: "found"}}},
-		TextParts(ChatMessageTypeHuman, "thanks"), // merged into the tool message's user turn
+		textParts(ChatMessageTypeHuman, "thanks"), // merged into the tool message's user turn
 	}
 	_, err := newTestBedrock(t, url, "us.anthropic.claude-sonnet-4-5").GenerateContent(bg, msgs, WithTemperature(0), WithTopK(3),
 		WithStopWords([]string{"END"}),
@@ -92,7 +92,7 @@ func TestBedrockRequest(t *testing.T) {
 
 func TestBedrockTopKOnlyForAnthropic(t *testing.T) {
 	f, url := newFake(t, "application/json", bedrockReply)
-	if _, err := newTestBedrock(t, url, "us.amazon.nova-pro-v1:0").GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")}, WithTopK(3)); err != nil {
+	if _, err := newTestBedrock(t, url, "us.amazon.nova-pro-v1:0").GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")}, WithTopK(3)); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := f.bodies[0]["additionalModelRequestFields"]; ok {
@@ -102,7 +102,7 @@ func TestBedrockTopKOnlyForAnthropic(t *testing.T) {
 
 func TestBedrockResponse(t *testing.T) {
 	_, url := newFake(t, "application/json", bedrockReply)
-	resp, err := newTestBedrock(t, url, "anthropic.claude").GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")})
+	resp, err := newTestBedrock(t, url, "anthropic.claude").GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,11 +123,11 @@ func TestBedrockEmptyAndMaxTokens(t *testing.T) {
 		`{"output":{"message":{"role":"assistant","content":[]}},"stopReason":"end_turn","usage":{"inputTokens":1,"outputTokens":0,"totalTokens":1}}`,
 		`{"output":{"message":{"role":"assistant","content":[{"text":"trunc"}]}},"stopReason":"max_tokens","usage":{"inputTokens":1,"outputTokens":9,"totalTokens":10}}`)
 	m := newTestBedrock(t, url, "anthropic.claude")
-	if _, err := m.GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")}); !errors.Is(err, ErrEmptyResponse) {
+	if _, err := m.GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")}); !errors.Is(err, ErrEmptyResponse) {
 		t.Fatalf("err = %v, want ErrEmptyResponse", err)
 	}
 	// A max_tokens stop returns the truncated answer rather than an error.
-	resp, err := m.GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")})
+	resp, err := m.GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")})
 	if err != nil || resp.Choices[0].Content != "trunc" || resp.Choices[0].StopReason != "max_tokens" {
 		t.Fatalf("resp %+v err %v", resp, err)
 	}

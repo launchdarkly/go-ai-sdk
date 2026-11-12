@@ -15,6 +15,8 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
@@ -34,9 +36,9 @@ const (
 	operation = "invoke_agent"
 )
 
-// ProvidesFor is the variation provider/mode this handler serves: the '*'
+// providesFor is the variation provider/mode this handler serves: the '*'
 // wildcard, because LangChain routes to any provider.
-var ProvidesFor = aiserver.ProvidesFor{Provider: aiserver.WildcardProvider, Mode: aiserver.ModeAgent}
+var providesFor = aiserver.ProvidesFor{Provider: kitbase.WildcardProvider, Mode: aiserver.ModeAgent}
 
 var (
 	// ErrRecursionLimit is returned when an agent or graph run executes more
@@ -57,7 +59,7 @@ var (
 	ErrNodeName = errors.New("langchainagents: node name collision")
 )
 
-func init() { aiserver.RegisterAiSdkPackage(PackageName, PackageVersion) }
+func init() { handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion) }
 
 // ModelFactory builds the llms model for one call from the evaluated
 // AI Config, so the model can see config.model.parameters and name.
@@ -80,13 +82,13 @@ type Options struct {
 // NewHandler returns the LangChain agent handler
 // (createLangChainAgentsHandler).
 func NewHandler(opts Options) *aiserver.ProviderHandler {
-	aiserver.ReportUsage("langchain-agents.createLangChainAgentsHandler", PackageName, PackageVersion)
+	handlerkit.ReportUsage("langchain-agents.createLangChainAgentsHandler", PackageName, PackageVersion)
 	return newHandler(opts)
 }
 
 func newHandler(opts Options) *aiserver.ProviderHandler {
 	h := &handler{opts: opts}
-	return sdkapi.CreateHandler(ProvidesFor, h.invoke, h.stream, opts.CaptureContent)
+	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent)
 }
 
 // InvokeOptions are the optional arguments to LangChainAgents.
@@ -103,7 +105,7 @@ type InvokeOptions struct {
 // LangChainAgents invokes configKey through a fresh LangChain agent handler
 // (langchainAgents). opts may be nil.
 func LangChainAgents(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error) {
-	aiserver.ReportUsage("langchain-agents.langchainAgents", PackageName, PackageVersion)
+	handlerkit.ReportUsage("langchain-agents.langchainAgents", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}
@@ -117,7 +119,7 @@ type handler struct{ opts Options }
 
 type runResult struct {
 	text      string // blocking: the last AI message; streaming: every turn's text
-	usage     aiserver.SpanUsage
+	usage     kitbase.SpanUsage
 	abandoned bool
 }
 
@@ -133,11 +135,11 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 
 	// Agent mode: instructions win; history and userInput become messages,
 	// never system-prompt text.
-	p := aiserver.ComposePrompt(req, aiserver.ModeAgent)
+	p := handlerkit.ComposePrompt(req, aiserver.ModeAgent)
 	if onText == nil { // streaming ignores outputFormat
-		p.System = aiserver.WithOutputFormat(p.System, cfg.OutputFormat)
+		p.System = kitbase.WithOutputFormat(p.System, cfg.OutputFormat)
 	}
-	r := aiserver.StartHandlerRun(ctx, aiserver.HandlerSpanOptions{
+	r := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
 		Tracer: PackageName, Name: SpanName, System: langchainwire.GenAISystem, ProviderName: langchainwire.ProviderName(cfg), Operation: operation,
 		RequestModel: cfg.Model.Name,
 	}, req, p)
@@ -158,7 +160,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 			return m, nil, err
 		},
 	}
-	out, err := a.invoke(r.Context(), langchainwire.ToMessages(aiserver.Prompt{Turns: p.Turns}))
+	out, err := a.invoke(r.Context(), langchainwire.ToMessages(handlerkit.Prompt{Turns: p.Turns}))
 	res.usage = a.usage
 	if errors.Is(err, errStopped) {
 		r.Abandon()

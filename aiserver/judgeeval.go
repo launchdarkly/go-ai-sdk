@@ -13,7 +13,7 @@ import (
 
 // judgeScope holds a judge handler's root span open after the handler
 // finishes, so the score can be written onto it. Only handlers built
-// on HandlerRun participate; a custom handler's span ends normally.
+// on kitHandlerRun participate; a custom handler's span ends normally.
 type judgeScope struct {
 	key     string
 	mu      sync.Mutex

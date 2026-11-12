@@ -13,6 +13,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/bedrockwire"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
@@ -28,8 +29,8 @@ const (
 	GenAISystem = bedrockwire.GenAISystem
 )
 
-// ProvidesFor is the variation provider/mode this handler serves.
-var ProvidesFor = aiserver.ProvidesFor{Provider: "Bedrock", Mode: aiserver.ModeMessages}
+// providesFor is the variation provider/mode this handler serves.
+var providesFor = aiserver.ProvidesFor{Provider: "Bedrock", Mode: aiserver.ModeMessages}
 
 // ErrUnsupportedContent reports a history content block Bedrock Converse
 // cannot carry without a policy this package does not apply, such as a URL
@@ -45,7 +46,7 @@ var ErrToolNotFound = bedrockwire.ErrToolNotFound
 // turn bound.
 var ErrMaxSteps = bedrockwire.ErrMaxSteps
 
-func init() { aiserver.RegisterAiSdkPackage(PackageName, PackageVersion) }
+func init() { handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion) }
 
 // Options configure NewHandler.
 type Options struct {
@@ -81,7 +82,7 @@ type Options struct {
 // when that configuration cannot be loaded (for example a malformed shared
 // config file); the error is returned instead of deferred to the first call.
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error) {
-	aiserver.ReportUsage("bedrock-messages.createBedrockMessagesHandler", PackageName, PackageVersion)
+	handlerkit.ReportUsage("bedrock-messages.createBedrockMessagesHandler", PackageName, PackageVersion)
 	h, err := build(opts)
 	if err != nil {
 		return nil, err
@@ -112,7 +113,7 @@ func build(opts Options) (*handler, error) {
 }
 
 func (h *handler) provider() *aiserver.ProviderHandler {
-	return sdkapi.CreateHandler(ProvidesFor, h.Invoke, h.Stream, h.captureContent)
+	return sdkapi.CreateHandler(providesFor, h.Invoke, h.Stream, h.captureContent)
 }
 
 // InvokeOptions are the optional arguments to BedrockMessages.
@@ -129,7 +130,7 @@ type InvokeOptions struct {
 // BedrockMessages invokes configKey through a fresh Bedrock messages handler.
 // opts may be nil.
 func BedrockMessages(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error) {
-	aiserver.ReportUsage("bedrock-messages.bedrockMessages", PackageName, PackageVersion)
+	handlerkit.ReportUsage("bedrock-messages.bedrockMessages", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}

@@ -9,6 +9,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 const (
@@ -38,15 +40,15 @@ func targetJudgeHandler(capture ContentCapture) *ProviderHandler {
 		if judge {
 			name = "judge"
 		}
-		run := StartHandlerRun(ctx, HandlerSpanOptions{Tracer: TracerPrefix + "/test", Name: name, System: "p", RequestModel: "m"}, req, Prompt{})
-		run.EndChat(run.StartChat(""), "m", SpanUsage{}, "")
+		run := kitStartHandlerRun(ctx, kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/test", Name: name, System: "p", RequestModel: "m"}, req, prompt{})
+		run.EndChat(run.StartChat(""), "m", kitbase.SpanUsage{}, "")
 		if !judge {
 			run.Finish("m", "answer")
 			return HandlerResult{Output: "answer"}, nil
 		}
 		_, other := otel.Tracer("example.com/other").Start(ctx, "other")
 		other.End()
-		_, own := otel.Tracer(TracerPrefix+"/test").Start(ctx, "own", trace.WithAttributes(attribute.String(targetRunID, "own")))
+		_, own := otel.Tracer(kitbase.TracerPrefix+"/test").Start(ctx, "own", trace.WithAttributes(attribute.String(targetRunID, "own")))
 		own.End()
 		run.Finish("m", `{"score":0.5,"reasoning":"ok"}`)
 		return HandlerResult{Output: `{"score":0.5,"reasoning":"ok"}`}, nil
@@ -153,12 +155,12 @@ func TestGraphJudgeTargetAttributes(t *testing.T) {
 	exp := withStampedSpans(t)
 	nodeRuns := map[string]TrackData{}
 	h := createHandler(ProvidesFor{"P", ModeAgent}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
-		td, _ := req.Variables[VarLD].(TrackData)
+		td, _ := req.Variables[kitbase.VarLD].(TrackData)
 		if req.Variables["response_to_evaluate"] == nil {
 			nodeRuns[td.ConfigKey] = td
 			return HandlerResult{Output: "out"}, nil
 		}
-		run := StartHandlerRun(ctx, HandlerSpanOptions{Tracer: TracerPrefix + "/test", Name: "judge " + td.ConfigKey, System: "p", RequestModel: "m"}, req, Prompt{})
+		run := kitStartHandlerRun(ctx, kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/test", Name: "judge " + td.ConfigKey, System: "p", RequestModel: "m"}, req, prompt{})
 		run.Finish("m", `{"score":1,"reasoning":"r"}`)
 		return HandlerResult{Output: `{"score":1,"reasoning":"r"}`}, nil
 	}, nil, CaptureDefault)
@@ -169,7 +171,7 @@ func TestGraphJudgeTargetAttributes(t *testing.T) {
 	for _, s := range exp.GetSpans().Snapshots() {
 		byName[s.Name()] = targetAttrs(s)
 	}
-	graphRun := byName[GraphSpanName]["launchdarkly.run.id"]
+	graphRun := byName[kitbase.GraphSpanName]["launchdarkly.run.id"]
 	if graphRun == "" || nodeRuns["leaf-node"].RunID == "" {
 		t.Fatalf("graph run %q, node runs %v, spans %v", graphRun, nodeRuns, byName)
 	}
@@ -182,7 +184,7 @@ func TestGraphJudgeTargetAttributes(t *testing.T) {
 			t.Errorf("%s target = run %q config %q, want %q %q", judge, a[targetRunID], a[targetConfigKey], want[0], want[1])
 		}
 	}
-	if a := byName[GraphSpanName]; a[targetRunID] != "" {
+	if a := byName[kitbase.GraphSpanName]; a[targetRunID] != "" {
 		t.Errorf("graph span stamped with a judge target: %v", a)
 	}
 }

@@ -13,6 +13,9 @@ import (
 
 	ld "github.com/launchdarkly/go-server-sdk/v7"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/judging"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
+
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 )
 
@@ -236,7 +239,7 @@ func TestJudges(t *testing.T) {
 	if len(judgeReq.ToolHandlers) != 0 {
 		t.Error("judge must not receive caller tools")
 	}
-	if mh := judgeReq.Variables["message_history"].(string); !strings.HasPrefix(mh, "question\n\nanswer\n\n") || !strings.HasSuffix(mh, FormattingInstructions) {
+	if mh := judgeReq.Variables["message_history"].(string); !strings.HasPrefix(mh, "question\n\nanswer\n\n") || !strings.HasSuffix(mh, judging.FormattingInstructions) {
 		t.Errorf("message_history = %q", mh)
 	}
 	if q := f.events("quality"); len(q) != 1 || q[0].Metric != 0.8 || q[0].Data["judgeConfigKey"] != "judge" {
@@ -331,12 +334,12 @@ func TestContextIdentity(t *testing.T) {
 		{multi(kind("2", "b"), kind("10", "a")), "10:a:2:b", `{"10":"a","2":"b"}`},
 	}
 	for _, c := range cases {
-		id, per, ok := ContextIdentity(c.c)
+		id, per, ok := kitbase.ContextIdentity(c.c)
 		if !ok || id != c.id || compactSortedJSON(per) != c.keys {
 			t.Errorf("%v: id=%q keys=%s ok=%v", c.c, id, compactSortedJSON(per), ok)
 		}
 	}
-	if _, _, ok := ContextIdentity(kind("not a kind!", "x")); ok {
+	if _, _, ok := kitbase.ContextIdentity(kind("not a kind!", "x")); ok {
 		t.Error("empty kind should be unusable")
 	}
 }
@@ -405,10 +408,10 @@ func TestCallOptionsAndText(t *testing.T) {
 func TestSelectHandlerNormalizesHandlerMode(t *testing.T) {
 	legacy := &ProviderHandler{ProvidesFor: ProvidesFor{Provider: "OpenAI", Mode: Mode("completion")}}
 	agent := &ProviderHandler{ProvidesFor: ProvidesFor{Provider: "OpenAI", Mode: ModeAgent}}
-	if h, err := SelectHandler([]*ProviderHandler{agent, legacy}, "OpenAI", ModeMessages); err != nil || h != legacy {
+	if h, err := kitSelectHandler([]*ProviderHandler{agent, legacy}, "OpenAI", ModeMessages); err != nil || h != legacy {
 		t.Errorf("messages: got %v %v", h, err)
 	}
-	if h, err := SelectHandler([]*ProviderHandler{legacy, agent}, "OpenAI", ModeAgent); err != nil || h != agent {
+	if h, err := kitSelectHandler([]*ProviderHandler{legacy, agent}, "OpenAI", ModeAgent); err != nil || h != agent {
 		t.Errorf("agent: got %v %v", h, err)
 	}
 }

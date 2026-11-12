@@ -10,7 +10,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/stategraph"
 	"github.com/launchdarkly/go-ai-sdk/llms"
@@ -112,11 +112,11 @@ type reactAgent struct {
 	modelName string
 	// run receives chat and execute_tool spans (the handler); nil in a
 	// native graph node.
-	run *aiserver.HandlerRun
+	run kitbase.Run
 	// onText streams text deltas; nil when blocking.
 	onText func(string) bool
 
-	usage    aiserver.SpanUsage
+	usage    kitbase.SpanUsage
 	streamed strings.Builder
 	steps    int
 	stopped  bool
@@ -162,7 +162,7 @@ func (a *reactAgent) agentStep(ctx context.Context, state any) (any, error) {
 	}
 	msgs := messagesOf(state)
 	if a.system != "" {
-		msgs = append([]llms.MessageContent{llms.TextParts(llms.ChatMessageTypeSystem, a.system)}, msgs...)
+		msgs = append([]llms.MessageContent{langchainwire.TextParts(llms.ChatMessageTypeSystem, a.system)}, msgs...)
 	}
 	opts := a.opts
 	if len(a.tools) > 0 {
@@ -176,7 +176,7 @@ func (a *reactAgent) agentStep(ctx context.Context, state any) (any, error) {
 	if langchainwire.IsEmptyResponse(err) && len(msgs) > 0 && msgs[len(msgs)-1].Role == llms.ChatMessageTypeTool {
 		// Claude can end its turn with no content right after a tool result (seen
 		// live after a handoff); Anthropic's advice is a new user turn, not a resend.
-		retry := append(slices.Clone(msgs), llms.TextParts(llms.ChatMessageTypeHuman, "Please continue."))
+		retry := append(slices.Clone(msgs), langchainwire.TextParts(llms.ChatMessageTypeHuman, "Please continue."))
 		resp, text, stopped, err = langchainwire.Turn(ctx, a.model, retry, opts, a.onText)
 	}
 	if stopped {
@@ -192,7 +192,7 @@ func (a *reactAgent) agentStep(ctx context.Context, state any) (any, error) {
 		a.run.EndChat(chat, a.modelName, u, langchainwire.FinishReason(resp))
 	}
 	a.streamed.WriteString(text)
-	return map[string]any{messagesKey: []llms.MessageContent{resp.AssistantMessage()}}, nil
+	return map[string]any{messagesKey: []llms.MessageContent{langchainwire.AssistantMessage(resp)}}, nil
 }
 
 func (a *reactAgent) toolsStep(ctx context.Context, state any) (any, error) {

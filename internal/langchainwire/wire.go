@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
@@ -110,12 +112,12 @@ func ToParts(m aiserver.Message) []llms.ContentPart {
 			// OpenAI sends it as a data: image_url.
 			data, err := base64.StdEncoding.DecodeString(b.Source.Data)
 			if err != nil {
-				parts = append(parts, llms.ImageURLContent{URL: aiserver.ImageURL(*b.Source)})
+				parts = append(parts, llms.ImageURLContent{URL: handlerkit.ImageURL(*b.Source)})
 				continue
 			}
 			parts = append(parts, llms.BinaryContent{MIMEType: b.Source.MediaType, Data: data})
 		case b.Type == "image" && b.Source != nil:
-			parts = append(parts, llms.ImageURLContent{URL: aiserver.ImageURL(*b.Source)})
+			parts = append(parts, llms.ImageURLContent{URL: handlerkit.ImageURL(*b.Source)})
 		}
 	}
 	return parts
@@ -123,10 +125,10 @@ func ToParts(m aiserver.Message) []llms.ContentPart {
 
 // ToMessages maps a composed prompt to llms messages: a system
 // message when System is set, then one message per turn.
-func ToMessages(p aiserver.Prompt) []llms.MessageContent {
+func ToMessages(p handlerkit.Prompt) []llms.MessageContent {
 	out := make([]llms.MessageContent, 0, len(p.Turns)+1)
 	if p.System != "" {
-		out = append(out, llms.TextParts(llms.ChatMessageTypeSystem, p.System))
+		out = append(out, TextParts(llms.ChatMessageTypeSystem, p.System))
 	}
 	for _, t := range p.Turns {
 		role := llms.ChatMessageTypeHuman
@@ -146,7 +148,7 @@ func FunctionTool(name, description string, parameters map[string]any) llms.Tool
 // BuildTools forwards config tools that have a local ToolFunc, sorted
 // by name so the request is deterministic.
 func BuildTools(cfg aiserver.AiConfig, handlers map[string]aiserver.ToolHandler) ([]llms.Tool, map[string]aiserver.ToolFunc) {
-	callable := aiserver.CallableTools(cfg, handlers)
+	callable := handlerkit.CallableTools(cfg, handlers)
 	keys := make([]string, 0, len(callable))
 	for k := range callable {
 		keys = append(keys, k)
@@ -231,27 +233,27 @@ func CallOptions(params map[string]any) []llms.CallOption {
 // choiceUsage reads token counts from a choice's GenerationInfo using the key
 // families the built-in llms models write (langchaingo's key names): Anthropic (InputTokens, uncached),
 // OpenAI (PromptTokens, cache-inclusive) and Bedrock (input_tokens).
-func choiceUsage(info map[string]any) (aiserver.SpanUsage, bool) {
+func choiceUsage(info map[string]any) (kitbase.SpanUsage, bool) {
 	get := func(k string) float64 { v, _ := Number(info[k]); return v }
 	has := func(k string) bool { _, ok := info[k]; return ok }
 	switch {
 	case has("InputTokens") || has("OutputTokens"):
 		read, created := get("CacheReadInputTokens"), get("CacheCreationInputTokens")
-		return aiserver.SpanUsage{Input: get("InputTokens") + read + created, Output: get("OutputTokens"), CacheRead: read, CacheCreation: created}, true
+		return kitbase.SpanUsage{Input: get("InputTokens") + read + created, Output: get("OutputTokens"), CacheRead: read, CacheCreation: created}, true
 	case has("PromptTokens") || has("CompletionTokens"):
-		return aiserver.SpanUsage{Input: get("PromptTokens"), Output: get("CompletionTokens"), CacheRead: get("PromptCachedTokens")}, true
+		return kitbase.SpanUsage{Input: get("PromptTokens"), Output: get("CompletionTokens"), CacheRead: get("PromptCachedTokens")}, true
 	case has("input_tokens") || has("output_tokens"):
-		return aiserver.SpanUsage{Input: get("input_tokens"), Output: get("output_tokens")}, true
+		return kitbase.SpanUsage{Input: get("input_tokens"), Output: get("output_tokens")}, true
 	}
-	return aiserver.SpanUsage{}, false
+	return kitbase.SpanUsage{}, false
 }
 
 // ResponseUsage takes usage from the first choice that reports it: the
 // Anthropic provider repeats the message usage on every content-block
 // choice. A response without usage yields zeros.
-func ResponseUsage(resp *llms.ContentResponse) aiserver.SpanUsage {
+func ResponseUsage(resp *llms.ContentResponse) kitbase.SpanUsage {
 	if resp == nil {
-		return aiserver.SpanUsage{}
+		return kitbase.SpanUsage{}
 	}
 	for _, c := range resp.Choices {
 		if c == nil {
@@ -261,7 +263,7 @@ func ResponseUsage(resp *llms.ContentResponse) aiserver.SpanUsage {
 			return u
 		}
 	}
-	return aiserver.SpanUsage{}
+	return kitbase.SpanUsage{}
 }
 
 // ResponseText concatenates every choice's content.
@@ -366,7 +368,7 @@ func ToolResponse(tc llms.ToolCall, content string) llms.MessageContent {
 // RunTool executes one requested tool. When r is set the call runs under an
 // execute_tool span; on error the span is left open for r.Fail. Tool errors
 // propagate.
-func RunTool(ctx context.Context, r *aiserver.HandlerRun, fns map[string]aiserver.ToolFunc, tc llms.ToolCall) (llms.MessageContent, error) {
+func RunTool(ctx context.Context, r kitbase.Run, fns map[string]aiserver.ToolFunc, tc llms.ToolCall) (llms.MessageContent, error) {
 	if tc.FunctionCall == nil {
 		return llms.MessageContent{}, fmt.Errorf("%w: tool call %q has no function", ErrNoToolHandler, tc.ID)
 	}
@@ -410,4 +412,39 @@ func DecodeArgs(tc llms.ToolCall) (map[string]any, error) {
 		}
 	}
 	return args, nil
+}
+
+// TextParts is a message of role with one text part per string.
+func TextParts(role llms.ChatMessageType, parts ...string) llms.MessageContent {
+	m := llms.MessageContent{Role: role, Parts: make([]llms.ContentPart, 0, len(parts))}
+	for _, p := range parts {
+		m.Parts = append(m.Parts, llms.TextContent{Text: p})
+	}
+	return m
+}
+
+// AssistantMessage is the reply as an AI message for the conversation:
+// every choice's Parts in order, or else the first choice's text and tool
+// calls.
+func AssistantMessage(r *llms.ContentResponse) llms.MessageContent {
+	msg := llms.MessageContent{Role: llms.ChatMessageTypeAI}
+	if r == nil {
+		return msg
+	}
+	for _, c := range r.Choices {
+		if c != nil {
+			msg.Parts = append(msg.Parts, c.Parts...)
+		}
+	}
+	if len(msg.Parts) > 0 || len(r.Choices) == 0 || r.Choices[0] == nil {
+		return msg
+	}
+	c := r.Choices[0]
+	if c.Content != "" {
+		msg.Parts = append(msg.Parts, llms.TextContent{Text: c.Content})
+	}
+	for _, tc := range c.ToolCalls {
+		msg.Parts = append(msg.Parts, tc)
+	}
+	return msg
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 // SkillRefs projects a resolved AI Config's "skills" array into references.
@@ -14,11 +15,11 @@ import (
 // error rather than an empty list: an empty list handed to WriteSkills would
 // prune every managed skill. A config without "skills" returns an empty list.
 // A "skills" value that is not an array, or any malformed entry (reachable
-// only by a config that bypassed aiserver.ParseAiConfig), rejects the whole
+// only by a config that bypassed handlerkit.ParseAiConfig), rejects the whole
 // field, as the JavaScript and Python SDKs do: a partial list handed to
 // WriteSkills with pruning would delete the dropped skill's files.
 func SkillRefs(config *aiserver.AiConfig) ([]SkillReference, error) {
-	aiserver.ReportUsage("client.skillRefs", "", "")
+	handlerkit.ReportUsage("client.skillRefs", "", "")
 	if config == nil {
 		return nil, invalidArg("SkillRefs was given a nil AI Config. A failed InspectConfig returns a nil " +
 			"Config; handle that before deriving skill references, because an empty list passed to " +
@@ -50,7 +51,7 @@ func SkillRefs(config *aiserver.AiConfig) ([]SkillReference, error) {
 // version, or fails verification (GetSkillResult says which). version 0 means
 // the newest version the store holds. The only error is ErrNoSkillStore.
 func GetSkill(key string, version int) (*Skill, error) {
-	aiserver.ReportUsage("client.getSkill", "", "")
+	handlerkit.ReportUsage("client.getSkill", "", "")
 	s, err := requireStore()
 	if err != nil {
 		return nil, err
@@ -61,7 +62,7 @@ func GetSkill(key string, version int) (*Skill, error) {
 // GetSkillResult is GetSkill reporting why there is no skill. It runs the
 // same retrieval, verification and telemetry exactly once.
 func GetSkillResult(key string, version int) (SkillOutcome, error) {
-	aiserver.ReportUsage("client.getSkillResult", "", "")
+	handlerkit.ReportUsage("client.getSkillResult", "", "")
 	s, err := requireStore()
 	if err != nil {
 		return SkillOutcome{}, err
@@ -73,7 +74,7 @@ func GetSkillResult(key string, version int) (SkillOutcome, error) {
 // GetSkills returns the verified skills for refs, in input order. Entries that
 // are missing, at another version, or fail verification are omitted.
 func GetSkills[R SkillRequest](refs []R) ([]Skill, error) {
-	aiserver.ReportUsage("client.getSkills", "", "")
+	handlerkit.ReportUsage("client.getSkills", "", "")
 	s, err := requireStore()
 	if err != nil {
 		return nil, err
@@ -98,7 +99,7 @@ func GetSkills[R SkillRequest](refs []R) ([]Skill, error) {
 // per key, omitting any that fail verification. A store error yields an empty
 // list (logged); WriteAllSkills does not use this path for that reason.
 func AllSkills() ([]Skill, error) {
-	aiserver.ReportUsage("client.allSkills", "", "")
+	handlerkit.ReportUsage("client.allSkills", "", "")
 	s, err := requireStore()
 	if err != nil {
 		return nil, err

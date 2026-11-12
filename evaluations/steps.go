@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
 // --- AI Config source ---------------------------------------------
@@ -43,7 +44,7 @@ func (r *runState) readAIConfig(ctx context.Context) error {
 		}
 		modeName = s
 	}
-	mode := aiserver.NormalizeMode(modeName)
+	mode := handlerkit.NormalizeMode(modeName)
 	if !hasMode(r.pool, mode) {
 		return fmt.Errorf("evaluations: %w: AI Config %q is in %q mode, which needs a %q handler; the pool provides for: %s",
 			ErrInvalidConfig, ref.Key, modeName, mode, describePool(r.pool))

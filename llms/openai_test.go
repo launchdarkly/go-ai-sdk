@@ -69,7 +69,7 @@ func TestOpenAIRequest(t *testing.T) {
 	f, url := newFake(t, "application/json", openAIReply)
 	m := newTestOpenAI(t, url, nil)
 	msgs := []MessageContent{
-		TextParts(ChatMessageTypeSystem, "be brief"),
+		textParts(ChatMessageTypeSystem, "be brief"),
 		{Role: ChatMessageTypeHuman, Parts: []ContentPart{TextContent{Text: "look"}, BinaryContent{MIMEType: "image/png", Data: []byte{1, 2}}}},
 		{Role: ChatMessageTypeAI, Parts: []ContentPart{ToolCall{ID: "call_1", Type: "function", FunctionCall: &FunctionCall{Name: "lookup", Arguments: `{"q":"x"}`}}}},
 		{Role: ChatMessageTypeTool, Parts: []ContentPart{ToolCallResponse{ToolCallID: "call_1", Name: "lookup", Content: "found"}}},
@@ -121,7 +121,7 @@ func TestOpenAIRequest(t *testing.T) {
 
 func TestOpenAIResponse(t *testing.T) {
 	_, url := newFake(t, "application/json", openAIReply)
-	resp, err := newTestOpenAI(t, url, nil).GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")})
+	resp, err := newTestOpenAI(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,15 +132,16 @@ func TestOpenAIResponse(t *testing.T) {
 	if c.GenerationInfo["PromptTokens"] != 7 || c.GenerationInfo["CompletionTokens"] != 3 || c.GenerationInfo["PromptCachedTokens"] != 2 {
 		t.Errorf("usage = %v", c.GenerationInfo)
 	}
-	if am := resp.AssistantMessage(); len(am.Parts) != 2 {
-		t.Errorf("assistant message parts = %v", am.Parts)
+	// No Parts: the AI message falls back to Content and ToolCalls.
+	if len(c.Parts) != 0 {
+		t.Errorf("choice parts = %v", c.Parts)
 	}
 }
 
 func TestOpenAIResponseFormats(t *testing.T) {
 	schema := map[string]any{"type": "object", "properties": map[string]any{"a": map[string]any{"anyOf": []any{map[string]any{"type": "string"}}}}}
 	f, url := newFake(t, "application/json", openAIReply)
-	if _, err := newTestOpenAI(t, url, schema).GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")}, WithJSONMode()); err != nil {
+	if _, err := newTestOpenAI(t, url, schema).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")}, WithJSONMode()); err != nil {
 		t.Fatal(err)
 	}
 	rf := f.bodies[0]["response_format"].(map[string]any)
@@ -150,7 +151,7 @@ func TestOpenAIResponseFormats(t *testing.T) {
 		t.Errorf("response_format = %v", rf)
 	}
 	f2, url2 := newFake(t, "application/json", openAIReply)
-	if _, err := newTestOpenAI(t, url2, nil).GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")}, WithJSONMode()); err != nil {
+	if _, err := newTestOpenAI(t, url2, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")}, WithJSONMode()); err != nil {
 		t.Fatal(err)
 	}
 	if rf := f2.bodies[0]["response_format"].(map[string]any); rf["type"] != "json_object" {
@@ -160,7 +161,7 @@ func TestOpenAIResponseFormats(t *testing.T) {
 
 func TestOpenAIEmptyChoices(t *testing.T) {
 	_, url := newFake(t, "application/json", `{"id":"c1","object":"chat.completion","created":1,"model":"gpt-4o","choices":[]}`)
-	if _, err := newTestOpenAI(t, url, nil).GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")}); !errors.Is(err, ErrEmptyResponse) {
+	if _, err := newTestOpenAI(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")}); !errors.Is(err, ErrEmptyResponse) {
 		t.Fatalf("err = %v, want ErrEmptyResponse", err)
 	}
 }
@@ -185,7 +186,7 @@ func TestOpenAIStreaming(t *testing.T) {
 	)
 	f, url := newFake(t, "text/event-stream", body)
 	var chunks []string
-	resp, err := newTestOpenAI(t, url, nil).GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")},
+	resp, err := newTestOpenAI(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")},
 		WithStreamingFunc(func(_ context.Context, c []byte) error { chunks = append(chunks, string(c)); return nil }))
 	if err != nil {
 		t.Fatal(err)
@@ -212,7 +213,7 @@ func TestOpenAIStreamingFuncErrorStops(t *testing.T) {
 		`{"id":"c","object":"chat.completion.chunk","created":1,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"b"}}]}`))
 	stop := errors.New("stop")
 	calls := 0
-	_, err := newTestOpenAI(t, url, nil).GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")},
+	_, err := newTestOpenAI(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")},
 		WithStreamingFunc(func(context.Context, []byte) error { calls++; return stop }))
 	if !errors.Is(err, stop) || calls != 1 {
 		t.Fatalf("err = %v after %d calls, want the callback's error after 1", err, calls)
@@ -233,7 +234,7 @@ func TestOpenAIEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := mm.GenerateContent(bg, []MessageContent{TextParts(ChatMessageTypeHuman, "q")}); err != nil {
+	if _, err := mm.GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "q")}); err != nil {
 		t.Fatal(err)
 	}
 	if f.bodies[0]["model"] != "gpt-env" || f.headers[0].Get("Authorization") != "Bearer envkey" || f.headers[0].Get("OpenAI-Organization") != "org-1" {
