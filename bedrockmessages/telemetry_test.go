@@ -134,3 +134,18 @@ func TestToolContentCapture(t *testing.T) {
 		})
 	}
 }
+
+// A response without usage writes zeros on its chat span and leaves the
+// root's usage unset: zeros there would claim the run was free.
+func TestUnreportedUsage(t *testing.T) {
+	h, _, exp := setup(t, Options{}, reply{body: `{"output":{"message":{"role":"assistant","content":[{"text":"ok"}]}},"stopReason":"end_turn","metrics":{"latencyMs":1}}`})
+	if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: cfg(instructions("x")), UserInput: "q"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, has := attrs(spanNamed(t, exp, SpanName))["gen_ai.usage.total_tokens"]; has {
+		t.Errorf("root usage total = %q, want unset", got)
+	}
+	if got := attrs(spanNamed(t, exp, "chat anthropic.claude-test"))["gen_ai.usage.total_tokens"]; got != "0" {
+		t.Errorf("chat usage total = %q, want 0", got)
+	}
+}

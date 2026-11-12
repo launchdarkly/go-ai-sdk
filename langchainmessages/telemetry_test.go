@@ -138,3 +138,18 @@ func TestToolContentCapture(t *testing.T) {
 		})
 	}
 }
+
+// A response whose GenerationInfo has no usage writes zeros on its chat span
+// and leaves the root's usage unset: zeros there would claim the run was free.
+func TestUnreportedUsage(t *testing.T) {
+	h, _, exp := setup(t, scripted{resp: &llms.ContentResponse{Choices: []*llms.ContentChoice{{Content: "ok", StopReason: "end_turn"}}}})
+	if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: cfg(nil), UserInput: "q"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, has := spanAttrs(spansByName(exp)[SpanName][0])["gen_ai.usage.total_tokens"]; has {
+		t.Errorf("root usage total = %q, want unset", got)
+	}
+	if got := spanAttrs(spansByName(exp)["chat test-model"][0])["gen_ai.usage.total_tokens"]; got != "0" {
+		t.Errorf("chat usage total = %q, want 0", got)
+	}
+}

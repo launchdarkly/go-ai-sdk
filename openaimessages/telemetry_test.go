@@ -53,3 +53,22 @@ func TestConversationIDAndZeroUsage(t *testing.T) {
 		}
 	}
 }
+
+// A response without a usage object writes zeros on its chat span and
+// leaves the root's usage unset: zeros there would claim the run was free.
+func TestUnreportedUsage(t *testing.T) {
+	noUsage := `{"id":"r","object":"response","created_at":0,"status":"completed","model":"` + servedModel + `","output":` + textOutput("ok") + `}`
+	h, _, exp := setup(t, noUsage)
+	if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: cfg(instructions("x")), UserInput: "q"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range exp.GetSpans().Snapshots() {
+		got, has := attrs(s)["gen_ai.usage.total_tokens"]
+		if s.Name() == SpanName && has {
+			t.Errorf("root usage total = %q, want unset", got)
+		}
+		if s.Name() != SpanName && got != "0" {
+			t.Errorf("%s usage total = %q, want 0", s.Name(), got)
+		}
+	}
+}

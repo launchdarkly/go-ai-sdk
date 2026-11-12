@@ -128,6 +128,7 @@ func spanUsage(x *types.TokenUsage) kitbase.SpanUsage {
 		Input:     float64(u.input + u.cacheRead + u.cacheWrite),
 		Output:    float64(u.output),
 		CacheRead: float64(u.cacheRead), CacheCreation: float64(u.cacheWrite),
+		Unreported: x == nil,
 	}
 }
 

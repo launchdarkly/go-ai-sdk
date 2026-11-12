@@ -186,7 +186,7 @@ func (r *kitHandlerRun) StartChat(model string) trace.Span {
 }
 
 // EndChat records one turn's usage on its chat span (always, zeros included)
-// and accumulates it for the root.
+// and accumulates it for the root unless u is Unreported.
 func (r *kitHandlerRun) EndChat(s trace.Span, responseModel string, u kitbase.SpanUsage, finishReason string) {
 	if responseModel == "" {
 		responseModel = r.opts.RequestModel
@@ -197,8 +197,7 @@ func (r *kitHandlerRun) EndChat(s trace.Span, responseModel string, u kitbase.Sp
 	if finishReason != "" {
 		s.SetAttributes(attribute.StringSlice("gen_ai.response.finish_reasons", []string{finishReason}))
 	}
-	r.usage.Add(u)
-	r.usageOK = true
+	r.addUsage(u)
 	r.end(s, nil)
 }
 
@@ -245,12 +244,16 @@ func (r *kitHandlerRun) end(s trace.Span, err error) {
 }
 
 // AddUsage accumulates usage that has no chat span of its own.
-func (r *kitHandlerRun) AddUsage(u kitbase.SpanUsage) {
+func (r *kitHandlerRun) AddUsage(u kitbase.SpanUsage) { r.addUsage(u) }
+
+func (r *kitHandlerRun) addUsage(u kitbase.SpanUsage) {
 	r.usage.Add(u)
-	r.usageOK = true
+	if !u.Unreported {
+		r.usageOK = true
+	}
 }
 
-// Finish ends the root on success: response model, run usage, completion
+// Finish ends the root on success: response model, run usage once reported, completion
 // content (gen_ai.completion.0.* + gen_ai.content.completion) when
 // capture is enabled, status OK.
 func (r *kitHandlerRun) Finish(responseModel, output string) {
@@ -258,7 +261,9 @@ func (r *kitHandlerRun) Finish(responseModel, output string) {
 		responseModel = r.opts.RequestModel
 	}
 	r.Root.SetAttributes(attribute.String("gen_ai.response.model", responseModel))
-	kitbase.SetUsageSpanAttributes(r.Root, r.usage)
+	if r.usageOK {
+		kitbase.SetUsageSpanAttributes(r.Root, r.usage)
+	}
 	if telemetry.Enabled(r.ctx) {
 		r.Root.SetAttributes(attribute.String("gen_ai.completion.0.role", "assistant"),
 			attribute.String("gen_ai.completion.0.content", output))

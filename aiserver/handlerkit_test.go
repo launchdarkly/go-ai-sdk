@@ -313,3 +313,60 @@ func TestHandlerRunEndOnPanic(t *testing.T) {
 		t.Errorf("finished run spans = %v", s)
 	}
 }
+
+// The root writes usage only once a turn reported it: zeros there would claim
+// the run cost nothing. A turn whose response carried no usage still writes
+// zeros on its chat span; a turn that reported zero counts as reported.
+func TestHandlerRunRootUsageOnlyWhenReported(t *testing.T) {
+	exp := withSpans(t)
+	opts := kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/t", Name: "root", System: "s", RequestModel: "m"}
+	total := func(name string) string {
+		for _, s := range exp.GetSpans() {
+			if s.Name == name {
+				for _, a := range s.Attributes {
+					if a.Key == "gen_ai.usage.total_tokens" {
+						return a.Value.Emit()
+					}
+				}
+				return "unset"
+			}
+		}
+		return "no span"
+	}
+	turns := map[string]struct {
+		usage []kitbase.SpanUsage
+		root  string
+	}{
+		"no turn":         {nil, "unset"},
+		"unreported turn": {[]kitbase.SpanUsage{{Unreported: true}}, "unset"},
+		"zero reported":   {[]kitbase.SpanUsage{{}}, "0"},
+		"one of two":      {[]kitbase.SpanUsage{{Unreported: true}, {Input: 2, Output: 1}}, "3"},
+	}
+	for name, end := range map[string]func(*kitHandlerRun){
+		"finish":  func(r *kitHandlerRun) { r.Finish("m", "out") },
+		"fail":    func(r *kitHandlerRun) { r.Fail(errors.New("x")) },
+		"abandon": func(r *kitHandlerRun) { r.Abandon() },
+	} {
+		for tname, tc := range turns {
+			exp.Reset()
+			r := kitStartHandlerRun(bg, opts, HandlerRequest{}, prompt{})
+			for _, u := range tc.usage {
+				r.EndChat(r.StartChat(""), "", u, "stop")
+			}
+			end(r)
+			if got := total("root"); got != tc.root {
+				t.Errorf("%s/%s: root total = %s, want %s", name, tname, got, tc.root)
+			}
+			if len(tc.usage) == 1 && total("chat m") != "0" {
+				t.Errorf("%s/%s: chat total = %s, want 0", name, tname, total("chat m"))
+			}
+		}
+		exp.Reset()
+		r := kitStartHandlerRun(bg, opts, HandlerRequest{}, prompt{})
+		r.AddUsage(kitbase.SpanUsage{Unreported: true})
+		end(r)
+		if got := total("root"); got != "unset" {
+			t.Errorf("%s/unreported AddUsage: root total = %s, want unset", name, got)
+		}
+	}
+}

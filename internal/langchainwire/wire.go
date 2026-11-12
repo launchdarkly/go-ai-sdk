@@ -269,10 +269,10 @@ func choiceUsage(info map[string]any) (kitbase.SpanUsage, bool) {
 
 // ResponseUsage takes usage from the first choice that reports it: the
 // Anthropic provider repeats the message usage on every content-block
-// choice. A response without usage yields zeros.
+// choice. A response without usage yields Unreported zeros.
 func ResponseUsage(resp *llms.ContentResponse) kitbase.SpanUsage {
 	if resp == nil {
-		return kitbase.SpanUsage{}
+		return kitbase.SpanUsage{Unreported: true}
 	}
 	for _, c := range resp.Choices {
 		if c == nil {
@@ -282,7 +282,7 @@ func ResponseUsage(resp *llms.ContentResponse) kitbase.SpanUsage {
 			return u
 		}
 	}
-	return kitbase.SpanUsage{}
+	return kitbase.SpanUsage{Unreported: true}
 }
 
 // ResponseText concatenates every choice's content.

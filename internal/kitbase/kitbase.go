@@ -38,6 +38,10 @@ func WithOutputFormat(system string, schema map[string]any) string {
 // caller folds provider cache buckets in before calling SetUsageSpanAttributes.
 type SpanUsage struct {
 	Input, Output, CacheRead, CacheCreation float64
+	// Unreported marks a turn whose response carried no usage. Its chat span
+	// still writes zeros, but the root writes usage only once a turn reported
+	// some: zeros there would claim the run cost nothing.
+	Unreported bool
 }
 
 // Add accumulates o into u.
