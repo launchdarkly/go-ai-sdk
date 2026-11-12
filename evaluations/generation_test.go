@@ -188,7 +188,7 @@ func TestInlineSchemaMutationsDoNotLeak(t *testing.T) {
 	if len(seen) != 2 || seen[0] != want || seen[1] != want {
 		t.Fatalf("row configs %v, want %s for both", seen, want)
 	}
-	tools := e.body("POST", "projects/proj/evaluations").(map[string]any)["tools"].([]any)
+	tools := e.body("POST", "projects/proj/offline-evaluations").(map[string]any)["tools"].([]any)
 	if got := toJSON(tools[0].(map[string]any)["schema"]); got != want {
 		t.Fatalf("create body schema %s, want %s", got, want)
 	}

@@ -372,8 +372,9 @@ func validateThresholds(threshold, passRate float64) error {
 
 // RunOptions are the arguments to EvaluationsModule.Run.
 type RunOptions struct {
-	// Key names the evaluation Run creates. Every Run creates a new
-	// evaluation, so the key must be unique per run (e.g. timestamp-suffixed).
+	// Key names the offline evaluation Run reuses. The same key on a later
+	// Run updates that evaluation and creates only a new run. It must match
+	// ^[a-z0-9][a-z0-9._-]*$ and be at most 128 characters.
 	Key string
 	// Dataset is a DatasetKey or InlineRows. Required.
 	Dataset Dataset

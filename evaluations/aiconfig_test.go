@@ -58,16 +58,16 @@ func TestAIConfigHappyPathSequence(t *testing.T) {
 	args.Tools = []EvalTool{e.libTool(m, "lookup", noopTool, map[string]any{"version": 4})}
 	mustRun(t, m, args)
 	// Run issues no tool request: Tools().Get already pinned the version.
-	assertSequence(t, e, cfgGET, varGET, modelGET, "GET projects/proj/datasets/ds", rowsPath, evalPath, runPath, summaryPath)
+	assertSequence(t, e, cfgGET, varGET, modelGET, "GET projects/proj/datasets/ds", rowsPath, offlineGet, offlinePost, runPath, summaryPath)
 	cfg := rec.all()[0].Config
 	// The model config's id wins over modelName; params layer variation over model config.
 	if cfg.Model.Name != "gpt-4o" || !reflect.DeepEqual(cfg.Model.Parameters, map[string]any{"max_tokens": 100.0, "temperature": 0.5}) {
 		t.Fatalf("model %+v", cfg.Model)
 	}
-	if strings.Contains(toJSON(e.body("POST", "projects/proj/evaluations")), "OLD") || strings.Contains(toJSON(cfg), "OLD") {
+	if strings.Contains(toJSON(e.body("POST", "projects/proj/offline-evaluations")), "OLD") || strings.Contains(toJSON(cfg), "OLD") {
 		t.Fatal("an older variation version leaked into the run")
 	}
-	body := e.body("POST", "projects/proj/evaluations").(map[string]any)
+	body := e.body("POST", "projects/proj/offline-evaluations").(map[string]any)
 	if _, has := body["mode"]; has {
 		t.Fatal("mode must not be sent to LaunchDarkly")
 	}
@@ -258,7 +258,7 @@ func TestAIConfigVariationTools(t *testing.T) {
 		if !strings.Contains(logs, "pinnedVersion=4") || !strings.Contains(logs, "runVersion=9") {
 			t.Fatalf("drift warning: %s", logs)
 		}
-		if !strings.Contains(toJSON(e.body("POST", "projects/proj/evaluations")), `"version":9`) {
+		if !strings.Contains(toJSON(e.body("POST", "projects/proj/offline-evaluations")), `"version":9`) {
 			t.Fatal("run must use the version Get pinned")
 		}
 	})
@@ -293,7 +293,7 @@ func TestAIConfigVariationJudges(t *testing.T) {
 		e := aiConfigEnv(t, "completion", linked(map[string]any{"messages": sysMsgs, "judgeConfiguration": two}))
 		e.judges["a"], e.judges["b"] = judgeVariation("OpenAI", "completion", nil), judgeVariation("OpenAI", "completion", nil)
 		mustRun(t, e.module(), aiArgs(handler("OpenAI", aiserver.ModeMessages, verdict(0.9, "ok"))))
-		crit := e.body("POST", "projects/proj/evaluations").(map[string]any)["criteria"].([]any)
+		crit := e.body("POST", "projects/proj/offline-evaluations").(map[string]any)["criteria"].([]any)
 		if len(crit) != 2 || crit[0].(map[string]any)["judgeKey"] != "b" ||
 			!reflect.DeepEqual(crit[1].(map[string]any)["options"], map[string]any{"threshold": 0.5, "passRateThreshold": 0.95}) {
 			t.Fatalf("criteria %s", toJSON(crit))
