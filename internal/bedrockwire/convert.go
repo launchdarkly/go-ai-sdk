@@ -137,20 +137,20 @@ func number(params map[string]any, keys ...string) (float64, bool) {
 }
 
 // inferenceConfig maps the documented common inference parameters (Converse
-// InferenceConfiguration fields, camelCase or snake_case) and nothing else. nil means no inferenceConfig.
+// InferenceConfiguration fields, read in snake_case only) and nothing else. nil means no inferenceConfig.
 func inferenceConfig(params map[string]any) *types.InferenceConfiguration {
 	var ic types.InferenceConfiguration
 	set := false
-	if v, ok := number(params, "maxTokens", "max_tokens"); ok {
+	if v, ok := number(params, "max_tokens"); ok {
 		ic.MaxTokens, set = aws.Int32(int32(v)), true
 	}
 	if v, ok := number(params, "temperature"); ok {
 		ic.Temperature, set = aws.Float32(float32(v)), true
 	}
-	if v, ok := number(params, "topP", "top_p"); ok {
+	if v, ok := number(params, "top_p"); ok {
 		ic.TopP, set = aws.Float32(float32(v)), true
 	}
-	for _, k := range []string{"stopSequences", "stop_sequences"} {
+	for _, k := range []string{"stop_sequences"} {
 		raw, ok := params[k].([]any)
 		if !ok {
 			continue

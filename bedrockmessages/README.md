@@ -20,7 +20,7 @@ Model fields the handler reads:
 | --- | --- |
 | `model.name` | Bedrock model or inference-profile id, e.g. `anthropic.claude-sonnet-4-5` |
 | `model.region` | Short inference-profile prefix (`us`, `eu`, `global`), prepended once: `us` + `anthropic.x` → `us.anthropic.x`; `us` + `us.anthropic.x` stays `us.anthropic.x`. Not an AWS region. |
-| `model.parameters` | `maxTokens`/`max_tokens`, `temperature`, `topP`/`top_p`, `stopSequences`/`stop_sequences` → `inferenceConfig`. Other keys are ignored. |
+| `model.parameters` | `max_tokens`, `temperature`, `top_p`, `stop_sequences` → `inferenceConfig`. Keys are read in snake_case only: a camelCase spelling such as `maxTokens` is ignored, like any other key. |
 | `model.custom` | **Never read.** Forward values explicitly with `ConverseOptions` if you need them. |
 
 ## Examples

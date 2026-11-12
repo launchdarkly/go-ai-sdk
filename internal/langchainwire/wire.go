@@ -233,7 +233,7 @@ func CallOptions(params map[string]any) []llms.CallOption {
 	if v, ok := num("presence_penalty"); ok {
 		out = append(out, llms.WithPresencePenalty(v))
 	}
-	for _, k := range []string{"stop", "stop_sequences"} {
+	for _, k := range []string{"stop_sequences", "stop"} { // stop_sequences wins when both are set
 		raw, _ := params[k].([]any)
 		var words []string
 		for _, w := range raw {

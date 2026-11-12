@@ -90,9 +90,10 @@ func Tools(cfg aiserver.AiConfig, handlers map[string]aiserver.ToolHandler) []an
 	return out
 }
 
-// MaxTokens reads max_tokens / maxTokens from the model parameters.
-func MaxTokens(cfg aiserver.AiConfig) int64 {
-	for _, k := range []string{"max_tokens", "maxTokens"} {
+// MaxTokens reads max_tokens from the model parameters, then each key in
+// also (claudeagents passes its maxTokens spelling).
+func MaxTokens(cfg aiserver.AiConfig, also ...string) int64 {
+	for _, k := range append([]string{"max_tokens"}, also...) {
 		if v, ok := cfg.Model.Parameters[k].(float64); ok && v > 0 {
 			return int64(v)
 		}

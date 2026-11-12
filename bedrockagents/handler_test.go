@@ -603,7 +603,7 @@ func TestModelOptions(t *testing.T) {
 	h, f, _ := setup(t, opts, toolReply("a", `{}`), textReply("ok", 1, 1), streamTool, streamText(t, []string{"s"}, 1, 1))
 	c := cfg(func(c *aiserver.AiConfig) {
 		c.Instructions = "sys"
-		c.Model.Parameters = map[string]any{"maxTokens": 10.0}
+		c.Model.Parameters = map[string]any{"max_tokens": 10.0}
 		c.Tools = map[string]aiserver.Tool{"a": {Name: "a", Type: "function", Parameters: map[string]any{"type": "object"}}}
 	})
 	tools := map[string]aiserver.ToolHandler{"a": aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) { return "r", nil })}
@@ -660,7 +660,7 @@ func TestParametersAndCustomSentinel(t *testing.T) {
 	c := cfg(func(c *aiserver.AiConfig) {
 		c.Instructions = "x"
 		c.OutputFormat = map[string]any{"type": "object"}
-		c.Model.Parameters = map[string]any{"max_tokens": 100.0, "temperature": 0.5, "top_p": 0.9, "stopSequences": []any{"END"}, "unknownParam": "UNKNOWN_SENTINEL"}
+		c.Model.Parameters = map[string]any{"max_tokens": 100.0, "temperature": 0.5, "top_p": 0.9, "stop_sequences": []any{"END"}, "unknownParam": "UNKNOWN_SENTINEL"}
 		c.Model.Custom = map[string]any{"guardrailConfig": map[string]any{"guardrailIdentifier": "CUSTOM_SENTINEL"},
 			"additionalModelRequestFields": map[string]any{"k": "CUSTOM_SENTINEL"}, "CUSTOM_SENTINEL": true}
 	})
