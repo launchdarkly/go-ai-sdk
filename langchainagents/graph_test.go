@@ -682,7 +682,7 @@ func TestToLangGraphBedrockProviderName(t *testing.T) {
 		"triage":  {turns: []scripted{toolTurn("transfer_to_billing", nil)}},
 		"billing": {turns: []scripted{textTurn("billed", 1, 1)}},
 	}
-	if _, err := ToLangGraph(resolve("g"), &NativeGraphOptions{ModelFactory: models(fm)}).Invoke(bg, "hi"); err != nil {
+	if _, err := must(ToLangGraph(resolve("g"), &NativeGraphOptions{ModelFactory: models(fm)})).Invoke(bg, "hi"); err != nil {
 		t.Fatal(err)
 	}
 	got := map[string]string{}
