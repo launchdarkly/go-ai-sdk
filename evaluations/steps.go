@@ -433,6 +433,9 @@ func (r *runState) evaluationConfigBody(includeKey bool) map[string]any {
 		criteria = append(criteria, c.wire())
 	}
 	body["criteria"] = criteria
+	// Send the link only when this run uses an AI Config. A generation-only
+	// reconcile omits the three fields rather than sending null, so a previous
+	// link stays. Inline overrides that still use an AI Config resend it.
 	if r.configKey != "" {
 		body["configKey"] = r.configKey
 		body["variationKey"] = r.variationKey
