@@ -69,6 +69,12 @@ type runState struct {
 	evalVersion   int
 	runID         string
 
+	// configKey, variationKey and variationVersion are the AI Config link
+	// sent on create and PATCH. variationVersion is the variation's version.
+	configKey        string
+	variationKey     string
+	variationVersion int
+
 	// rowTraces holds each started row's trace by row position, so the
 	// deferred cleanup can end any root a failed phase left open.
 	rowTraces []*rowTrace
@@ -186,9 +192,6 @@ func (m *EvaluationsModule) prepare(a RunOptions) (*runState, error) {
 	if a.AIConfig != nil {
 		if strings.TrimSpace(a.AIConfig.Key) == "" {
 			return nil, invalid("AIConfig.Key must not be blank")
-		}
-		if strings.TrimSpace(a.AIConfig.Variation) == "" {
-			return nil, invalid("AIConfig.Variation must not be blank")
 		}
 	} else if err := r.checkGeneration(*a.Generation); err != nil {
 		return nil, err
