@@ -118,7 +118,7 @@ func handlersFor(calls *[]string) map[string]aiserver.ToolHandler {
 }
 
 func newRun(def *aiserver.GraphDefinition, opts NativeGraphOptions) *graphRun {
-	return &graphRun{g: ToLangGraph(def, &opts), runID: "run", userCtx: opts.Context, tracking: opts.Context.IsDefined()}
+	return &graphRun{g: must(ToLangGraph(def, &opts)), runID: "run", userCtx: opts.Context, tracking: opts.Context.IsDefined()}
 }
 
 // topology: one StateGraph node per GraphNode, START → root,
@@ -235,7 +235,7 @@ func TestToLangGraphToolNode(t *testing.T) {
 		"triage":  {turns: []scripted{toolTurn("lookup", map[string]any{"id": 1}), textTurn("routed", 1, 1)}},
 		"billing": {turns: []scripted{textTurn("billed", 1, 1)}},
 	}
-	res, err := ToLangGraph(def, &NativeGraphOptions{ToolHandlers: handlersFor(&calls), ModelFactory: models(fm)}).Invoke(bg, "hi")
+	res, err := must(ToLangGraph(def, &NativeGraphOptions{ToolHandlers: handlersFor(&calls), ModelFactory: models(fm)})).Invoke(bg, "hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestToLangGraphRun(t *testing.T) {
 		"triage":  {turns: []scripted{{resp: &llms.ContentResponse{Choices: []*llms.ContentChoice{{StopReason: "tool_use", ToolCalls: []llms.ToolCall{toolCall("transfer_to_billing", nil)}, GenerationInfo: usageInfo(3, 1)}}}}}},
 		"billing": {turns: []scripted{toolTurn("refund", map[string]any{"id": 1}), textTurn("refunded", 5, 2)}},
 	}
-	res, err := ToLangGraph(def, &NativeGraphOptions{ToolHandlers: handlersFor(&calls), ModelFactory: models(fm), Context: user}).
+	res, err := must(ToLangGraph(def, &NativeGraphOptions{ToolHandlers: handlersFor(&calls), ModelFactory: models(fm), Context: user})).
 		Invoke(bg, "hello", aiserver.WithVariables(map[string]any{"tone": "calm"}))
 	if err != nil {
 		t.Fatal(err)
@@ -376,7 +376,7 @@ func TestToLangGraphFailureAndNoContext(t *testing.T) {
 	ld.resetTracks()
 	boom := errors.New("model down")
 	fm := map[string]*fakeModel{"triage": {turns: []scripted{{err: boom}}}}
-	_, err := ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm), Context: user}).Invoke(bg, "hi")
+	_, err := must(ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm), Context: user})).Invoke(bg, "hi")
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v", err)
 	}
@@ -390,14 +390,14 @@ func TestToLangGraphFailureAndNoContext(t *testing.T) {
 
 	ld.resetTracks()
 	fm = map[string]*fakeModel{"triage": {turns: []scripted{textTurn("a", 1, 1)}}, "billing": {turns: []scripted{textTurn("b", 1, 1)}}}
-	if _, err := ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm)}).Invoke(bg, "hi"); err != nil {
+	if _, err := must(ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm)})).Invoke(bg, "hi"); err != nil {
 		t.Fatal(err)
 	}
 	if got := ld.aiEvents(); len(got) != 0 {
 		t.Errorf("tracked without a context: %v", got)
 	}
 	ld.resetTracks()
-	if _, err := ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(map[string]*fakeModel{"triage": {turns: []scripted{{err: boom}}}})}).Invoke(bg, "hi"); err == nil || len(ld.aiEvents()) != 0 {
+	if _, err := must(ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(map[string]*fakeModel{"triage": {turns: []scripted{{err: boom}}}})})).Invoke(bg, "hi"); err == nil || len(ld.aiEvents()) != 0 {
 		t.Errorf("failure without a context: err %v events %v", err, ld.aiEvents())
 	}
 }
@@ -407,13 +407,13 @@ func TestToLangGraphInvalid(t *testing.T) {
 	ld := &fakeLD{}
 	installClient(t, ld)
 	disabled := resolve("missing-graph")
-	if _, err := ToLangGraph(disabled, nil).Invoke(bg, "x"); !errors.Is(err, aiserver.ErrGraphDisabled) || !strings.Contains(err.Error(), "missing-graph") {
+	if _, err := must(ToLangGraph(disabled, nil)).Invoke(bg, "x"); !errors.Is(err, aiserver.ErrGraphDisabled) || !strings.Contains(err.Error(), "missing-graph") {
 		t.Errorf("disabled = %v", err)
 	}
-	if _, err := ToLangGraph(&aiserver.GraphDefinition{Key: "rootless", Enabled: true}, nil).Invoke(bg, "x"); !errors.Is(err, ErrNoRoot) || !strings.Contains(err.Error(), "rootless") {
+	if _, err := must(ToLangGraph(&aiserver.GraphDefinition{Key: "rootless", Enabled: true}, nil)).Invoke(bg, "x"); !errors.Is(err, ErrNoRoot) || !strings.Contains(err.Error(), "rootless") {
 		t.Errorf("null root = %v", err)
 	}
-	if _, err := ToLangGraph(nil, nil).Invoke(bg, "x"); !errors.Is(err, ErrNilGraph) {
+	if _, err := must(ToLangGraph(nil, nil)).Invoke(bg, "x"); !errors.Is(err, ErrNilGraph) {
 		t.Errorf("nil = %v", err)
 	}
 }
@@ -434,7 +434,7 @@ func TestToLangGraphNodeNameCollision(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			installClient(t, &fakeLD{variations: flags})
 			m := &fakeModel{}
-			_, err := ToLangGraph(resolve("g"), &NativeGraphOptions{ModelFactory: models(map[string]*fakeModel{"root": m})}).Invoke(bg, "x")
+			_, err := must(ToLangGraph(resolve("g"), &NativeGraphOptions{ModelFactory: models(map[string]*fakeModel{"root": m})})).Invoke(bg, "x")
 			if !errors.Is(err, ErrNodeName) || len(m.calls) != 0 {
 				t.Errorf("err = %v, model calls = %d", err, len(m.calls))
 			}
@@ -453,7 +453,7 @@ func TestToLangGraphUsageAndContent(t *testing.T) {
 		{Content: "world", Parts: []llms.ContentPart{llms.TextContent{Text: "world"}}},
 	}}
 	fm := map[string]*fakeModel{"solo": {turns: []scripted{{resp: multi}}}}
-	res, err := ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm), Context: user}).Invoke(bg, "hi")
+	res, err := must(ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm), Context: user})).Invoke(bg, "hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -474,7 +474,7 @@ func TestToLangGraphHistoryRootOnly(t *testing.T) {
 		"billing": {turns: []scripted{textTurn("blue", 1, 1)}},
 	}
 	hist := []aiserver.Message{image(), {Role: "assistant", Text: "an image"}}
-	if _, err := ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm)}).Invoke(bg, "what colour?", aiserver.WithHistory(hist)); err != nil {
+	if _, err := must(ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm)})).Invoke(bg, "what colour?", aiserver.WithHistory(hist)); err != nil {
 		t.Fatal(err)
 	}
 	root := fm["triage"].call(0).msgs
@@ -498,7 +498,7 @@ func TestToLangGraphCycle(t *testing.T) {
 	}})
 	def := resolve("g")
 	fm := map[string]*fakeModel{"a": {turns: []scripted{toolTurn("transfer_to_b", nil)}, repeat: true}, "b": {turns: []scripted{toolTurn("transfer_to_a", nil)}, repeat: true}}
-	if _, err := ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm)}).Invoke(bg, "x"); !errors.Is(err, ErrRecursionLimit) {
+	if _, err := must(ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm)})).Invoke(bg, "x"); !errors.Is(err, ErrRecursionLimit) {
 		t.Errorf("err = %v", err)
 	}
 }
@@ -510,7 +510,7 @@ func TestToLangGraphRealStateGraph(t *testing.T) {
 	installClient(t, &fakeLD{variations: map[string]map[string]any{"g": graphFlag("solo", nil), "solo": node("Solo", "m", "lookup")}})
 	var calls []string
 	fm := map[string]*fakeModel{"solo": {turns: []scripted{toolTurn("lookup", nil), textTurn("done", 1, 1)}}}
-	res, err := ToLangGraph(resolve("g"), &NativeGraphOptions{ToolHandlers: handlersFor(&calls), ModelFactory: models(fm)}).Invoke(bg, "hello")
+	res, err := must(ToLangGraph(resolve("g"), &NativeGraphOptions{ToolHandlers: handlersFor(&calls), ModelFactory: models(fm)})).Invoke(bg, "hello")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -549,8 +549,12 @@ func TestLangChainGraph(t *testing.T) {
 		return aiserver.HandlerResult{}, nil
 	}}
 	var calls []string
-	res, err := LangChainGraph("g", aiserver.GraphOptions{Handlers: []*aiserver.ProviderHandler{bogus, bogus}, ToolHandlers: handlersFor(&calls)},
-		Options{Model: f}).Invoke(bg, "q", user)
+	g, err := LangChainGraph("g", aiserver.GraphOptions{Handlers: []*aiserver.ProviderHandler{bogus, bogus}, ToolHandlers: handlersFor(&calls)},
+		Options{Model: f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := g.Invoke(bg, "q", user)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -569,7 +573,7 @@ func TestToLangGraphSdkUsage(t *testing.T) {
 	def := resolve("g")
 	ld.resetTracks()
 	fm := map[string]*fakeModel{"solo": {turns: []scripted{textTurn("x", 1, 1)}}}
-	if _, err := ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm), Context: user}).Invoke(bg, "q"); err != nil {
+	if _, err := must(ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm), Context: user})).Invoke(bg, "q"); err != nil {
 		t.Fatal(err)
 	}
 	if got := ld.usageHelpers(); !reflect.DeepEqual(got, []string{"langchain-agents.toLangGraph"}) {
@@ -589,7 +593,7 @@ func TestToLangGraphHandoffFailure(t *testing.T) {
 		"triage":  {turns: []scripted{toolTurn("transfer_to_billing", nil)}},
 		"billing": {turns: []scripted{{err: boom}}},
 	}
-	if _, err := ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm), Context: user}).Invoke(bg, "hi"); !errors.Is(err, boom) {
+	if _, err := must(ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm), Context: user})).Invoke(bg, "hi"); !errors.Is(err, boom) {
 		t.Fatalf("err = %v", err)
 	}
 	if hs := ld.events("$ld:ai:graph:handoff_success"); len(hs) != 0 {
@@ -618,7 +622,7 @@ func TestToLangGraphNodeSpansAndPayloads(t *testing.T) {
 		"triage":  {turns: []scripted{toolTurn("transfer_to_billing", nil)}},
 		"billing": {turns: []scripted{toolTurn("refund", map[string]any{"id": 1}), textTurn("refunded", 5, 2)}},
 	}
-	if _, err := ToLangGraph(def, &NativeGraphOptions{ToolHandlers: handlersFor(&calls), ModelFactory: models(fm), Context: user}).Invoke(bg, "hello"); err != nil {
+	if _, err := must(ToLangGraph(def, &NativeGraphOptions{ToolHandlers: handlersFor(&calls), ModelFactory: models(fm), Context: user})).Invoke(bg, "hello"); err != nil {
 		t.Fatal(err)
 	}
 	runID := ld.events("$ld:ai:graph:invocation_success")[0].data["runId"]

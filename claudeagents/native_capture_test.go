@@ -26,7 +26,7 @@ func TestToClaudeAgentsCaptureContent(t *testing.T) {
 			})}
 			opts := e.opts
 			opts.CaptureContent = tc.capture
-			if _, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: opts, ToolHandlers: tools}).Invoke(bg, "q"); err != nil {
+			if _, err := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: opts, ToolHandlers: tools})).Invoke(bg, "q"); err != nil {
 				t.Fatal(err)
 			}
 			got := map[string]bool{}

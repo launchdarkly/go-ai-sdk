@@ -52,7 +52,10 @@ defer aiserver.Shutdown(ctx)
 user := ldcontext.New("user-123")
 
 // 1. One handler.
-claude := claudemessages.NewHandler(claudemessages.Options{})
+claude, err := claudemessages.NewHandler(claudemessages.Options{})
+if err != nil {
+	log.Fatal(err)
+}
 resp, err := aiserver.Config(aiserver.ConfigArgs{Key: "summariser", Handlers: []*aiserver.ProviderHandler{claude}}).
 	Invoke(ctx, "What is a feature flag?", user,
 		aiserver.WithVariables(map[string]any{"tone": "brief"})) // optional; also WithHistory(msgs)
@@ -62,7 +65,10 @@ if errors.Is(err, aiserver.ErrConfigDisabled) {
 fmt.Println(resp.Text()) // string response, or structured output as JSON
 
 // 2. Several providers: the variation's provider and mode choose.
-openai := openaimessages.NewHandler(openaimessages.Options{})
+openai, err := openaimessages.NewHandler(openaimessages.Options{})
+if err != nil {
+	log.Fatal(err)
+}
 cfg := aiserver.Config(aiserver.ConfigArgs{Key: "summariser", Handlers: []*aiserver.ProviderHandler{claude, openai}})
 for ev, err := range cfg.Stream(ctx, "Hello", user) {
 	if err != nil {
@@ -74,7 +80,15 @@ for ev, err := range cfg.Stream(ctx, "Hello", user) {
 }
 
 // 3. A multi-agent graph.
-agents := []*aiserver.ProviderHandler{claudeagents.NewHandler(claudeagents.Options{}), openaiagents.NewHandler(openaiagents.Options{})}
+claudeAgent, err := claudeagents.NewHandler(claudeagents.Options{})
+if err != nil {
+	log.Fatal(err)
+}
+openaiAgent, err := openaiagents.NewHandler(openaiagents.Options{})
+if err != nil {
+	log.Fatal(err)
+}
+agents := []*aiserver.ProviderHandler{claudeAgent, openaiAgent}
 out, err := aiserver.Graph("travel-agent-flow", aiserver.GraphOptions{Handlers: agents}).
 	Invoke(ctx, "Plan a week in Lisbon", user)
 

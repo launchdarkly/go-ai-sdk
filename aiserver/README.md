@@ -31,9 +31,13 @@ if _, err := aiserver.InitClient(ctx, aiserver.InitOptions{}); err != nil { // r
 }
 defer aiserver.Shutdown(ctx)
 
+h, err := claudemessages.NewHandler(claudemessages.Options{})
+if err != nil {
+	log.Fatal(err)
+}
 resp, err := aiserver.Config(aiserver.ConfigArgs{
 	Key:      "my-ai-config",
-	Handlers: []*aiserver.ProviderHandler{claudemessages.NewHandler(claudemessages.Options{})},
+	Handlers: []*aiserver.ProviderHandler{h},
 }).Invoke(ctx, "Summarise feature flags", ldcontext.New("user-123"),
 	aiserver.WithVariables(map[string]any{"tone": "brief"}), // optional: fills {{tone}} in the config's messages
 	aiserver.WithHistory(previousMessages))                          // optional
@@ -49,8 +53,14 @@ The variation's `provider.name` and `_ldMeta.mode` pick the handler. A `*`
 provider (LangChain) is the fallback when no handler names the provider.
 
 ```go
-oa := openaimessages.NewHandler(openaimessages.Options{})
-cl := claudemessages.NewHandler(claudemessages.Options{})
+oa, err := openaimessages.NewHandler(openaimessages.Options{})
+if err != nil {
+	log.Fatal(err)
+}
+cl, err := claudemessages.NewHandler(claudemessages.Options{})
+if err != nil {
+	log.Fatal(err)
+}
 cfg := aiserver.Config(aiserver.ConfigArgs{Key: "my-ai-config", Handlers: []*aiserver.ProviderHandler{oa, cl}})
 ```
 

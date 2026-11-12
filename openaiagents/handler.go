@@ -82,9 +82,11 @@ func (o Options) client() *openai.Client {
 }
 
 // NewHandler returns the OpenAI agent handler (createOpenAIAgentsHandler).
-func NewHandler(opts Options) *aiserver.ProviderHandler {
+// It returns an error for an invalid option. No current option can be
+// invalid, so the error is nil for now.
+func NewHandler(opts Options) (*aiserver.ProviderHandler, error) {
 	handlerkit.ReportUsage("openai-agents.createOpenAIAgentsHandler", PackageName, PackageVersion)
-	return newHandler(opts)
+	return newHandler(opts), nil
 }
 
 func newHandler(opts Options) *aiserver.ProviderHandler {

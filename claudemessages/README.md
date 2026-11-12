@@ -42,7 +42,10 @@ func main() {
 	}
 	defer aiserver.Shutdown(ctx)
 
-	h := claudemessages.NewHandler(claudemessages.Options{}) // reads ANTHROPIC_API_KEY
+	h, err := claudemessages.NewHandler(claudemessages.Options{}) // reads ANTHROPIC_API_KEY
+	if err != nil {
+		log.Fatal(err)
+	}
 	res, err := aiserver.Config(aiserver.ConfigArgs{
 		Key:      "my-ai-config",
 		Handlers: []*aiserver.ProviderHandler{h},
@@ -68,10 +71,15 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/claudemessages"
 )
 
-handlers := []*aiserver.ProviderHandler{
-	claudemessages.NewHandler(claudemessages.Options{}),
-	claudeagents.NewHandler(claudeagents.Options{}),
+messages, err := claudemessages.NewHandler(claudemessages.Options{})
+if err != nil {
+	log.Fatal(err)
 }
+agents, err := claudeagents.NewHandler(claudeagents.Options{})
+if err != nil {
+	log.Fatal(err)
+}
+handlers := []*aiserver.ProviderHandler{messages, agents}
 res, err := aiserver.Config(aiserver.ConfigArgs{Key: "my-ai-config", Handlers: handlers}).
 	Invoke(ctx, "Hello", ldcontext.New("user-123"))
 ```
@@ -118,8 +126,8 @@ type Options struct {
 	APIKey         string            // used when Client is nil; else ANTHROPIC_API_KEY
 	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 }
-// NewHandler is createClaudeMessagesHandler. The handler has Invoke and Stream.
-func NewHandler(Options) *aiserver.ProviderHandler
+// NewHandler is createClaudeMessagesHandler. The handler has Invoke and Stream; the error reports an invalid option (nil for now).
+func NewHandler(Options) (*aiserver.ProviderHandler, error)
 
 type InvokeOptions struct {
 	ToolHandlers map[string]aiserver.ToolHandler

@@ -55,7 +55,7 @@ func TestToClaudeAgentsRun(t *testing.T) {
 	e := setup(t, graphFlags(nil),
 		toolResp("mcp__subagents__leaf", `{"input":"sub task"}`), textResp("leaf says hi", 2, 3), textResp("Final: leaf says hi", 4, 5))
 	img := aiserver.ContentBlock{Type: "image", Source: &aiserver.ImageSource{Type: "url", URL: "https://x/y.png"}}
-	runner := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts})
+	runner := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts}))
 	res, err := runner.Invoke(bg, "help me", aiserver.WithHistory([]aiserver.Message{{Role: "user", Blocks: []aiserver.ContentBlock{img}}}))
 	if err != nil {
 		t.Fatal(err)
@@ -167,7 +167,7 @@ func TestToClaudeAgentsLeafTool(t *testing.T) {
 		gotArgs = args
 		return "record 7", nil
 	})}
-	res, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts, ToolHandlers: tools}).Invoke(bg, "q")
+	res, err := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts, ToolHandlers: tools})).Invoke(bg, "q")
 	if err != nil || res.Response != "done" {
 		t.Fatalf("res=%+v err=%v", res, err)
 	}
@@ -190,7 +190,7 @@ func TestToClaudeAgentsRepeatNode(t *testing.T) {
 		toolResp("mcp__subagents__leaf", `{"input":"one"}`), textResp("first", 1, 1),
 		toolResp("mcp__subagents__leaf", `{"input":"two"}`), textResp("second", 1, 1),
 		textResp("done", 1, 1))
-	if _, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts}).Invoke(bg, "q"); err != nil {
+	if _, err := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts})).Invoke(bg, "q"); err != nil {
 		t.Fatal(err)
 	}
 	if got := names(e.ld.events("$ld:ai:graph:node"), "nodeKey"); !reflect.DeepEqual(got, []any{"root", "leaf"}) {
@@ -207,7 +207,7 @@ func TestToClaudeAgentsRepeatNode(t *testing.T) {
 // an empty history behaves like no history.
 func TestToClaudeAgentsEmptyHistory(t *testing.T) {
 	e := setup(t, graphFlags(nil), textResp("a", 1, 1), textResp("b", 1, 1))
-	runner := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts})
+	runner := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts}))
 	if _, err := runner.Invoke(bg, "q"); err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestToClaudeAgentsEmptyHistory(t *testing.T) {
 
 func TestToClaudeAgentsFailure(t *testing.T) {
 	e := setup(t, graphFlags(nil), "STATUS400")
-	_, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts}).Invoke(bg, "q")
+	_, err := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts})).Invoke(bg, "q")
 	if err == nil {
 		t.Fatal("want error")
 	}
@@ -241,10 +241,10 @@ func TestToClaudeAgentsDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ToClaudeAgents(def, nil).Invoke(bg, "q"); !errors.Is(err, aiserver.ErrGraphDisabled) {
+	if _, err := must(ToClaudeAgents(def, nil)).Invoke(bg, "q"); !errors.Is(err, aiserver.ErrGraphDisabled) {
 		t.Errorf("want ErrGraphDisabled, got %v", err)
 	}
-	if _, err := ToClaudeAgents(nil, nil).Invoke(bg, "q"); !errors.Is(err, aiserver.ErrGraphDisabled) {
+	if _, err := must(ToClaudeAgents(nil, nil)).Invoke(bg, "q"); !errors.Is(err, aiserver.ErrGraphDisabled) {
 		t.Errorf("nil def: %v", err)
 	}
 }
@@ -253,8 +253,8 @@ func TestToClaudeAgentsDisabled(t *testing.T) {
 func TestToClaudeAgentsNativeTool(t *testing.T) {
 	tools := map[string]any{"web-search": map[string]any{"name": "web-search", "type": "function", "parameters": map[string]any{}}}
 	e := setup(t, graphFlags(map[string]any{"tools": tools}), msgJSON("end_turn", serverSearch, 1, 1))
-	res, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts,
-		ToolHandlers: map[string]aiserver.ToolHandler{"web-search": ClaudeWebSearch}}).Invoke(bg, "q")
+	res, err := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts,
+		ToolHandlers: map[string]aiserver.ToolHandler{"web-search": ClaudeWebSearch}})).Invoke(bg, "q")
 	if err != nil || res.Response != "found" {
 		t.Fatalf("%v %v", res, err)
 	}
@@ -279,13 +279,16 @@ func TestClaudeGraph(t *testing.T) {
 		return aiserver.HandlerResult{Output: "stub"}, nil
 	}, nil, aiserver.CaptureDefault)
 	looked := false
-	g := ClaudeGraph("g", GraphOptions{
+	g, err := ClaudeGraph("g", GraphOptions{
 		Registry: aiserver.NewRegistry(aiserver.RegistryEntries{Handlers: []*aiserver.ProviderHandler{stub}}),
 		ToolHandlers: map[string]aiserver.ToolHandler{"lookup": aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) {
 			looked = true
 			return "data", nil
 		})},
 	}, e.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
 	res, err := g.Invoke(bg, "q", user)
 	if err != nil || res.Response != "ok" || stubCalled || !looked || len(e.api.reqs()) != 2 {
 		t.Errorf("res=%v err=%v stub=%v looked=%v calls=%d", res, err, stubCalled, looked, len(e.api.reqs()))
@@ -302,7 +305,11 @@ func TestClaudeGraphJudge(t *testing.T) {
 		"gj":   judge,
 	}
 	e := setup(t, flags, sse([]string{"ok"}, "", 1, 1), textResp(`{"score":0.9,"reasoning":"fine"}`, 1, 1))
-	res, err := ClaudeGraph("g", GraphOptions{GraphJudge: "gj"}, e.opts).Invoke(bg, "q", user)
+	g, err := ClaudeGraph("g", GraphOptions{GraphJudge: "gj"}, e.opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := g.Invoke(bg, "q", user)
 	if err != nil || res.JudgeResults["gj"].Score != 0.9 || len(e.api.reqs()) != 2 {
 		t.Fatalf("res=%+v err=%v calls=%d", res, err, len(e.api.reqs()))
 	}
@@ -312,7 +319,7 @@ func TestClaudeGraphJudge(t *testing.T) {
 func TestConversationID(t *testing.T) {
 	e := setup(t, graphFlags(nil), textResp("a", 1, 1), textResp("b", 1, 1))
 	def := resolve(t)
-	if _, err := ToClaudeAgents(def, &AdapterOptions{Handler: e.opts}).Invoke(aiserver.WithConversationID(bg, "conv-1"), "q"); err != nil {
+	if _, err := must(ToClaudeAgents(def, &AdapterOptions{Handler: e.opts})).Invoke(aiserver.WithConversationID(bg, "conv-1"), "q"); err != nil {
 		t.Fatal(err)
 	}
 	for _, s := range e.exp.GetSpans().Snapshots() {
@@ -321,7 +328,7 @@ func TestConversationID(t *testing.T) {
 		}
 	}
 	e.exp.Reset()
-	if _, err := ToClaudeAgents(def, &AdapterOptions{Handler: e.opts}).Invoke(bg, "q"); err != nil {
+	if _, err := must(ToClaudeAgents(def, &AdapterOptions{Handler: e.opts})).Invoke(bg, "q"); err != nil {
 		t.Fatal(err)
 	}
 	for _, s := range e.exp.GetSpans().Snapshots() {
@@ -356,7 +363,7 @@ func TestSubAgentToolName(t *testing.T) {
 // events the node's.
 func TestToClaudeAgentsChildFailure(t *testing.T) {
 	e := setup(t, graphFlags(nil), toolResp("mcp__subagents__leaf", `{"input":"sub"}`), "STATUS400")
-	if _, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts}).Invoke(bg, "q"); err == nil {
+	if _, err := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts})).Invoke(bg, "q"); err == nil {
 		t.Fatal("want error")
 	}
 	if hs := e.ld.events("$ld:ai:graph:handoff_success"); len(hs) != 0 {
@@ -378,7 +385,7 @@ func TestToClaudeAgentsChildFailure(t *testing.T) {
 // variation) as aiserver.Graph does; node events use the node's.
 func TestToClaudeAgentsPayloads(t *testing.T) {
 	e := setup(t, graphFlags(nil), toolResp("mcp__subagents__leaf", `{"input":"sub"}`), textResp("leaf", 1, 1), textResp("done", 1, 1))
-	if _, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts}).Invoke(bg, "q"); err != nil {
+	if _, err := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts})).Invoke(bg, "q"); err != nil {
 		t.Fatal(err)
 	}
 	var runID any
@@ -406,7 +413,7 @@ func TestToClaudeAgentsNoContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ToClaudeAgents(def, &AdapterOptions{Handler: e.opts}).Invoke(bg, "q"); err != nil {
+	if _, err := must(ToClaudeAgents(def, &AdapterOptions{Handler: e.opts})).Invoke(bg, "q"); err != nil {
 		t.Fatal(err)
 	}
 	e.ld.mu.Lock()
@@ -432,7 +439,7 @@ func TestToClaudeAgentsCycleBackEdgeDropped(t *testing.T) {
 		},
 		"root": agentVariation("root inst", nil), "A": agentVariation("a", nil), "B": agentVariation("b", nil),
 	}, textResp("done", 1, 1))
-	if _, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts}).Invoke(bg, "q"); err != nil {
+	if _, err := must(ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts})).Invoke(bg, "q"); err != nil {
 		t.Fatal(err)
 	}
 	if got := toolNames(e.api.reqs()[0]); !slices.Contains(got, "mcp__subagents__A") {

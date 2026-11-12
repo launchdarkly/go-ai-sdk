@@ -25,7 +25,7 @@ Shared Anthropic wire mapping (turns, tools, max_tokens, finish reasons, usage) 
 const PackageName, PackageVersion, SpanName
 var ErrToolNotFound error
 type Options struct{ Client *anthropic.Client; APIKey string; CaptureContent aiserver.ContentCapture }
-func NewHandler(Options) *aiserver.ProviderHandler
+func NewHandler(Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func ClaudeMessages(ctx, configKey, userInput string, userCtx ldcontext.Context, *InvokeOptions) (aiserver.ProviderResponse, error)
 ```

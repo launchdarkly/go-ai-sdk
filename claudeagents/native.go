@@ -53,12 +53,13 @@ type GraphRunner struct {
 // ToClaudeAgents adapts a resolved graph to nested Claude agents
 // (toClaudeAgents). opts may be nil. The definition's user context is the
 // context every tracking event is sent for.
-func ToClaudeAgents(def *aiserver.GraphDefinition, opts *AdapterOptions) *GraphRunner {
+// The error is for an invalid option, and nil for now.
+func ToClaudeAgents(def *aiserver.GraphDefinition, opts *AdapterOptions) (*GraphRunner, error) {
 	handlerkit.ReportUsage("claude-agents.toClaudeAgents", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &AdapterOptions{}
 	}
-	return &GraphRunner{def: def, tools: opts.ToolHandlers, agent: newAgent(opts.Handler), capture: opts.Handler.CaptureContent}
+	return &GraphRunner{def: def, tools: opts.ToolHandlers, agent: newAgent(opts.Handler), capture: opts.Handler.CaptureContent}, nil
 }
 
 // subAgent is one node with the sub-agent tools for its children.

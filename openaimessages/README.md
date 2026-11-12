@@ -37,7 +37,10 @@ func main() {
 	}
 	defer aiserver.Shutdown(ctx)
 
-	h := openaimessages.NewHandler(openaimessages.Options{}) // reads OPENAI_API_KEY
+	h, err := openaimessages.NewHandler(openaimessages.Options{}) // reads OPENAI_API_KEY
+	if err != nil {
+		log.Fatal(err)
+	}
 	res, err := aiserver.Config(aiserver.ConfigArgs{Key: "my-ai-config", Handlers: []*aiserver.ProviderHandler{h}}).
 		Invoke(ctx, "What is LaunchDarkly?", ldcontext.New("user-123"))
 	if err != nil {
@@ -50,10 +53,15 @@ func main() {
 Multiple handlers: the variation's provider picks one.
 
 ```go
-handlers := []*aiserver.ProviderHandler{
-	openaimessages.NewHandler(openaimessages.Options{}),
-	claudemessages.NewHandler(claudemessages.Options{}), // github.com/launchdarkly/go-ai-sdk/claudemessages
+openai, err := openaimessages.NewHandler(openaimessages.Options{})
+if err != nil {
+	log.Fatal(err)
 }
+claude, err := claudemessages.NewHandler(claudemessages.Options{}) // github.com/launchdarkly/go-ai-sdk/claudemessages
+if err != nil {
+	log.Fatal(err)
+}
+handlers := []*aiserver.ProviderHandler{openai, claude}
 res, err := aiserver.Config(aiserver.ConfigArgs{Key: "my-ai-config", Handlers: handlers}).
 	Invoke(ctx, "Hello", ldcontext.New("user-123"))
 ```
@@ -102,7 +110,7 @@ type Options struct {
 	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
 }
 
-func NewHandler(opts Options) *aiserver.ProviderHandler
+func NewHandler(opts Options) (*aiserver.ProviderHandler, error)
 
 type InvokeOptions struct {
 	ToolHandlers map[string]aiserver.ToolHandler
@@ -115,7 +123,7 @@ type InvokeOptions struct {
 func OpenAIMessages(ctx context.Context, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 ```
 
-`NewHandler` returns a `*aiserver.ProviderHandler` with both `Invoke` and `Stream` set.
+`NewHandler` returns a `*aiserver.ProviderHandler` (with both `Invoke` and `Stream` set) and an `error` for an invalid option; the error is nil for now.
 
 Behavior:
 

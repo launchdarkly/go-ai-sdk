@@ -26,10 +26,11 @@ import (
 // package's agent handler as the only handler (openaiGraph). Any
 // options.Handlers value is replaced, so the graph cannot be bound to a
 // different handler. handler configures that agent handler.
-func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph {
+// The error is NewHandler's, and nil for now.
+func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error) {
 	handlerkit.ReportUsage("openai-agents.openaiGraph", PackageName, PackageVersion)
 	options.Handlers = []*aiserver.ProviderHandler{newHandler(handler)}
-	return sdkapi.Graph(key, options)
+	return sdkapi.Graph(key, options), nil
 }
 
 // NativeGraphOptions configure ToOpenAIAgents.
@@ -56,12 +57,13 @@ type NativeGraph struct {
 // ToOpenAIAgents translates def into an agent tree run natively on the
 // Responses API (toOpenAIAgents). opts may be nil. Errors for
 // a nil, disabled or rootless definition are returned by Invoke.
-func ToOpenAIAgents(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *NativeGraph {
+// The error is for an invalid option, and nil for now.
+func ToOpenAIAgents(def *aiserver.GraphDefinition, opts *NativeGraphOptions) (*NativeGraph, error) {
 	handlerkit.ReportUsage("openai-agents.toOpenAIAgents", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &NativeGraphOptions{}
 	}
-	return &NativeGraph{def: def, opts: *opts, client: opts.Handler.client()}
+	return &NativeGraph{def: def, opts: *opts, client: opts.Handler.client()}, nil
 }
 
 // buildAgents makes one agent per reachable node, then wires a handoff for

@@ -216,19 +216,18 @@ func NewLaunchDarklySkillStore(sdkKey string, opts *LaunchDarklySkillStoreOption
 	return s, nil
 }
 
-// Start begins delivery on a background goroutine and returns the store, so
-// it chains. It is a no-op while delivery runs. A store that gave up on a
+// Start begins delivery on a background goroutine. It is a no-op while delivery runs. A store that gave up on a
 // fatal status (Failed is set) is started afresh, with Failed cleared and the
 // failure count and backoff reset. After Close it returns ErrStoreClosed.
-func (s *LaunchDarklySkillStore) Start() (*LaunchDarklySkillStore, error) {
+func (s *LaunchDarklySkillStore) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return nil, fmt.Errorf("%w: Close is final, so delivery cannot resume; construct a new LaunchDarklySkillStore. "+
+		return fmt.Errorf("%w: Close is final, so delivery cannot resume; construct a new LaunchDarklySkillStore. "+
 			"Held content is still readable from the closed store", ErrStoreClosed)
 	}
 	if s.running && s.failedReason == "" {
-		return s, nil
+		return nil
 	}
 	s.failedReason = ""
 	s.failures = 0
@@ -243,7 +242,7 @@ func (s *LaunchDarklySkillStore) Start() (*LaunchDarklySkillStore, error) {
 	s.running = true
 	s.done = make(chan struct{})
 	go s.run(ctx, s.done)
-	return s, nil
+	return nil
 }
 
 // Close stops delivery and waits briefly for the goroutine to exit. It is

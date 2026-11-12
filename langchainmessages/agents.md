@@ -25,7 +25,7 @@ const PackageName, PackageVersion, SpanName
 var ErrMaxSteps, ErrNoToolHandler, ErrEmptyResponse
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
 type Options struct{ Model llms.Model; ModelFactory ModelFactory; CaptureContent aiserver.ContentCapture }
-func NewHandler(opts Options) *aiserver.ProviderHandler
+func NewHandler(opts Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func LangChainMessages(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 ```

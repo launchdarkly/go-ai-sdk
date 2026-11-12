@@ -30,13 +30,13 @@ lives in `internal/openaiwire`, also used by `openaimessages`.
 const PackageName, PackageVersion, SpanName
 var ErrMaxTurns, ErrToolNotOffered, ErrNoRoot, ErrNilGraph error
 type Options struct{ Client *openai.Client; APIKey string; CaptureContent aiserver.ContentCapture; MaxTurns int }
-func NewHandler(Options) *aiserver.ProviderHandler
+func NewHandler(Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func OpenAIAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, *InvokeOptions) (aiserver.ProviderResponse, error)
-func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph
+func OpenAIGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error)
 type NativeGraphOptions struct{ ToolHandlers; Context ldcontext.Context; Handler Options }
 type NativeGraph struct{ /* unexported */ }
-func ToOpenAIAgents(*aiserver.GraphDefinition, *NativeGraphOptions) *NativeGraph
+func ToOpenAIAgents(*aiserver.GraphDefinition, *NativeGraphOptions) (*NativeGraph, error)
 func (*NativeGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 ```
 

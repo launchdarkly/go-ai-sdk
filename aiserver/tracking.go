@@ -40,9 +40,11 @@ func track(event string, ctx ldcontext.Context, td TrackData, metric float64) {
 	safeTrack(c, event, ctx, metric, data)
 }
 
-// Track sends a LaunchDarkly AI tracking event with td as its data. It is
-// for handler and adapter packages; a missing client or a failing track
-// never returns an error, because telemetry must not fail an AI call.
+// Track sends a LaunchDarkly AI tracking event with td as its data.
+// Applications use it to record a deferred judge's result (see RunJudge and
+// JudgeRunResult.TrackData); handler and adapter packages use it too. A
+// missing client or a failing track never returns an error, because
+// telemetry must not fail an AI call.
 func Track(event string, ctx ldcontext.Context, td TrackData, metric float64) {
 	track(event, ctx, td, metric)
 }

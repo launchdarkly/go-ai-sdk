@@ -28,10 +28,11 @@ import (
 // LangChainGraph returns aiserver's model-driven graph runner with this
 // package's agent handler as the only handler. Any options.Handlers value is replaced, so the graph
 // cannot be bound to a different handler. handler supplies the model: its Model or ModelFactory runs every node.
-func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) *aiserver.AgentGraph {
+// The error is NewHandler's, and nil for now.
+func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error) {
 	handlerkit.ReportUsage("langchain-agents.langchainGraph", PackageName, PackageVersion)
 	options.Handlers = []*aiserver.ProviderHandler{newHandler(handler)}
-	return sdkapi.Graph(key, options)
+	return sdkapi.Graph(key, options), nil
 }
 
 // NativeGraphOptions configure ToLangGraph.
@@ -60,12 +61,13 @@ type LangGraph struct {
 // ToLangGraph translates def into a stategraph runner.
 // opts may be nil. Errors for a nil, disabled or
 // rootless definition are returned by Invoke.
-func ToLangGraph(def *aiserver.GraphDefinition, opts *NativeGraphOptions) *LangGraph {
+// The error is for an invalid option, and nil for now.
+func ToLangGraph(def *aiserver.GraphDefinition, opts *NativeGraphOptions) (*LangGraph, error) {
 	handlerkit.ReportUsage("langchain-agents.toLangGraph", PackageName, PackageVersion)
 	if opts == nil {
 		opts = &NativeGraphOptions{}
 	}
-	return &LangGraph{def: def, opts: *opts}
+	return &LangGraph{def: def, opts: *opts}, nil
 }
 
 var unsafeNameChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)

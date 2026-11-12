@@ -36,14 +36,14 @@ Shared Anthropic wire mapping (turns, tools, max_tokens, finish reasons, usage) 
 const PackageName, PackageVersion, SpanName, DefaultMaxSteps
 var ErrToolNotFound, ErrUnsupportedNativeTool, ErrMaxSteps error
 type Options struct{ Client *anthropic.Client; APIKey string; CaptureContent aiserver.ContentCapture; MaxSteps int; WorkDir string }
-func NewHandler(Options) *aiserver.ProviderHandler
+func NewHandler(Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func ClaudeAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, *InvokeOptions) (aiserver.ProviderResponse, error)
 type GraphOptions struct{ ToolHandlers; GraphJudge; Registry }
-func ClaudeGraph(key string, GraphOptions, Options) *aiserver.AgentGraph
+func ClaudeGraph(key string, GraphOptions, Options) (*aiserver.AgentGraph, error)
 type AdapterOptions struct{ ToolHandlers; Handler Options }
 type GraphRunner struct{ /* unexported */ }
-func ToClaudeAgents(*aiserver.GraphDefinition, *AdapterOptions) *GraphRunner
+func ToClaudeAgents(*aiserver.GraphDefinition, *AdapterOptions) (*GraphRunner, error)
 func (*GraphRunner) Invoke(ctx, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error)
 var ClaudeBash, ClaudeRead, ClaudeEdit, ClaudeWrite, ClaudeGlob, ClaudeGrep, ClaudeWebFetch, ClaudeWebSearch, ClaudeTodoWrite, ClaudeNotebookEdit *aiserver.NativeTool
 ```
@@ -124,7 +124,8 @@ is already a dependency of `aiserver`; there is no extra to install. See the cor
 
 ## `InitClient()`: when to call it
 
-Lazy initialization is the default: `aiserver.Config(...).Invoke`, `ClaudeGraph(...).Invoke` and
+Lazy initialization is the default: `aiserver.Config(...).Invoke`, `Invoke` on the graph
+`ClaudeGraph` returns (`g, err := ClaudeGraph(...)`, then `g.Invoke(...)`) and
 `aiserver.ResolveGraph` initialize the client from `LD_SDK_KEY` on first use. Call
 `aiserver.InitClient` explicitly for custom options (base URIs, OTLP endpoint, service name),
 call `aiserver.InitWithClient` to bring your own LaunchDarkly client (BYOC, including edge

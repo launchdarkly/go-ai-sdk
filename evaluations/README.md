@@ -51,10 +51,12 @@ judge, _ := evaluations.NewJudge("accuracy", nil)
 // A library tool: read and pinned now, so Run issues no tool request.
 lookup, err := evals.Tools().Get(ctx, "lookup-order", aiserver.ToolFunc(lookupOrder))
 if err != nil { log.Fatal(err) }
+handler, err := openaimessages.NewHandler(openaimessages.Options{})
+if err != nil { log.Fatal(err) }
 res, err := evals.Run(ctx, evaluations.RunOptions{
 	Key:        "support-bot-" + time.Now().Format("20060102-150405"), // unique per run
 	Dataset:    evaluations.DatasetKey("support-questions"),
-	Handler:    openaimessages.NewHandler(openaimessages.Options{}),
+	Handler:    handler,
 	Generation: &evaluations.GenerationConfig{
 		Provider: "OpenAI", Model: "gpt-4o",
 		Mode:     evaluations.GenerationModeCompletion, // required: "completion" or "agent"

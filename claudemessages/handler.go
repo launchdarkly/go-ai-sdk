@@ -57,9 +57,11 @@ type Options struct {
 }
 
 // NewHandler returns the Anthropic messages handler (createClaudeMessagesHandler).
-func NewHandler(opts Options) *aiserver.ProviderHandler {
+// It returns an error for an invalid option. No current option can be
+// invalid, so the error is nil for now.
+func NewHandler(opts Options) (*aiserver.ProviderHandler, error) {
 	handlerkit.ReportUsage("claude-messages.createClaudeMessagesHandler", PackageName, PackageVersion)
-	return newHandler(opts)
+	return newHandler(opts), nil
 }
 
 func newHandler(opts Options) *aiserver.ProviderHandler {
