@@ -301,7 +301,7 @@ func (a *agent) run(ctx context.Context, req aiserver.HandlerRequest, extra []lo
 	}
 	defer ts.ws.close()
 	params := anthropic.MessageNewParams{
-		Model: anthropic.Model(model), MaxTokens: anthropicwire.MaxTokens(req.Config),
+		Model: anthropic.Model(model), MaxTokens: anthropicwire.MaxTokens(req.Config, "maxTokens"), // Claude Agents also reads the maxTokens spelling
 		Messages: anthropicwire.Messages(p.Turns), Tools: ts.params,
 	}
 	q := buildQueryOptions(req.Config.Model.Parameters)

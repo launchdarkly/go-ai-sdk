@@ -23,7 +23,7 @@ Variation fields the handler reads:
 | `messages` | Conversation turns before history; system entries are used only when `instructions` is empty. |
 | `model.name` | Bedrock model or inference-profile id, e.g. `anthropic.claude-sonnet-4-5`. |
 | `model.region` | Short inference-profile prefix (`us`, `eu`, `global`), prepended once: `us` + `anthropic.x` → `us.anthropic.x`; `us.anthropic.x` stays as is. Not an AWS region. |
-| `model.parameters` | `maxTokens`/`max_tokens`, `temperature`, `topP`/`top_p`, `stopSequences`/`stop_sequences` → `inferenceConfig`. Other keys are ignored. |
+| `model.parameters` | `max_tokens`, `temperature`, `top_p`, `stop_sequences` → `inferenceConfig`. Keys are read in snake_case only: a camelCase spelling such as `maxTokens` is ignored, like any other key. |
 | `model.custom` | **Never read.** Return values from `ModelOptions` if you need them. |
 | `tools` | Offered to the model only when `ToolHandlers` has an `aiserver.ToolFunc` under the same key. |
 | `outputFormat` | Blocking runs send it as Converse native structured output (`outputConfig.textFormat`, `json_schema`). Streaming ignores it. |

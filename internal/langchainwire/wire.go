@@ -206,39 +206,34 @@ func Number(v any) (float64, bool) {
 }
 
 // CallOptions maps the documented common config.model.parameters to
-// llms call options. config.model.custom is never read.
+// llms call options. Keys are read in snake_case only: a camelCase spelling
+// such as maxTokens is not a table key, so it is dropped.
+// config.model.custom is never read.
 func CallOptions(params map[string]any) []llms.CallOption {
 	var out []llms.CallOption
-	num := func(keys ...string) (float64, bool) {
-		for _, k := range keys {
-			if v, ok := Number(params[k]); ok {
-				return v, true
-			}
-		}
-		return 0, false
-	}
-	if v, ok := num("max_tokens", "maxTokens"); ok {
+	num := func(key string) (float64, bool) { return Number(params[key]) }
+	if v, ok := num("max_tokens"); ok {
 		out = append(out, llms.WithMaxTokens(int(v)))
 	}
 	if v, ok := num("temperature"); ok {
 		out = append(out, llms.WithTemperature(v))
 	}
-	if v, ok := num("top_p", "topP"); ok {
+	if v, ok := num("top_p"); ok {
 		out = append(out, llms.WithTopP(v))
 	}
-	if v, ok := num("top_k", "topK"); ok {
+	if v, ok := num("top_k"); ok {
 		out = append(out, llms.WithTopK(int(v)))
 	}
 	if v, ok := num("seed"); ok {
 		out = append(out, llms.WithSeed(int(v)))
 	}
-	if v, ok := num("frequency_penalty", "frequencyPenalty"); ok {
+	if v, ok := num("frequency_penalty"); ok {
 		out = append(out, llms.WithFrequencyPenalty(v))
 	}
-	if v, ok := num("presence_penalty", "presencePenalty"); ok {
+	if v, ok := num("presence_penalty"); ok {
 		out = append(out, llms.WithPresencePenalty(v))
 	}
-	for _, k := range []string{"stop", "stop_sequences", "stopSequences"} {
+	for _, k := range []string{"stop_sequences", "stop"} { // stop_sequences wins when both are set
 		raw, _ := params[k].([]any)
 		var words []string
 		for _, w := range raw {

@@ -116,9 +116,10 @@ wrapped in a short adapter that converts the messages and options.
 | `ModelFactory` set | `ModelFactory(config)` per call |
 | neither | built from lowercased `provider.name`: `anthropic` → `llms.NewAnthropic` (Messages API), `bedrock` → `llms.NewBedrock` (Converse API; model id prefixed with `model.region`), anything else → `llms.NewOpenAI` (Chat Completions, so any OpenAI-compatible endpoint works through `OPENAI_BASE_URL`) |
 
-`config.model.parameters` maps to `llms` call options: `max_tokens`/`maxTokens`,
-`temperature`, `top_p`/`topP`, `top_k`/`topK`, `seed`, `frequency_penalty`,
-`presence_penalty`, `stop`/`stop_sequences`. An explicit `0` is sent, not dropped; an unset
+`config.model.parameters` maps to `llms` call options: `max_tokens`,
+`temperature`, `top_p`, `top_k`, `seed`, `frequency_penalty`, `presence_penalty`,
+`stop`/`stop_sequences`. Keys are read in snake_case only: a camelCase spelling such as
+`maxTokens` is dropped. An explicit `0` is sent, not dropped; an unset
 value is left to the provider's default. Bedrock sends `top_k` to Anthropic models only, as
 an additional model request field. `config.model.custom` is never read.
 

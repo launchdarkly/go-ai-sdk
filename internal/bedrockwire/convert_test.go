@@ -27,12 +27,12 @@ func TestStreamInputCoversConverseInput(t *testing.T) {
 	}
 }
 
-// Both spellings of each documented parameter map to inferenceConfig;
-// integers are accepted.
+// Each documented snake_case parameter maps to inferenceConfig; integers
+// are accepted.
 func TestInferenceConfigSpellings(t *testing.T) {
 	want := &types.InferenceConfiguration{MaxTokens: aws.Int32(7), Temperature: aws.Float32(0.5), TopP: aws.Float32(0.25), StopSequences: []string{"END"}}
 	for _, params := range []map[string]any{
-		{"maxTokens": 7, "temperature": 0.5, "topP": 0.25, "stopSequences": []any{"END"}},
+		{"max_tokens": 7, "temperature": 0.5, "top_p": 0.25, "stop_sequences": []any{"END"}},
 		{"max_tokens": 7.0, "temperature": 0.5, "top_p": 0.25, "stop_sequences": []any{"END"}},
 	} {
 		if got := inferenceConfig(params); !reflect.DeepEqual(got, want) {
