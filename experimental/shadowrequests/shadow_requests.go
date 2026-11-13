@@ -35,7 +35,8 @@ import (
 // variation runs exactly as Config runs it. Once it succeeds, each sampled
 // shadow runs on the same input in the background, or is handed to OnTask
 // to run later with RunShadow. A shadow's response is discarded; it is
-// tracked on the normal $ld:ai:* events with isShadow.
+// tracked on the normal $ld:ai:* events with isShadow. The shadow's judges
+// score its response first, and their scores are tracked under the shadow.
 //
 //	shadowed, err := shadowrequests.ShadowConfig(
 //		aiserver.ConfigArgs{Key: "my-ai-config", Handlers: handlers}, shadowrequests.ShadowOptions{})
@@ -67,8 +68,9 @@ type ShadowAIConfig struct {
 	opts ShadowOptions
 }
 
-// ShadowTask is everything needed to run and track one sampled shadow, with
-// no flag evaluation. It survives a JSON round trip. Experimental.
+// ShadowTask is everything needed to run and track one sampled shadow. Running
+// it evaluates no flag except the shadow's judges. It survives a JSON round
+// trip. Experimental.
 type ShadowTask struct {
 	ConfigKey       string                 `json:"configKey"`
 	ShadowRequestID string                 `json:"shadowRequestId"`
@@ -95,6 +97,9 @@ type ShadowResult struct {
 	Usage     aiserver.TokenUsage `json:"usage"`
 	TrackData map[string]any      `json:"trackData"`
 	Error     string              `json:"error,omitempty"`
+	// JudgeResults are the scores the shadow's judges gave its response,
+	// keyed by judge key. Nil when no judge ran.
+	JudgeResults map[string]aiserver.JudgeResult `json:"judgeResults,omitempty"`
 }
 
 // ShadowConfig is Config, and also runs the shadows of the matched rule or
@@ -305,8 +310,8 @@ func inSample(shadowID string, c ldcontext.Context, samplingRate float64) bool {
 	return float64(n)/bucketScale < samplingRate
 }
 
-// shadowVariation parses an enabled shadow variation without its tools,
-// judges and shadows.
+// shadowVariation parses an enabled shadow variation without its tools and
+// shadows. Its judges stay, to score its response.
 func shadowVariation(raw any) (aiserver.AiConfig, aiserver.VariationMeta, bool) {
 	value, _ := deepCopy(raw).(map[string]any)
 	metaRaw, _ := value["_ldMeta"].(map[string]any)
@@ -318,7 +323,7 @@ func shadowVariation(raw any) (aiserver.AiConfig, aiserver.VariationMeta, bool) 
 	if json.Unmarshal(b, &meta) != nil {
 		return aiserver.AiConfig{}, aiserver.VariationMeta{}, false
 	}
-	for _, k := range []string{"_ldMeta", "tools", "judgeConfiguration", "shadowConfiguration"} {
+	for _, k := range []string{"_ldMeta", "tools", "shadowConfiguration"} {
 		delete(value, k)
 	}
 	cfg, err := handlerkit.ParseAiConfig(value)
@@ -426,9 +431,11 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 		cfg.Raw = task.ConfigRaw
 	}
 	value := shadowValue(cfg, task.Meta)
+	// The deadline wraps only B's handler: B's judges run after it, on the
+	// caller's handlers, with no timeout of their own.
 	run := bridge.ConfigWithOptions(aiserver.ConfigArgs{
 		Key:      task.ConfigKey,
-		Handlers: []*aiserver.ProviderHandler{withDeadline(h, timeout)},
+		Handlers: handlers,
 	}, bridge.RunOptions{
 		Variation: func(bridge.VariationClient, string, ldcontext.Context, ldvalue.Value) (ldvalue.Value, error) {
 			return value, nil
@@ -439,6 +446,10 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 		ExistingClient: true,
 		NoUsage:        true,
 		NoFlagEvent:    true,
+		WrapHandler: func(h *aiserver.ProviderHandler) *aiserver.ProviderHandler {
+			return withDeadline(h, timeout)
+		},
+		LogJudgeErrors: true,
 	}).(*aiserver.AIConfig)
 	vars, _ := deepCopy(map[string]any(task.Variables)).(map[string]any)
 	resp, err := run.Invoke(ctx, task.UserInput, task.UserContext,
@@ -448,6 +459,9 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 		return res
 	}
 	res.Usage = resp.Usage
+	if len(resp.JudgeResults) > 0 {
+		res.JudgeResults = resp.JudgeResults
+	}
 	res.TrackData = trackDataMap(resp.TrackData)
 	maps.Copy(res.TrackData, task.TrackData)
 	return res

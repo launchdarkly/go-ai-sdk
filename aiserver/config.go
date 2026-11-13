@@ -184,8 +184,12 @@ func (c *AIConfig) Invoke(ctx context.Context, userInput string, userCtx ldconte
 	if err != nil {
 		return ProviderResponse{}, err
 	}
+	handler := r.handler
+	if wrap, ok := c.opts.WrapHandler.(func(*ProviderHandler) *ProviderHandler); ok {
+		handler = wrap(handler)
+	}
 	res, err := executeAndTrack(ctx, execArgs{
-		configKey: c.args.Key, config: r.cfg, meta: r.meta, value: r.value, userCtx: userCtx, handler: r.handler,
+		configKey: c.args.Key, config: r.cfg, meta: r.meta, value: r.value, userCtx: userCtx, handler: handler,
 		userInput: userInput, tools: r.tools, variables: variables, history: history, run: c.opts,
 	})
 	if err != nil {
@@ -194,7 +198,8 @@ func (c *AIConfig) Invoke(ctx context.Context, userInput string, userCtx ldconte
 	parsed := resolveOutputFormat(res.Output, r.cfg.OutputFormat)
 	resp := ProviderResponse{Response: parsed, Usage: res.Usage, TrackData: res.TrackData}
 	ja := judgeArgs{cfg: r.cfg, userCtx: userCtx, handler: r.handler, handlers: r.handlers,
-		userInput: userInput, output: outputString(parsed), parentTD: res.TrackData, trajectory: res.Trajectory}
+		userInput: userInput, output: outputString(parsed), parentTD: res.TrackData, trajectory: res.Trajectory,
+		existingClient: c.opts.ExistingClient, logErrors: c.opts.LogJudgeErrors}
 	if c.args.SkipJudges {
 		resp.JudgeTasks, err = buildJudgeTasks(ctx, ja)
 	} else {
@@ -233,7 +238,8 @@ func (c *AIConfig) Stream(ctx context.Context, userInput string, userCtx ldconte
 		out := StreamEvent{Type: EventDone, Response: done.response, Usage: done.usage}
 		if !c.args.SkipJudges {
 			jr, err := runJudges(ctx, judgeArgs{cfg: r.cfg, userCtx: userCtx, handler: r.handler, handlers: r.handlers,
-				userInput: userInput, output: done.response, parentTD: done.td, trajectory: done.trajectory})
+				userInput: userInput, output: done.response, parentTD: done.td, trajectory: done.trajectory,
+				existingClient: c.opts.ExistingClient, logErrors: c.opts.LogJudgeErrors})
 			if err != nil {
 				yield(StreamEvent{}, err)
 				return

@@ -25,6 +25,12 @@ type judgeArgs struct {
 	parentTD   TrackData
 	graphKey   string
 	trajectory string
+	// existingClient resolves judges on the initialized client, never
+	// starting one.
+	existingClient bool
+	// logErrors logs a failed judge and runs the rest instead of returning
+	// the failure.
+	logErrors bool
 }
 
 func collapseMessages(cfg AiConfig) AiConfig {
@@ -90,8 +96,8 @@ func activeJudges(cfg AiConfig) []JudgeRef {
 // already produced and paid for, so a judge that cannot be resolved (most
 // often one toggled off in LaunchDarkly) is logged and skipped rather than
 // failing the call, as in the JavaScript SDK.
-func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context) (AiConfig, VariationMeta, ldvalue.Value, bool) {
-	cfg, meta, value, err := extractVariation(ctx, key, userCtx, nil, false)
+func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context, existingClient bool) (AiConfig, VariationMeta, ldvalue.Value, bool) {
+	cfg, meta, value, err := extractVariation(ctx, key, userCtx, nil, existingClient)
 	if err != nil {
 		sdkLogger().Error("judge skipped: its config could not be resolved", "judge", key, "error", err)
 		return AiConfig{}, VariationMeta{}, ldvalue.Null(), false
@@ -105,7 +111,7 @@ func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context) (A
 func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error) {
 	results := map[string]JudgeResult{}
 	for _, j := range activeJudges(a.cfg) {
-		jcfg, jmeta, jvalue, ok := resolveJudge(ctx, j.Key, a.userCtx)
+		jcfg, jmeta, jvalue, ok := resolveJudge(ctx, j.Key, a.userCtx, a.existingClient)
 		if !ok {
 			continue
 		}
@@ -148,6 +154,10 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 			}
 			return nil
 		})
+		if err != nil && a.logErrors {
+			sdkLogger().Error("judge failed", "judge", j.Key, "error", err)
+			continue
+		}
 		if err != nil {
 			return results, err
 		}
@@ -181,7 +191,7 @@ func buildJudgeTasksFromArgs(ctx context.Context, args buildJudgeTasksArgs) ([]J
 func buildJudgeTasks(ctx context.Context, a judgeArgs) ([]JudgeTask, error) {
 	tasks := []JudgeTask{}
 	for _, j := range activeJudges(a.cfg) {
-		jcfg, jmeta, jvalue, ok := resolveJudge(ctx, j.Key, a.userCtx)
+		jcfg, jmeta, jvalue, ok := resolveJudge(ctx, j.Key, a.userCtx, a.existingClient)
 		if !ok {
 			continue
 		}

@@ -47,8 +47,16 @@ result := shadowrequests.RunShadow(ctx, <-queue, handlers) // never fails; see r
 Shadows run in a background goroutine by default, detached from the caller's cancellation, and
 each one ends at its timeout. `aiserver.Shutdown` cancels any that are still running, and a
 cancelled shadow records nothing. A shadow always runs as
-a plain invoke, even when the served call streamed, with no tools and no judges. Pass handlers for
+a plain invoke, even when the served call streamed, with no tools. Pass handlers for
 every provider your shadow variations use, since a shadow with no matching handler is skipped.
+
+When a shadow variation has judges attached, they score the shadow's response after it succeeds,
+the same way they score the served variation's, with each judge's own sampling rate. Their metric
+events carry the shadow's track data (its `variationKey`, `isShadow` and `shadowRequestId`), so the
+scores show under the shadow variation and never mix into the served variation's results. The
+scores are also on `ShadowResult.JudgeResults`, which is nil when no judge ran. The shadow's timeout
+covers only its own handler, a judge that fails is logged and never sets `Error`, and `SkipJudges`
+applies only to the served variation. Pass handlers for your judges' providers too.
 Shadows need a client with `JSONVariationDetail`, which `*ld.LDClient` has; with any other client
 the served call still runs and no shadow does. Plain `aiserver.Config` never runs shadows.
 
