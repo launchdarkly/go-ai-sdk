@@ -244,7 +244,9 @@ func TestToolHandlersKeepKeysAndPassThrough(t *testing.T) {
 		})},
 	}
 	mustRun(t, m, args)
-	if !reflect.DeepEqual(results[0], map[string]any{"from": "lib"}) || errs[0] != nil || errs[1] != wantErr {
+	// A failed tool answers the model instead of failing the handler.
+	if !reflect.DeepEqual(results[0], map[string]any{"from": "lib"}) || errs[0] != nil ||
+		results[1] != "Error: Error: tool failed" || errs[1] != nil {
 		t.Fatalf("results %v errs %v", results, errs)
 	}
 }

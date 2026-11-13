@@ -115,6 +115,7 @@ func (t *rowTrace) end() { t.once.Do(func() { t.root.End() }) }
 
 // errorType is the error's type name without package or pointer, the Go
 // form of Python's type(error).__name__: "errorString" for errors.New.
+// The model is told "Error" for unexported types instead (toolErrorResult).
 func errorType(err error) string {
 	if err == nil {
 		return ""

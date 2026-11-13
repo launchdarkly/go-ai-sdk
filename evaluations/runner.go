@@ -435,15 +435,21 @@ func rowConfig(base aiserver.AiConfig) aiserver.AiConfig {
 }
 
 // rowTools wraps each local tool with the row's own recorder, under its
-// original key; native tools pass through unrecorded.
+// original key (handoff tools are not recorded), and every local tool with
+// answerErrors outside that, so the recorder still sees a failed call;
+// native tools pass through unrecorded.
 func (r *runState) rowTools(rec *trajectory.Recorder) map[string]aiserver.ToolHandler {
 	out := make(map[string]aiserver.ToolHandler, len(r.tools))
 	for _, t := range r.tools {
-		if fn, ok := t.impl.(aiserver.ToolFunc); ok && trajectory.ShouldObserve(t.key, nil) {
-			out[t.key] = aiserver.ToolFunc(rec.Observe(t.key, fn))
+		fn, ok := t.impl.(aiserver.ToolFunc)
+		if !ok {
+			out[t.key] = t.impl
 			continue
 		}
-		out[t.key] = t.impl
+		if trajectory.ShouldObserve(t.key, nil) {
+			fn = aiserver.ToolFunc(rec.Observe(t.key, fn))
+		}
+		out[t.key] = answerErrors(fn)
 	}
 	return out
 }
