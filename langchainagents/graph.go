@@ -79,6 +79,9 @@ var unsafeNameChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 // JavaScript adapter does.
 func sanitizeName(key string) string { return unsafeNameChars.ReplaceAllString(key, "_") }
 
+// handoffIgnored answers a hand-off call after the first one in a node run.
+const handoffIgnored = "Ignored: only the first transfer in a turn routes."
+
 func handoffToolName(targetKey string) string { return "transfer_to_" + sanitizeName(targetKey) }
 
 // handoffCommand is a transfer_to_<target> tool's result: a Command routing
@@ -411,10 +414,10 @@ func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.Too
 		if target, ok := handoffs[name]; ok {
 			markTool(span, name, tc.ID)
 			if chosen != "" {
-				return langchainwire.ToolResponse(tc, "Ignored: already transferring to "+chosen+"."), nil, nil
+				return langchainwire.ToolResponse(tc, handoffIgnored), nil, nil
 			}
 			chosen = target // the handoff is tracked once the target has run
-			return langchainwire.ToolResponse(tc, "Transferred to "+target+"."), handoffCommand(target), nil
+			return langchainwire.ToolResponse(tc, "Handed off to "+target+"."), handoffCommand(target), nil
 		}
 		if nt := natives[name]; nt != nil {
 			markTool(span, name, tc.ID)

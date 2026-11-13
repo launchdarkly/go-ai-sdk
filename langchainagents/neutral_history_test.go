@@ -57,7 +57,7 @@ func TestToLangGraphHandoffToToolLessNode(t *testing.T) {
 	}
 	want := []turn{{sys, "Garden"}, {human, "who cut the roses?"},
 		{ai, "Routing.\n[Tool call] transfer_to_gardener {}"},
-		{human, "[Tool result] transfer_to_gardener: Transferred to gardener."}}
+		{human, "[Tool result] transfer_to_gardener: Handed off to gardener."}}
 	if got := turns(gardener.call(0).msgs); !reflect.DeepEqual(got, want) {
 		t.Errorf("gardener input =\n%v\nwant\n%v", got, want)
 	}
@@ -101,5 +101,31 @@ func TestNeutralHistory(t *testing.T) {
 				t.Errorf("non-text part %T left on %s", p, m.Role)
 			}
 		}
+	}
+}
+
+// The hand-off results use the shared wording: the first transfer in a
+// message routes ("Handed off to <target>."), a later one is answered
+// "Ignored: only the first transfer in a turn routes.".
+func TestToLangGraphHandoffResultText(t *testing.T) {
+	installClient(t, &fakeLD{variations: map[string]map[string]any{
+		"g":   graphFlag("hub", map[string][]any{"hub": {edge("a"), edge("b")}}),
+		"hub": node("Hub", "m"),
+		"a":   node("A", "m"),
+		"b":   node("B", "m"),
+	}})
+	two := scripted{resp: &llms.ContentResponse{Choices: []*llms.ContentChoice{{StopReason: "tool_use",
+		ToolCalls: []llms.ToolCall{toolCall("transfer_to_a", nil), toolCall("transfer_to_b", nil)}, GenerationInfo: usageInfo(1, 1)}}}}
+	fm := map[string]*fakeModel{"hub": {turns: []scripted{two}}, "a": {turns: []scripted{textTurn("from a", 1, 1)}}, "b": {}}
+	res, err := must(ToLangGraph(resolve("g"), &NativeGraphOptions{ModelFactory: models(fm)})).Invoke(bg, "hi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Response != "from a" || fm["b"].count() != 0 {
+		t.Errorf("response %q, b calls %d", res.Response, fm["b"].count())
+	}
+	want := "[Tool result] transfer_to_a: Handed off to a.\n[Tool result] transfer_to_b: Ignored: only the first transfer in a turn routes."
+	if got := turns(fm["a"].call(0).msgs); got[len(got)-1] != (turn{human, want}) {
+		t.Errorf("a's last input = %q, want %q", got[len(got)-1].text, want)
 	}
 }
