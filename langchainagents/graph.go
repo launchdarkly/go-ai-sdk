@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"slices"
 	"sort"
@@ -538,7 +539,10 @@ func compactArgs(args string) string {
 	d := json.NewDecoder(strings.NewReader(args))
 	d.UseNumber() // keep numbers as written
 	var v any
-	if d.Decode(&v) != nil || d.More() {
+	if d.Decode(&v) != nil {
+		return args
+	}
+	if _, err := d.Token(); err != io.EOF { // trailing data, even a stray } or ]
 		return args
 	}
 	if v == nil {

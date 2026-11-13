@@ -81,14 +81,14 @@ func TestNeutralHistory(t *testing.T) {
 		result("1", "", "one"),
 		{Role: ai, Parts: []llms.ContentPart{img.Parts[0]}}, // no text left: dropped
 		{Role: human, Parts: []llms.ContentPart{llms.TextContent{Text: "next"}}},
-		{Role: ai, Parts: []llms.ContentPart{call("3", "raw", "not json")}},
+		{Role: ai, Parts: []llms.ContentPart{call("3", "raw", "not json"), call("4", "extra", `{"a":1}}`)}},
 	}
 	got := neutralHistory(in)
 	want := []turn{{sys, "s"}, {human, ""},
 		{ai, "ab\n[Tool call] first {\"n\":{\"x\":[1,2.50]},\"q\":\"café & <tea>\"}\n[Tool call] second {}"},
 		{human, "[Tool result] first: one\n[Tool result] second: two\n[Tool result] orphan: lost"},
 		{human, "next"},
-		{ai, "[Tool call] raw not json"}}
+		{ai, "[Tool call] raw not json\n[Tool call] extra {\"a\":1}}"}}
 	if !reflect.DeepEqual(turns(got), want) {
 		t.Errorf("got\n%v\nwant\n%v", turns(got), want)
 	}
