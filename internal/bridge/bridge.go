@@ -37,6 +37,16 @@ type RunOptions struct {
 	ExistingClient bool                 // true: use the initialized client and never start one
 	NoFlagEvent    bool                 // true: no feature_flag event on the handler's root span
 	NoUsage        bool                 // true: no $ld:ai:sdk:usage for the call (SDK packages report their own)
+	// WrapHandler, when set, wraps the handler that runs the config, in both
+	// Invoke and Stream. It must be
+	// func(*aiserver.ProviderHandler) *aiserver.ProviderHandler; any other
+	// non-nil value panics at run time. The config's judges get the
+	// unwrapped handlers.
+	WrapHandler any
+	// LogJudgeErrors true: a judge that fails or panics is logged and
+	// skipped, and the run still succeeds with the other judges' results. A
+	// panic is still tracked as the judge's failed generation.
+	LogJudgeErrors bool
 }
 
 // ConversationID returns the conversation id bound on ctx, or "". Set by the
