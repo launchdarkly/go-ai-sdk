@@ -23,7 +23,7 @@ import (
 
 const (
 	PackageName    = "github.com/launchdarkly/go-ai-sdk/claudemessages"
-	PackageVersion = "0.1.0" // x-release-please-version
+	PackageVersion = "1.0.0" // x-release-please-version
 	// SpanName is the root span name for both the blocking and streaming paths.
 	SpanName = "invoke_agent"
 	// maxSteps bounds the tool loop. 10 matches the
