@@ -92,7 +92,8 @@ func handoffCommand(targetKey string) *stategraph.Command {
 
 // Invoke runs the graph from the root with input; variables fill each node's
 // instruction templates, and history precedes input in the graph's messages,
-// which every node sees (a hand-off target as text, see neutralHistory).
+// which every node sees, with earlier tool calls and results as text (see
+// neutralHistory).
 // It returns the last AI message's text and the run's total usage.
 func (g *LangGraph) Invoke(ctx context.Context, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error) {
 	co := aiserver.NewCallOptions(opts...)

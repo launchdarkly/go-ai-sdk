@@ -108,16 +108,19 @@ func TestNeutralHistory(t *testing.T) {
 // message routes ("Handed off to <target>."), a later one is answered
 // "Ignored: only the first transfer in a turn routes.".
 func TestToLangGraphHandoffResultText(t *testing.T) {
-	installClient(t, &fakeLD{variations: map[string]map[string]any{
+	ld := &fakeLD{variations: map[string]map[string]any{
 		"g":   graphFlag("hub", map[string][]any{"hub": {edge("a"), edge("b")}}),
 		"hub": node("Hub", "m"),
 		"a":   node("A", "m"),
 		"b":   node("B", "m"),
-	}})
+	}}
+	installClient(t, ld)
 	two := scripted{resp: &llms.ContentResponse{Choices: []*llms.ContentChoice{{StopReason: "tool_use",
 		ToolCalls: []llms.ToolCall{toolCall("transfer_to_a", nil), toolCall("transfer_to_b", nil)}, GenerationInfo: usageInfo(1, 1)}}}}
 	fm := map[string]*fakeModel{"hub": {turns: []scripted{two}}, "a": {turns: []scripted{textTurn("from a", 1, 1)}}, "b": {}}
-	res, err := must(ToLangGraph(resolve("g"), &NativeGraphOptions{ModelFactory: models(fm)})).Invoke(bg, "hi")
+	def := resolve("g")
+	ld.resetTracks()
+	res, err := must(ToLangGraph(def, &NativeGraphOptions{ModelFactory: models(fm), Context: user})).Invoke(bg, "hi")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,5 +130,30 @@ func TestToLangGraphHandoffResultText(t *testing.T) {
 	want := "[Tool result] transfer_to_a: Handed off to a.\n[Tool result] transfer_to_b: Ignored: only the first transfer in a turn routes."
 	if got := turns(fm["a"].call(0).msgs); got[len(got)-1] != (turn{human, want}) {
 		t.Errorf("a's last input = %q, want %q", got[len(got)-1].text, want)
+	}
+	if h := ld.events("$ld:ai:graph:handoff_success"); len(h) != 1 || h[0].data["targetKey"] != "a" {
+		t.Errorf("handoff_success = %+v, want one, to a", h)
+	}
+}
+
+// A regular tool call in the same message as a hand-off still runs, in the
+// same tools step; the router does not run again, and the target receives
+// both results, in call order, as one message.
+func TestToLangGraphToolAndHandoffInOneMessage(t *testing.T) {
+	installClient(t, twoNode())
+	var calls []string
+	both := scripted{resp: &llms.ContentResponse{Choices: []*llms.ContentChoice{{StopReason: "tool_use",
+		ToolCalls: []llms.ToolCall{toolCall("lookup", map[string]any{"q": "x"}), toolCall("transfer_to_billing", nil)}, GenerationInfo: usageInfo(1, 1)}}}}
+	fm := map[string]*fakeModel{"triage": {turns: []scripted{both}}, "billing": {turns: []scripted{textTurn("done", 1, 1)}}}
+	res, err := must(ToLangGraph(resolve("g"), &NativeGraphOptions{ToolHandlers: handlersFor(&calls), ModelFactory: models(fm)})).Invoke(bg, "hi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Response != "done" || !reflect.DeepEqual(calls, []string{"lookup"}) || fm["triage"].count() != 1 {
+		t.Errorf("response %q, tools %v, triage calls %d", res.Response, calls, fm["triage"].count())
+	}
+	want := "[Tool result] lookup: lookup done\n[Tool result] transfer_to_billing: Handed off to billing."
+	if got := turns(fm["billing"].call(0).msgs); got[len(got)-1] != (turn{human, want}) {
+		t.Errorf("billing's last input = %q, want %q", got[len(got)-1].text, want)
 	}
 }
