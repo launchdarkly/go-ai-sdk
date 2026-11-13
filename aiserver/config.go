@@ -39,10 +39,11 @@ func variationToAny(v ldvalue.Value) any {
 }
 
 func readVariation(ctx context.Context, key string, userCtx ldcontext.Context) (map[string]any, *VariationMeta, error) {
-	return readVariationWith(ctx, key, userCtx, nil, false)
+	raw, _, meta, err := readVariationWith(ctx, key, userCtx, nil, false)
+	return raw, meta, err
 }
 
-func readVariationWith(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation, existingClient bool) (raw map[string]any, meta *VariationMeta, err error) {
+func readVariationWith(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation, existingClient bool) (raw map[string]any, value ldvalue.Value, meta *VariationMeta, err error) {
 	var c LDClient
 	if existingClient {
 		c, err = GetClient()
@@ -50,7 +51,7 @@ func readVariationWith(ctx context.Context, key string, userCtx ldcontext.Contex
 		c, err = InitClient(ctx, InitOptions{})
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, ldvalue.Null(), nil, err
 	}
 	def := ldvalue.ObjectBuild().SetBool("enabled", false).Build()
 	var v ldvalue.Value
@@ -68,11 +69,11 @@ func readVariationWith(ctx context.Context, key string, userCtx ldcontext.Contex
 		// No AI Config came back. Keep the SDK's reason (client not ready,
 		// unknown flag, wrong type) so the error names the real cause.
 		if evalErr != nil {
-			return nil, nil, fmt.Errorf("%w: variation %s returned null: %w", ErrConfigNotFound, key, evalErr)
+			return nil, ldvalue.Null(), nil, fmt.Errorf("%w: variation %s returned null: %w", ErrConfigNotFound, key, evalErr)
 		}
-		return nil, nil, fmt.Errorf("%w: variation %s returned null: the flag does not exist or is not an AI Config", ErrConfigNotFound, key)
+		return nil, ldvalue.Null(), nil, fmt.Errorf("%w: variation %s returned null: the flag does not exist or is not an AI Config", ErrConfigNotFound, key)
 	}
-	return raw, meta, nil
+	return raw, v, meta, nil
 }
 
 // parseMeta reads `_ldMeta` field by field, so one malformed field (for
@@ -93,19 +94,21 @@ func parseMeta(m map[string]any) *VariationMeta {
 	return meta
 }
 
-func extractVariation(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation, existingClient bool) (AiConfig, VariationMeta, error) {
-	raw, meta, err := readVariationWith(ctx, key, userCtx, variation, existingClient)
+// extractVariation also returns the variation as the LaunchDarkly SDK
+// evaluated it, for feature_flag.result.value.
+func extractVariation(ctx context.Context, key string, userCtx ldcontext.Context, variation bridge.Variation, existingClient bool) (AiConfig, VariationMeta, ldvalue.Value, error) {
+	raw, value, meta, err := readVariationWith(ctx, key, userCtx, variation, existingClient)
 	if err != nil {
-		return AiConfig{}, VariationMeta{}, err
+		return AiConfig{}, VariationMeta{}, ldvalue.Null(), err
 	}
 	if !meta.Enabled {
-		return AiConfig{}, VariationMeta{}, fmt.Errorf("%w: variation %s is not enabled", ErrConfigDisabled, key)
+		return AiConfig{}, VariationMeta{}, ldvalue.Null(), fmt.Errorf("%w: variation %s is not enabled", ErrConfigDisabled, key)
 	}
 	cfg, err := kitParseAiConfig(raw)
 	if err != nil {
-		return AiConfig{}, VariationMeta{}, errorf("invalid AI config for %q: %w", key, err)
+		return AiConfig{}, VariationMeta{}, ldvalue.Null(), errorf("invalid AI config for %q: %w", key, err)
 	}
-	return cfg, *meta, nil
+	return cfg, *meta, value, nil
 }
 
 func selectHandler(cfg AiConfig, meta VariationMeta, handlers []*ProviderHandler) (*ProviderHandler, error) {
@@ -139,6 +142,7 @@ func kitSelectHandler(handlers []*ProviderHandler, provider string, mode Mode) (
 type resolved struct {
 	cfg      AiConfig
 	meta     VariationMeta
+	value    ldvalue.Value
 	handler  *ProviderHandler
 	handlers []*ProviderHandler
 	tools    map[string]ToolHandler
@@ -147,7 +151,7 @@ type resolved struct {
 func (c *AIConfig) resolve(ctx context.Context, userCtx ldcontext.Context) (resolved, error) {
 	handlers := resolveHandlers(c.args.Registry, c.args.Handlers)
 	tools := resolveTools(c.args.Registry, c.args.ToolHandlers)
-	cfg, meta, err := extractVariation(ctx, c.args.Key, userCtx, c.opts.Variation, c.opts.ExistingClient)
+	cfg, meta, value, err := extractVariation(ctx, c.args.Key, userCtx, c.opts.Variation, c.opts.ExistingClient)
 	if err != nil {
 		return resolved{}, err
 	}
@@ -155,7 +159,7 @@ func (c *AIConfig) resolve(ctx context.Context, userCtx ldcontext.Context) (reso
 	if err != nil {
 		return resolved{}, err
 	}
-	return resolved{cfg, meta, h, handlers, tools}, nil
+	return resolved{cfg, meta, value, h, handlers, tools}, nil
 }
 
 func resolveOutputFormat(raw any, outputFormat map[string]any) any {
@@ -181,7 +185,7 @@ func (c *AIConfig) Invoke(ctx context.Context, userInput string, userCtx ldconte
 		return ProviderResponse{}, err
 	}
 	res, err := executeAndTrack(ctx, execArgs{
-		configKey: c.args.Key, config: r.cfg, meta: r.meta, userCtx: userCtx, handler: r.handler,
+		configKey: c.args.Key, config: r.cfg, meta: r.meta, value: r.value, userCtx: userCtx, handler: r.handler,
 		userInput: userInput, tools: r.tools, variables: variables, history: history, run: c.opts,
 	})
 	if err != nil {
@@ -215,7 +219,7 @@ func (c *AIConfig) Stream(ctx context.Context, userInput string, userCtx ldconte
 		}
 		var done streamDone
 		for ev, err := range executeAndStream(ctx, execArgs{
-			configKey: c.args.Key, config: r.cfg, meta: r.meta, userCtx: userCtx, handler: r.handler,
+			configKey: c.args.Key, config: r.cfg, meta: r.meta, value: r.value, userCtx: userCtx, handler: r.handler,
 			userInput: userInput, tools: r.tools, variables: variables, history: history, run: c.opts,
 		}, &done) {
 			if err != nil {

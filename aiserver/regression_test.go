@@ -81,7 +81,8 @@ func TestGraphJudgeUsesItsOwnProvidersHandler(t *testing.T) {
 }
 
 // judgeVisibleKeys is every variable a judge handler receives: the two judge
-// variables plus the context and track data every invocation gets.
+// variables plus the context and track data every invocation gets. A judge
+// whose handler captures content also gets __ldValue, its evaluated variation.
 var judgeVisibleKeys = []string{"__ld", "__ldContextTyped", "input", "ldContext", "message_history", "response_to_evaluate"}
 
 func TestRunJudgeVariablesAreExactlyTheJudgeKeys(t *testing.T) {

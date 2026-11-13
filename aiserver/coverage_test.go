@@ -507,8 +507,9 @@ func TestInlineJudgeVariablesAreExact(t *testing.T) {
 	if _, err := Config(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}, ToolHandlers: th}).Invoke(bg, "q", userCtx, WithVariables(map[string]any{"caller": "x"})); err != nil {
 		t.Fatal(err)
 	}
-	if keys := slices.Sorted(maps.Keys(judgeVars)); !slices.Equal(keys, judgeVisibleKeys) {
-		t.Errorf("judge variables = %v, want %v", keys, judgeVisibleKeys)
+	want := slices.Sorted(slices.Values(append([]string{"__ldValue"}, judgeVisibleKeys...))) // capture is on
+	if keys := slices.Sorted(maps.Keys(judgeVars)); !slices.Equal(keys, want) {
+		t.Errorf("judge variables = %v, want %v", keys, want)
 	}
 	if !strings.Contains(judgeVars["message_history"].(string), "1. lookup") {
 		t.Error("trajectory missing from message_history")

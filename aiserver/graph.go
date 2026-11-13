@@ -56,6 +56,8 @@ type GraphNode struct {
 	Config AiConfig
 	Meta   VariationMeta
 	Edges  []GraphEdge
+
+	value ldvalue.Value // the evaluated variation, for feature_flag.result.value
 }
 
 // IsTerminal reports whether the node has no outgoing edges.
@@ -143,6 +145,7 @@ type GraphDefinition struct {
 	userCtx   ldcontext.Context
 	opts      GraphOptions
 	trackData TrackData
+	value     ldvalue.Value // the graph variation, for feature_flag.result.value
 }
 
 // GetNode returns the node for key, or nil.
@@ -462,7 +465,7 @@ func (d *GraphDefinition) streamRoute(ctx context.Context, n *GraphNode, input s
 	}
 	var done streamDone
 	for ev, serr := range executeAndStream(ctx, execArgs{
-		configKey: n.Key, config: cfg, meta: n.Meta, userCtx: d.userCtx, handler: h,
+		configKey: n.Key, config: cfg, meta: n.Meta, value: n.value, userCtx: d.userCtx, handler: h,
 		userInput: input, tools: tools, variables: o.Variables, graphKey: d.Key, history: o.History,
 	}, &done) {
 		if serr != nil {
@@ -549,6 +552,7 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 		meta = parseMeta(m)
 	}
 	def.trackData = newTrackData(key, AiConfig{}, *meta, key)
+	def.value = v
 	var topo graphTopology
 	b, err := json.Marshal(raw)
 	if err != nil {
@@ -579,14 +583,14 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 		}
 	}
 	for _, k := range keys {
-		cfg, nmeta, err := extractVariation(ctx, k, userCtx, nil, false)
+		cfg, nmeta, nvalue, err := extractVariation(ctx, k, userCtx, nil, false)
 		if errors.Is(err, ErrConfigDisabled) {
 			return off(), nil // a turned-off node turns the graph off
 		}
 		if err != nil {
 			return off(), fmt.Errorf("graph %q node %q: %w", key, k, err)
 		}
-		def.nodes[k] = &GraphNode{Key: k, Config: cfg, Meta: nmeta}
+		def.nodes[k] = &GraphNode{Key: k, Config: cfg, Meta: nmeta, value: nvalue}
 	}
 	for _, n := range def.nodes {
 		n.Edges = def.EdgesFrom(n.Key)
@@ -684,8 +688,14 @@ func (g *AgentGraph) stream(ctx context.Context, input string, userCtx ldcontext
 
 		spanCtx, span := otel.Tracer(kitbase.TracerPrefix+"/aiserver").Start(ctx, kitbase.GraphSpanName)
 		span.SetAttributes(attribute.String("launchdarkly.graph.key", g.key))
-		// Context identity goes on the root handler span only, not here.
-		kitSetLDSpanAttributesFor(span, runTD, ldcontext.Context{})
+		// Context identity goes on the root handler span only, not here. The graph
+		// span has no handler, so the process-wide capture default decides whether
+		// it carries the variation.
+		graphValue := ldvalue.Null()
+		if CaptureDefault.enabled() {
+			graphValue = def.value
+		}
+		setLDSpanAttributes(span, runTD, ldcontext.Context{}, true, graphValue)
 
 		start := time.Now()
 		usage := TokenUsage{}

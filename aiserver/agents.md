@@ -108,6 +108,12 @@ written on spans only when capture is enabled for the call's `ctx`
 (`CaptureOn` / `CaptureOff`), else the process default from
 `Configure(SDKOptions{CaptureContent: ...})`, else on.
 
+- **Evaluated variation.** `prepare` passes the variation as the SDK returned
+  it to a handler that captures content, as `__ldValue` (unexported value type,
+  so template variables cannot set it), and the root span writes it as
+  `feature_flag.result.value`; otherwise the value is the JSON-quoted variation
+  key. Judges carry it in `JudgeTask.JudgeValue`; the graph span follows the
+  process default.
 - **Binding.** Each handler call binds its resolved setting on `ctx`. The core
   path (`executeAndTrack`, `executeAndStream`, evaluations) binds the value of
   the handler it routed to, marked pending; the `CreateHandler` wrapper

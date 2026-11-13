@@ -111,7 +111,11 @@ func (g *LangGraph) Invoke(ctx context.Context, input string, opts ...aiserver.C
 	spanCtx, span := otel.Tracer(PackageName).Start(ctx, kitbase.GraphSpanName)
 	defer span.End()
 	span.SetAttributes(attribute.String("launchdarkly.graph.key", def.Key))
-	handlerkit.SetLDSpanAttributesFor(span, r.graphTD, r.userCtx) // a node opens no root span, so the run's context identity goes here
+	// The graph flag is not an AI Config, so its span has no variation, as in the
+	// other SDKs: no variation key and no feature_flag.result.* attributes.
+	spanTD := r.graphTD
+	spanTD.VariationKey = ""
+	handlerkit.SetLDSpanAttributesFor(span, spanTD, r.userCtx) // a node opens no root span, so the run's context identity goes here
 	start := time.Now()
 
 	response, err := r.run(spanCtx, input, co.History)

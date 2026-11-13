@@ -8,6 +8,7 @@ import (
 	"iter"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
+	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 )
 
 // Mode is the handler mode a ProviderHandler serves.
@@ -265,9 +266,12 @@ type ProviderResponse struct {
 
 // JudgeTask is a serialisable deferred judge.
 type JudgeTask struct {
-	ConfigKey           string            `json:"configKey"`
-	JudgeConfig         AiConfig          `json:"judgeConfig"`
-	JudgeMeta           VariationMeta     `json:"judgeMeta"`
+	ConfigKey   string        `json:"configKey"`
+	JudgeConfig AiConfig      `json:"judgeConfig"`
+	JudgeMeta   VariationMeta `json:"judgeMeta"`
+	// JudgeValue is the judge variation as the LaunchDarkly SDK returned it. It
+	// is written on the judge span when the judge's handler captures content.
+	JudgeValue          ldvalue.Value     `json:"judgeValue"`
 	ActualOutput        string            `json:"actualOutput"`
 	UserInput           string            `json:"userInput"`
 	Trajectory          string            `json:"trajectory"`

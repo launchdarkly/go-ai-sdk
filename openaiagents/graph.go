@@ -127,7 +127,11 @@ func (g *NativeGraph) Invoke(ctx context.Context, input string, opts ...aiserver
 	spanCtx, span := otel.Tracer(PackageName).Start(ctx, kitbase.GraphSpanName)
 	defer span.End()
 	span.SetAttributes(attribute.String("launchdarkly.graph.key", def.Key))
-	handlerkit.SetLDSpanAttributesFor(span, graphTD, userCtx) // a node opens no root span, so the run's context identity goes here
+	// The graph flag is not an AI Config, so its span has no variation, as in the
+	// other SDKs: no variation key and no feature_flag.result.* attributes.
+	spanTD := graphTD
+	spanTD.VariationKey = ""
+	handlerkit.SetLDSpanAttributesFor(span, spanTD, userCtx) // a node opens no root span, so the run's context identity goes here
 	start := time.Now()
 
 	n := &nativeRun{g: g, ctx: spanCtx, userCtx: userCtx, tracking: userCtx.IsDefined(), graphTD: graphTD, runID: runID}

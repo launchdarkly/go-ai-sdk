@@ -12,6 +12,7 @@ import (
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
@@ -111,6 +112,7 @@ func TestToClaudeAgentsRun(t *testing.T) {
 	if ga["launchdarkly.graph.key"] != "g" || ga["launchdarkly.graph.path"] != "root->leaf" || ga["gen_ai.usage.total_tokens"] != "16" {
 		t.Errorf("graph span attrs = %v", ga)
 	}
+	checkNativeGraphFlagEvent(t, g[0])
 	// The run has no per-node invoke_agent root: every node span descends
 	// from the graph span (the leaf's through the root's sub-agent tool span),
 	// and each node is identified by its $ld:ai:graph:node event.
@@ -454,5 +456,31 @@ func TestToClaudeAgentsCycleBackEdgeDropped(t *testing.T) {
 	}
 	if out := buf.String(); !strings.Contains(out, "dropping cyclic edge") || !strings.Contains(out, "source=B target=A") {
 		t.Errorf("log = %q", out)
+	}
+}
+
+// checkNativeGraphFlagEvent asserts that a native graph span, which has no
+// variation of its own, writes an empty variation key and no result attributes.
+func checkNativeGraphFlagEvent(t *testing.T, s sdktrace.ReadOnlySpan) {
+	t.Helper()
+	for _, kv := range s.Attributes() {
+		if kv.Key == "launchdarkly.variation.key" && kv.Value.AsString() != "" {
+			t.Errorf("graph span launchdarkly.variation.key = %q, want empty", kv.Value.AsString())
+		}
+	}
+	events := 0
+	for _, ev := range s.Events() {
+		if ev.Name != "feature_flag" {
+			continue
+		}
+		events++
+		for _, kv := range ev.Attributes {
+			if k := string(kv.Key); k == "feature_flag.result.variant" || k == "feature_flag.result.value" {
+				t.Errorf("graph span feature_flag event has %s = %s", k, kv.Value.Emit())
+			}
+		}
+	}
+	if events != 1 {
+		t.Errorf("graph span feature_flag events = %d, want 1", events)
 	}
 }
