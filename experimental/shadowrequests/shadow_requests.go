@@ -1,6 +1,7 @@
 package shadowrequests
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1" //nolint:gosec // a sampling bucket, not a security check
 	"encoding/hex"
@@ -75,7 +76,7 @@ type ShadowTask struct {
 	Meta            aiserver.VariationMeta `json:"meta"`
 	UserInput       string                 `json:"userInput"`
 	History         []aiserver.Message     `json:"history,omitempty"`
-	Variables       map[string]any         `json:"variables,omitempty"`
+	Variables       ShadowVariables        `json:"variables,omitempty"`
 	UserContext     ldcontext.Context      `json:"userContext"`
 	Timeout         time.Duration          `json:"timeout"`
 	TrackData       map[string]any         `json:"trackData"`
@@ -439,7 +440,7 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 		NoUsage:        true,
 		NoFlagEvent:    true,
 	}).(*aiserver.AIConfig)
-	vars, _ := deepCopy(task.Variables).(map[string]any)
+	vars, _ := deepCopy(map[string]any(task.Variables)).(map[string]any)
 	resp, err := run.Invoke(ctx, task.UserInput, task.UserContext,
 		aiserver.WithVariables(vars), aiserver.WithHistory(copyHistory(task.History)))
 	if err != nil {
@@ -564,9 +565,63 @@ func jsonCopy(m map[string]any) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	return decodeVariables(b)
+}
+
+// ShadowVariables are a ShadowTask's template variables. It decodes from
+// JSON as a background shadow sees its variables: a number is a float64,
+// except a whole number beyond ±2^53, which is an int64 (a uint64 above that
+// range) so it keeps its exact value. Experimental.
+type ShadowVariables map[string]any
+
+// UnmarshalJSON decodes v as a background shadow sees its variables.
+func (v *ShadowVariables) UnmarshalJSON(b []byte) error {
+	vars, err := decodeVariables(b)
+	if err != nil {
+		return err
+	}
+	*v = vars
+	return nil
+}
+
+// maxExactInt is the largest whole number every float64 at or below it can
+// hold exactly.
+const maxExactInt = 1 << 53
+
+// decodeVariables decodes variables as ShadowVariables documents.
+func decodeVariables(b []byte) (map[string]any, error) {
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber()
 	var out map[string]any
-	err = json.Unmarshal(b, &out)
-	return out, err
+	if err := d.Decode(&out); err != nil {
+		return nil, err
+	}
+	fromNumbers(out)
+	return out, nil
+}
+
+// fromNumbers replaces every json.Number inside v, in place.
+func fromNumbers(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		for k, val := range t {
+			t[k] = fromNumbers(val)
+		}
+	case []any:
+		for i, val := range t {
+			t[i] = fromNumbers(val)
+		}
+	case json.Number:
+		if i, err := strconv.ParseInt(string(t), 10, 64); err == nil && (i > maxExactInt || i < -maxExactInt) {
+			return i
+		}
+		if u, err := strconv.ParseUint(string(t), 10, 64); err == nil && u > maxExactInt {
+			return u
+		}
+		f, _ := t.Float64()
+		return f
+	}
+	return v
 }
 
 func copyHistory(history []aiserver.Message) []aiserver.Message {

@@ -11,7 +11,7 @@ import (
 )
 
 // shadowSurface is the documented shadow requests surface.
-var shadowSurface = []string{"RunShadow", "ShadowAIConfig", "ShadowConfig", "ShadowOptions", "ShadowResult", "ShadowTask"}
+var shadowSurface = []string{"RunShadow", "ShadowAIConfig", "ShadowConfig", "ShadowOptions", "ShadowResult", "ShadowTask", "ShadowVariables"}
 
 func TestShadowSurfaceIsExactlyTheDocumentedSet(t *testing.T) {
 	got := exportedDecls(t, "shadow_requests.go")

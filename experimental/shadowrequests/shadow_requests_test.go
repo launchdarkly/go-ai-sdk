@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"iter"
 	"log/slog"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -1142,6 +1143,71 @@ func TestShadowVariablesAreDetachedFromTheCaller(t *testing.T) {
 		if !ok || m["name"] != "a" {
 			t.Fatalf("shadow variables %#v follow the caller's map", got)
 		}
+	}
+}
+
+func TestShadowVariablesKeepLargeIntegersExact(t *testing.T) {
+	const id = int64(1<<53 + 1) // 9007199254740993: the nearest float64 is 9007199254740992
+	const prompt = "{{id}} {{big}} {{limit}} {{ratio}} {{huge}} {{negZero}} {{list}}"
+	served := map[string]any{"id": id, "big": uint64(1<<64 - 1), "limit": 3, "ratio": 0.5, "huge": 1e21,
+		"negZero": math.Copysign(0, -1), "list": []any{id}}
+	want := aiserver.ParseTemplate(prompt, served)
+	if want != "9007199254740993 18446744073709551615 3 0.5 1000000000000000000000 -0 [9007199254740993]" {
+		t.Fatalf("served call renders %q", want)
+	}
+	check := func(name string, vars map[string]any) {
+		t.Helper()
+		if vars["id"] != id || vars["limit"] != float64(3) {
+			t.Fatalf("%s: id %#v, limit %#v", name, vars["id"], vars["limit"])
+		}
+		if got := aiserver.ParseTemplate(prompt, vars); got != want {
+			t.Fatalf("%s renders %q, the served call %q", name, got, want)
+		}
+	}
+
+	install(t, fallthroughPayload(), ldreason.NewEvalReasonFallthrough())
+	p := newPair()
+	invokeAndWait(t, mustShadow(t, p.handlers(), ShadowOptions{}), aiserver.WithVariables(served))
+	check("background shadow", p.b.last().Variables)
+
+	var tasks []ShadowTask
+	invokeAndWait(t, mustShadow(t, p.handlers(), ShadowOptions{OnTask: func(task ShadowTask) { tasks = append(tasks, task) }}),
+		aiserver.WithVariables(served))
+	check("task", tasks[0].Variables)
+	b, err := json.Marshal(tasks[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded ShadowTask
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	check("task after a JSON round trip", decoded.Variables)
+	if decoded.ShadowRequestID != tasks[0].ShadowRequestID || decoded.ConfigRaw == nil {
+		t.Fatalf("decoded %+v", decoded)
+	}
+	if res := RunShadow(context.Background(), decoded, p.handlers()); res.Error != "" {
+		t.Fatal(res.Error)
+	}
+	check("deferred shadow", p.b.last().Variables)
+}
+
+func TestTaskEmbeddedInAQueueEnvelopeSurvivesJSON(t *testing.T) {
+	type job struct {
+		ShadowTask
+		Attempts int `json:"attempts"`
+	}
+	const id = int64(1<<53 + 1)
+	b, err := json.Marshal(job{ShadowTask: ShadowTask{ConfigKey: "cfg", UserContext: shadowUser, Variables: map[string]any{"id": id}}, Attempts: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded job
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Attempts != 3 || decoded.ConfigKey != "cfg" || decoded.Variables["id"] != id {
+		t.Fatalf("decoded %+v", decoded)
 	}
 }
 
