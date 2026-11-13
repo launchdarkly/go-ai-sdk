@@ -133,7 +133,5 @@ to pre-warm.
 
 - **No tracking without `NativeGraphOptions.Context`.** The zero context means "do not track",
   matching the JS/Python `context` option; spans are still emitted.
-- **A handed-off node sees the source node's `transfer_to_*` tool call** in its messages but not
-  the tool definition. OpenAI accepts this; Anthropic may reject tool blocks for undefined tools.
 - **An injected `Options.Model` ignores `config.model.name`.** Use `ModelFactory` when the
   variation should pick the model.

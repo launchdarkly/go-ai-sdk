@@ -75,7 +75,7 @@ func TestNeutralHistory(t *testing.T) {
 		{Role: sys, Parts: []llms.ContentPart{llms.TextContent{Text: "s"}}},
 		img,
 		{Role: ai, Parts: []llms.ContentPart{llms.TextContent{Text: "a"}, llms.TextContent{Text: "b"},
-			call("1", "first", ` {"q": "café", "n": {"x": [1, 2]}} `), call("2", "second", "")}},
+			call("1", "first", ` {"q": "café & <tea>", "n": {"x": [1, 2.50]}} `), call("2", "second", "")}},
 		result("x", "orphan", "lost"), // no matching call: goes last
 		result("2", "ignored-name", "two"),
 		result("1", "", "one"),
@@ -85,7 +85,7 @@ func TestNeutralHistory(t *testing.T) {
 	}
 	got := neutralHistory(in)
 	want := []turn{{sys, "s"}, {human, ""},
-		{ai, "ab\n[Tool call] first {\"q\":\"café\",\"n\":{\"x\":[1,2]}}\n[Tool call] second {}"},
+		{ai, "ab\n[Tool call] first {\"n\":{\"x\":[1,2.50]},\"q\":\"café & <tea>\"}\n[Tool call] second {}"},
 		{human, "[Tool result] first: one\n[Tool result] second: two\n[Tool result] orphan: lost"},
 		{human, "next"},
 		{ai, "[Tool call] raw not json"}}

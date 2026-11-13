@@ -501,7 +501,7 @@ func neutralHistory(msgs []llms.MessageContent) []llms.MessageContent {
 			out = append(out, m)
 			continue
 		}
-		calls = calls[:0:0]
+		calls = nil
 		var text strings.Builder
 		for _, p := range m.Parts {
 			switch v := p.(type) {
@@ -529,17 +529,26 @@ func neutralHistory(msgs []llms.MessageContent) []llms.MessageContent {
 }
 
 // compactArgs is a tool call's arguments as compact JSON ({} when empty),
-// in the order the model wrote them. Arguments that are not JSON pass through.
+// written by the standard encoder without HTML escaping, so "&" stays "&".
+// Arguments that are not JSON pass through.
 func compactArgs(args string) string {
 	if strings.TrimSpace(args) == "" {
 		return "{}"
 	}
-	var b bytes.Buffer
-	if json.Compact(&b, []byte(args)) != nil {
+	d := json.NewDecoder(strings.NewReader(args))
+	d.UseNumber() // keep numbers as written
+	var v any
+	if d.Decode(&v) != nil || d.More() {
 		return args
 	}
-	if s := b.String(); s != "null" {
-		return s
+	if v == nil {
+		return "{}"
 	}
-	return "{}"
+	var b bytes.Buffer
+	e := json.NewEncoder(&b)
+	e.SetEscapeHTML(false)
+	if e.Encode(v) != nil {
+		return args
+	}
+	return strings.TrimSuffix(b.String(), "\n")
 }
