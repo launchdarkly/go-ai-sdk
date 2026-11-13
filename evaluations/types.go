@@ -103,12 +103,14 @@ type GenerationOverrides struct {
 	OutputFormat   map[string]any
 }
 
-// AIConfigRef identifies an existing AI Config variation whose latest
-// version seeds the run's generation settings.
+// AIConfigRef identifies an AI Config whose variation seeds the run.
 type AIConfigRef struct {
 	// Key is the AI Config key.
 	Key string
-	// Variation is the variation key.
+	// Variation is the variation key. Empty means the variation served to a
+	// context of kind "evaluation" whose key is RunOptions.Key. The run then
+	// uses that served _ldMeta.version, which may be older than the newest
+	// management-API version.
 	Variation string
 }
 

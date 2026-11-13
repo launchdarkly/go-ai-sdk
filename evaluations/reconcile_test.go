@@ -47,6 +47,11 @@ func TestRunAlwaysPatchesExistingOfflineEvaluation(t *testing.T) {
 		!reflect.DeepEqual(patch["tools"], []any{}) || !reflect.DeepEqual(patch["criteria"], []any{}) {
 		t.Fatalf("patch snapshot %s", toJSON(patch))
 	}
+	for _, k := range []string{"configKey", "variationKey", "variationVersion"} {
+		if _, has := patch[k]; has {
+			t.Fatalf("generation-only PATCH must omit %s, not clear it: %s", k, toJSON(patch))
+		}
+	}
 	ev := e.ld.events(generationEventName)[0].Data
 	if ev["evaluationVersion"] != 4.0 || ev["evaluationKey"] != "eval-key" {
 		t.Fatalf("event identity %v", ev)

@@ -96,7 +96,6 @@ func TestRunValidationBeforeIO(t *testing.T) {
 		{"both sources", func(a *RunOptions) { a.AIConfig = &AIConfigRef{Key: "k", Variation: "v"} }, []string{"not both"}},
 		{"overrides without AI Config", func(a *RunOptions) { a.Overrides = &GenerationOverrides{} }, []string{"Overrides apply only with AIConfig"}},
 		{"blank aiConfig.key", func(a *RunOptions) { a.Generation, a.AIConfig = nil, &AIConfigRef{Variation: "v"} }, []string{"AIConfig.Key"}},
-		{"blank aiConfig.variation", func(a *RunOptions) { a.Generation, a.AIConfig = nil, &AIConfigRef{Key: "k", Variation: " "} }, []string{"AIConfig.Variation"}},
 		{"missing provider", func(a *RunOptions) { a.Generation.Provider = "" }, []string{"generation.provider is required"}},
 		{"missing model", func(a *RunOptions) { a.Generation.Model = "" }, []string{"generation.model is required"}},
 		{"missing mode", func(a *RunOptions) { a.Generation.Mode = "" }, []string{"generation.mode is required. Set it to 'completion' or 'agent'."}},
