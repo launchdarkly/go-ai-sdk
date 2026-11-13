@@ -672,3 +672,26 @@ func TestToLangGraphNodeSpansAndPayloads(t *testing.T) {
 		}
 	}
 }
+
+// A Bedrock node's spans carry gen_ai.provider.name "aws.bedrock".
+func TestToLangGraphBedrockProviderName(t *testing.T) {
+	ld := twoNode()
+	ld.variations["billing"]["provider"] = map[string]any{"name": "Bedrock"}
+	exp := installClient(t, ld)
+	fm := map[string]*fakeModel{
+		"triage":  {turns: []scripted{toolTurn("transfer_to_billing", nil)}},
+		"billing": {turns: []scripted{textTurn("billed", 1, 1)}},
+	}
+	if _, err := must(ToLangGraph(resolve("g"), &NativeGraphOptions{ModelFactory: models(fm)})).Invoke(bg, "hi"); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for name, ss := range spansByName(exp) {
+		if strings.HasPrefix(name, "chat ") {
+			got[name] = spanAttrs(ss[0])["gen_ai.provider.name"]
+		}
+	}
+	if got["chat triage-model"] != "openai" || got["chat billing-model"] != "aws.bedrock" {
+		t.Errorf("chat provider names = %v", got)
+	}
+}

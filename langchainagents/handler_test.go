@@ -692,3 +692,21 @@ func TestToolPanicEndsSpans(t *testing.T) {
 		}
 	}
 }
+
+// gen_ai.provider.name is the lowercased configured provider, with the
+// Bedrock route written as "aws.bedrock", as the Bedrock handlers write it.
+func TestProviderNameBedrock(t *testing.T) {
+	for provider, want := range map[string]string{"Anthropic": "anthropic", "": "openai", "Bedrock": "aws.bedrock"} {
+		h, _, exp := setup(t, textTurn("ok", 1, 1))
+		c := instr("x")
+		c.Provider.Name = provider
+		if _, err := h.Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "q"}); err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range exp.GetSpans().Snapshots() {
+			if a := spanAttrs(s); a["gen_ai.provider.name"] != want {
+				t.Errorf("provider %q: %s gen_ai.provider.name = %q, want %q", provider, s.Name(), a["gen_ai.provider.name"], want)
+			}
+		}
+	}
+}

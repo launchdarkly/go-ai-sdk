@@ -281,7 +281,7 @@ func (r *graphRun) nodeFunc(n *aiserver.GraphNode) func(context.Context, any) (a
 		// Each node run is an agent run with its own root span, carrying the
 		// node's config association and the context identity.
 		span := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
-			Tracer: PackageName, Name: SpanName, System: langchainwire.GenAISystem, ProviderName: langchainwire.ProviderName(cfg), Operation: operation,
+			Tracer: PackageName, Name: SpanName, System: langchainwire.GenAISystem, ProviderName: langchainwire.SpanProviderName(cfg), Operation: operation,
 			RequestModel: cfg.Model.Name,
 		}, aiserver.HandlerRequest{}, promptOf(system, in))
 		defer span.EndOnPanic()

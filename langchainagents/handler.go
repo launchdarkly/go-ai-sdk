@@ -142,7 +142,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 		p.System = kitbase.WithOutputFormat(p.System, cfg.OutputFormat)
 	}
 	r := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
-		Tracer: PackageName, Name: SpanName, System: langchainwire.GenAISystem, ProviderName: langchainwire.ProviderName(cfg), Operation: operation,
+		Tracer: PackageName, Name: SpanName, System: langchainwire.GenAISystem, ProviderName: langchainwire.SpanProviderName(cfg), Operation: operation,
 		RequestModel: cfg.Model.Name,
 	}, req, p)
 	defer r.EndOnPanic()

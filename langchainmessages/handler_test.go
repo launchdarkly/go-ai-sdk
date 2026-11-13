@@ -630,9 +630,10 @@ func TestStructuredOutput(t *testing.T) {
 }
 
 // LangChain rule: gen_ai.system is "langchain" on every span, and
-// gen_ai.provider.name is the lowercased configured provider.
+// gen_ai.provider.name is the lowercased configured provider, with the
+// Bedrock route written as "aws.bedrock", as the Bedrock handlers write it.
 func TestGenAISystemFromProvider(t *testing.T) {
-	for provider, want := range map[string]string{"Anthropic": "anthropic", "OpenAI": "openai", "": "openai"} {
+	for provider, want := range map[string]string{"Anthropic": "anthropic", "OpenAI": "openai", "": "openai", "Bedrock": "aws.bedrock", "bedrock": "aws.bedrock"} {
 		h, _, exp := setup(t, textTurn("ok", 1, 1))
 		c := instr("x")
 		c.Provider.Name = provider

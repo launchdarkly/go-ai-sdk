@@ -610,3 +610,19 @@ func TestNoUserTurnWithoutRowInput(t *testing.T) {
 		t.Errorf("no config messages besides system and no input: there is no input message, got %v", spanAttrs(chat)["gen_ai.input.messages"])
 	}
 }
+
+// A Bedrock config's spans name the provider aws.bedrock, as the Bedrock and
+// LangChain handlers write it; other providers are lowercased as configured.
+func TestModelIdentityBedrock(t *testing.T) {
+	for provider, want := range map[string]string{"Bedrock": "aws.bedrock", "bedrock": "aws.bedrock", "OpenAI": "openai", "": ""} {
+		got := map[string]string{}
+		var cfg aiserver.AiConfig
+		cfg.Provider.Name = provider
+		for _, kv := range modelIdentity(cfg) {
+			got[string(kv.Key)] = kv.Value.AsString()
+		}
+		if got["gen_ai.system"] != want || got["gen_ai.provider.name"] != want {
+			t.Errorf("provider %q: gen_ai.system = %q, gen_ai.provider.name = %q, want %q", provider, got["gen_ai.system"], got["gen_ai.provider.name"], want)
+		}
+	}
+}

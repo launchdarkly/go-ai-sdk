@@ -53,7 +53,7 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
 ## Implementation details
 
 - **`config`** — `ModelConfig` applies the Bedrock `model.region` prefix; lowercased
-  `provider.name` is `gen_ai.provider.name` (`gen_ai.system` is always `langchain`) and picks the built-in model. `handlerkit.ComposePrompt(req,
+  `provider.name` is `gen_ai.provider.name` (`aws.bedrock` for `bedrock`; `gen_ai.system` is always `langchain`) and picks the built-in model. `handlerkit.ComposePrompt(req,
   ModeAgent)` gives the system prompt (instructions win over system messages) and the turns.
   `outputFormat` (blocking only) appends `kitbase.OutputFormatInstruction` to the system prompt
   (best effort). `model.parameters` → `llms.CallOption`s; `model.custom` is never read.
