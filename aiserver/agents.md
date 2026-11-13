@@ -92,6 +92,10 @@ ConversationIDSpanProcessor, Track, PackageName, PackageVersion
    `JSONVariation`, and its tracked runs use the options' run id, extra track
    data and span attributes.
 3. Select the handler: exact `[provider, mode]`, then `["*", mode]`, else error.
+   `RunOptions.WrapHandler` wraps only this handler; judges get the unwrapped
+   handler and the full handler list. `RunOptions.ExistingClient` also applies
+   to judge resolution, and `RunOptions.LogJudgeErrors` logs a failed judge and
+   runs the rest instead of returning the error.
 4. Tracked execution: mint `TrackData`, wrap tools (trajectory recorder inside
    the `$ld:ai:tool_call` wrapper), inject `variables.ldContext` and `__ld`,
    call the handler, track duration, success/error and tokens. A handler
