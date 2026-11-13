@@ -317,8 +317,9 @@ func TestToLangGraphRun(t *testing.T) {
 	if res.Response != "refunded" || res.Usage != (aiserver.TokenUsage{Input: 9, Output: 4, Total: 13}) || !slices.Equal(calls, []string{"refund"}) {
 		t.Errorf("res = %+v calls %v", res, calls)
 	}
-	// The leaf sees the conversation so far, under its own system prompt.
-	if got := turns(fm["billing"].call(0).msgs); len(got) != 4 || got[0] != (turn{sys, "Bill"}) || got[1] != (turn{human, "hello"}) || got[3].role != tool {
+	// The leaf sees the conversation so far as text, under its own system prompt.
+	if got := turns(fm["billing"].call(0).msgs); len(got) != 4 || got[0] != (turn{sys, "Bill"}) || got[1] != (turn{human, "hello"}) ||
+		got[3] != (turn{human, "[Tool result] transfer_to_billing: Transferred to billing."}) {
 		t.Errorf("leaf input = %v", got)
 	}
 	if got := toolNames(fm["billing"].call(0).opts); !reflect.DeepEqual(got, []string{"refund"}) {

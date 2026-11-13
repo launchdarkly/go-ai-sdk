@@ -77,7 +77,12 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
   equivalent) over the graph's messages. A `transfer_to_<target>` tool returns
   `&stategraph.Command{Goto: target}`; the inner graph ends, and the outer node returns a `Command`
   with the new messages, which the runner follows instead of the static edge. History is read by
-  the root node only and never enters the shared state. Node names are sanitized keys; a name
+  the root node only and never enters the shared state. A node receives the messages from before
+  it was entered as provider-neutral text (`neutralHistory`): each AI message's text plus one
+  `[Tool call] <name> <args>` line per call, and its tool results as one human message of
+  `[Tool result] <name>: <text>` lines; the messages its own tool loop adds stay native. A target
+  on another provider, or a Bedrock node with no tools, never receives another node's tool blocks.
+  Node names are sanitized keys; a name
   equal to `END` or shared by two nodes fails with `ErrNodeName` (`AddNode` would silently replace).
 - **Tracking (ToLangGraph, only with `NativeGraphOptions.Context`)** — per first node visit
   `$ld:ai:graph:node {nodeKey, index}`; per node run `$ld:ai:duration:total`,

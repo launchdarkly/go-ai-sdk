@@ -1,8 +1,10 @@
 package langchainagents
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"slices"
@@ -281,6 +283,9 @@ func (r *graphRun) nodeFunc(n *aiserver.GraphNode) func(context.Context, any) (a
 		if n == r.g.def.Root {
 			in = append(slices.Clip(r.rootHistory), in...)
 		}
+		// The node's own tool loop runs inside a.invoke, so everything in is
+		// from before this entry: send it as text, not provider tool blocks.
+		in = neutralHistory(in)
 		system := handlerkit.ComposePrompt(aiserver.HandlerRequest{Config: n.Config, Variables: r.variables}, aiserver.ModeAgent).System
 		// A node opens no root span: its spans nest under the graph span, and
 		// its $ld:ai:graph:node event names it.
@@ -447,4 +452,94 @@ func promptOf(system string, msgs []llms.MessageContent) handlerkit.Prompt {
 		p.Turns = append(p.Turns, aiserver.Message{Role: cmp.Or(role, string(m.Role)), Text: b.String()})
 	}
 	return p
+}
+
+// neutralHistory rewrites the messages a node finds when it is entered as
+// provider-neutral text, so a target on another provider never receives the
+// previous node's tool blocks (Bedrock Converse rejects toolUse/toolResult
+// blocks from a request that declares no tools). Human and system messages
+// pass through. An AI message keeps its text and gains one
+// "[Tool call] <name> <args>" line per call; the tool results after it become
+// one human message of "[Tool result] <name>: <text>" lines, in call order.
+func neutralHistory(msgs []llms.MessageContent) []llms.MessageContent {
+	out := make([]llms.MessageContent, 0, len(msgs))
+	var calls []llms.ToolCall
+	var results []llms.ToolCallResponse
+	flush := func() {
+		if len(results) == 0 {
+			return
+		}
+		order := func(r llms.ToolCallResponse) int {
+			if i := slices.IndexFunc(calls, func(c llms.ToolCall) bool { return c.ID == r.ToolCallID }); i >= 0 {
+				return i
+			}
+			return len(calls) // a result with no matching call goes last
+		}
+		slices.SortStableFunc(results, func(a, b llms.ToolCallResponse) int { return order(a) - order(b) })
+		lines := make([]string, len(results))
+		for i, r := range results {
+			name := r.Name
+			if j := order(r); j < len(calls) && calls[j].FunctionCall != nil {
+				name = calls[j].FunctionCall.Name
+			}
+			lines[i] = "[Tool result] " + name + ": " + r.Content
+		}
+		out = append(out, langchainwire.TextParts(llms.ChatMessageTypeHuman, strings.Join(lines, "\n")))
+		results = nil
+	}
+	for _, m := range msgs {
+		if m.Role == llms.ChatMessageTypeTool {
+			for _, p := range m.Parts {
+				if r, ok := p.(llms.ToolCallResponse); ok {
+					results = append(results, r)
+				}
+			}
+			continue
+		}
+		flush()
+		if m.Role != llms.ChatMessageTypeAI {
+			out = append(out, m)
+			continue
+		}
+		calls = calls[:0:0]
+		var text strings.Builder
+		for _, p := range m.Parts {
+			switch v := p.(type) {
+			case llms.TextContent:
+				text.WriteString(v.Text)
+			case llms.ToolCall:
+				calls = append(calls, v)
+			}
+		}
+		var lines []string
+		if text.Len() > 0 {
+			lines = append(lines, text.String())
+		}
+		for _, c := range calls {
+			if c.FunctionCall != nil {
+				lines = append(lines, "[Tool call] "+c.FunctionCall.Name+" "+compactArgs(c.FunctionCall.Arguments))
+			}
+		}
+		if len(lines) > 0 {
+			out = append(out, langchainwire.TextParts(llms.ChatMessageTypeAI, strings.Join(lines, "\n")))
+		}
+	}
+	flush()
+	return out
+}
+
+// compactArgs is a tool call's arguments as compact JSON ({} when empty),
+// in the order the model wrote them. Arguments that are not JSON pass through.
+func compactArgs(args string) string {
+	if strings.TrimSpace(args) == "" {
+		return "{}"
+	}
+	var b bytes.Buffer
+	if json.Compact(&b, []byte(args)) != nil {
+		return args
+	}
+	if s := b.String(); s != "null" {
+		return s
+	}
+	return "{}"
 }
