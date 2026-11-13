@@ -1,9 +1,12 @@
 package langchainagents
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"slices"
 	"sort"
@@ -76,6 +79,9 @@ var unsafeNameChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 // JavaScript adapter does.
 func sanitizeName(key string) string { return unsafeNameChars.ReplaceAllString(key, "_") }
 
+// handoffIgnored answers a hand-off call after the first one in a node run.
+const handoffIgnored = "Ignored: only the first transfer in a turn routes."
+
 func handoffToolName(targetKey string) string { return "transfer_to_" + sanitizeName(targetKey) }
 
 // handoffCommand is a transfer_to_<target> tool's result: a Command routing
@@ -85,7 +91,9 @@ func handoffCommand(targetKey string) *stategraph.Command {
 }
 
 // Invoke runs the graph from the root with input; variables fill each node's
-// instruction templates and history (root only) precedes input as messages.
+// instruction templates, and history precedes input in the graph's messages,
+// which every node sees, with earlier tool calls and results as text (see
+// neutralHistory).
 // It returns the last AI message's text and the run's total usage.
 func (g *LangGraph) Invoke(ctx context.Context, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error) {
 	co := aiserver.NewCallOptions(opts...)
@@ -146,9 +154,6 @@ type graphRun struct {
 	userCtx   ldcontext.Context
 	tracking  bool
 	graphTD   aiserver.TrackData
-
-	// rootHistory is the caller's history, read only by the root node.
-	rootHistory []llms.MessageContent
 
 	path  []string
 	usage kitbase.SpanUsage
@@ -221,16 +226,15 @@ func (r *graphRun) run(ctx context.Context, input string, history []aiserver.Mes
 	if err != nil {
 		return "", fmt.Errorf("langchainagents: compile graph %q: %w", r.g.def.Key, err)
 	}
-	// The graph state starts with the current user turn. History reaches
-	// the root only: the root's agent reads it ahead of the state, and
-	// it never enters the state other nodes see.
+	// The graph state starts with the caller's history and the current user
+	// turn, so every node sees them: the root as they are, a later node under
+	// neutralHistory's rewrite of what came before it was entered.
 	turns := handlerkit.ComposePrompt(aiserver.HandlerRequest{UserInput: input, History: history}, aiserver.ModeAgent).Turns
 	msgs := langchainwire.ToMessages(handlerkit.Prompt{Turns: turns})
 	if len(msgs) == 0 { // history of system turns only, and no input
 		msgs = []llms.MessageContent{langchainwire.TextParts(llms.ChatMessageTypeHuman, "")}
 	}
-	r.rootHistory = msgs[:len(msgs)-1]
-	final, err := compiled.Invoke(ctx, map[string]any{messagesKey: msgs[len(msgs)-1:]})
+	final, err := compiled.Invoke(ctx, map[string]any{messagesKey: msgs})
 	if r.err != nil {
 		return "", r.err
 	}
@@ -278,9 +282,9 @@ func (r *graphRun) nodeFunc(n *aiserver.GraphNode) func(context.Context, any) (a
 		cfg := langchainwire.ModelConfig(n.Config)
 
 		in := messagesOf(state)
-		if n == r.g.def.Root {
-			in = append(slices.Clip(r.rootHistory), in...)
-		}
+		// The node's own tool loop runs inside a.invoke, so everything in is
+		// from before this entry: send it as text, not provider tool blocks.
+		in = neutralHistory(in)
 		system := handlerkit.ComposePrompt(aiserver.HandlerRequest{Config: n.Config, Variables: r.variables}, aiserver.ModeAgent).System
 		// A node opens no root span: its spans nest under the graph span, and
 		// its $ld:ai:graph:node event names it.
@@ -405,10 +409,10 @@ func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.Too
 		if target, ok := handoffs[name]; ok {
 			markTool(span, name, tc.ID)
 			if chosen != "" {
-				return langchainwire.ToolResponse(tc, "Ignored: already transferring to "+chosen+"."), nil, nil
+				return langchainwire.ToolResponse(tc, handoffIgnored), nil, nil
 			}
 			chosen = target // the handoff is tracked once the target has run
-			return langchainwire.ToolResponse(tc, "Transferred to "+target+"."), handoffCommand(target), nil
+			return langchainwire.ToolResponse(tc, "Handed off to "+target+"."), handoffCommand(target), nil
 		}
 		if nt := natives[name]; nt != nil {
 			markTool(span, name, tc.ID)
@@ -447,4 +451,106 @@ func promptOf(system string, msgs []llms.MessageContent) handlerkit.Prompt {
 		p.Turns = append(p.Turns, aiserver.Message{Role: cmp.Or(role, string(m.Role)), Text: b.String()})
 	}
 	return p
+}
+
+// neutralHistory rewrites the messages a node finds when it is entered as
+// provider-neutral text, so a target on another provider never receives the
+// previous node's tool blocks (Bedrock Converse rejects toolUse/toolResult
+// blocks from a request that declares no tools). Human and system messages
+// pass through. An AI message keeps its text and gains one
+// "[Tool call] <name> <args>" line per call; the tool results after it become
+// one human message of "[Tool result] <name>: <text>" lines, in call order.
+func neutralHistory(msgs []llms.MessageContent) []llms.MessageContent {
+	out := make([]llms.MessageContent, 0, len(msgs))
+	var calls []llms.ToolCall
+	var results []llms.ToolCallResponse
+	flush := func() {
+		if len(results) == 0 {
+			return
+		}
+		order := func(r llms.ToolCallResponse) int {
+			if i := slices.IndexFunc(calls, func(c llms.ToolCall) bool { return c.ID == r.ToolCallID }); i >= 0 {
+				return i
+			}
+			return len(calls) // a result with no matching call goes last
+		}
+		slices.SortStableFunc(results, func(a, b llms.ToolCallResponse) int { return order(a) - order(b) })
+		lines := make([]string, len(results))
+		for i, r := range results {
+			name := r.Name
+			if j := order(r); j < len(calls) && calls[j].FunctionCall != nil {
+				name = calls[j].FunctionCall.Name
+			}
+			lines[i] = "[Tool result] " + name + ": " + r.Content
+		}
+		out = append(out, langchainwire.TextParts(llms.ChatMessageTypeHuman, strings.Join(lines, "\n")))
+		results = nil
+	}
+	for _, m := range msgs {
+		if m.Role == llms.ChatMessageTypeTool {
+			for _, p := range m.Parts {
+				if r, ok := p.(llms.ToolCallResponse); ok {
+					results = append(results, r)
+				}
+			}
+			continue
+		}
+		flush()
+		if m.Role != llms.ChatMessageTypeAI {
+			out = append(out, m)
+			continue
+		}
+		calls = nil
+		var text strings.Builder
+		for _, p := range m.Parts {
+			switch v := p.(type) {
+			case llms.TextContent:
+				text.WriteString(v.Text)
+			case llms.ToolCall:
+				calls = append(calls, v)
+			}
+		}
+		var lines []string
+		if text.Len() > 0 {
+			lines = append(lines, text.String())
+		}
+		for _, c := range calls {
+			if c.FunctionCall != nil {
+				lines = append(lines, "[Tool call] "+c.FunctionCall.Name+" "+compactArgs(c.FunctionCall.Arguments))
+			}
+		}
+		if len(lines) > 0 {
+			out = append(out, langchainwire.TextParts(llms.ChatMessageTypeAI, strings.Join(lines, "\n")))
+		}
+	}
+	flush()
+	return out
+}
+
+// compactArgs is a tool call's arguments as compact JSON ({} when empty),
+// written by the standard encoder without HTML escaping, so "&" stays "&".
+// Arguments that are not JSON pass through.
+func compactArgs(args string) string {
+	if strings.TrimSpace(args) == "" {
+		return "{}"
+	}
+	d := json.NewDecoder(strings.NewReader(args))
+	d.UseNumber() // keep numbers as written
+	var v any
+	if d.Decode(&v) != nil {
+		return args
+	}
+	if _, err := d.Token(); err != io.EOF { // trailing data, even a stray } or ]
+		return args
+	}
+	if v == nil {
+		return "{}"
+	}
+	var b bytes.Buffer
+	e := json.NewEncoder(&b)
+	e.SetEscapeHTML(false)
+	if e.Encode(v) != nil {
+		return args
+	}
+	return strings.TrimSuffix(b.String(), "\n")
 }
