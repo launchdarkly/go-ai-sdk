@@ -80,8 +80,8 @@ invoke_agent`, one `chat <model>` child per turn and one `execute_tool <name>` c
 Native graph (`NativeGraph.Invoke`): one agent per reachable node (`Traverse`), then a handoff per
 outgoing edge (cycles are fine). History and input seed the root only. Hooks map to LD events
 when `NativeGraphOptions.Context` is set (`nativeRun`). Each stretch one agent is active, from
-`agentStart` to its `handoff` or `agentEnd`, is a node run: an `invoke_agent` span under the
-graph span (node association + context identity, `chat` / `execute_tool` children) and per-node
+`agentStart` to its `handoff` or `agentEnd`, is a node run: `chat` / `execute_tool` spans that
+are children of the graph span (no per-node root span) and per-node
 `$ld:ai:duration:total`, `$ld:ai:generation:success` (or `:error`) and `$ld:ai:tokens:*` (> 0).
 `agentStart` → `$ld:ai:graph:node` (once per node, `nodeKey` / `index`). A handoff is tracked when
 its target's node run ends: `$ld:ai:graph:handoff_success`, or `:handoff_failure` if it failed

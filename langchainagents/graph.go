@@ -111,7 +111,7 @@ func (g *LangGraph) Invoke(ctx context.Context, input string, opts ...aiserver.C
 	spanCtx, span := otel.Tracer(PackageName).Start(ctx, kitbase.GraphSpanName)
 	defer span.End()
 	span.SetAttributes(attribute.String("launchdarkly.graph.key", def.Key))
-	handlerkit.SetLDSpanAttributesFor(span, r.graphTD, ldcontext.Context{}) // identity belongs on handler root spans only
+	handlerkit.SetLDSpanAttributesFor(span, r.graphTD, r.userCtx) // a node opens no root span, so the run's context identity goes here
 	start := time.Now()
 
 	response, err := r.run(spanCtx, input, co.History)
@@ -278,14 +278,13 @@ func (r *graphRun) nodeFunc(n *aiserver.GraphNode) func(context.Context, any) (a
 			in = append(slices.Clip(r.rootHistory), in...)
 		}
 		system := handlerkit.ComposePrompt(aiserver.HandlerRequest{Config: n.Config, Variables: r.variables}, aiserver.ModeAgent).System
-		// Each node run is an agent run with its own root span, carrying the
-		// node's config association and the context identity.
+		// A node opens no root span: its spans nest under the graph span, and
+		// its $ld:ai:graph:node event names it.
 		span := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
-			Tracer: PackageName, Name: SpanName, System: langchainwire.GenAISystem, ProviderName: langchainwire.SpanProviderName(cfg), Operation: operation,
-			RequestModel: cfg.Model.Name,
+			Tracer: PackageName, System: langchainwire.GenAISystem, ProviderName: langchainwire.SpanProviderName(cfg), Operation: operation,
+			RequestModel: cfg.Model.Name, NoRoot: true,
 		}, aiserver.HandlerRequest{}, promptOf(system, in))
 		defer span.EndOnPanic()
-		handlerkit.SetLDSpanAttributesFor(span.RootSpan(), td, r.userCtx)
 
 		a, err := r.agent(span.Context(), n, cfg, td, system, span)
 		var res agentResult

@@ -370,3 +370,26 @@ func TestHandlerRunRootUsageOnlyWhenReported(t *testing.T) {
 		}
 	}
 }
+
+// With NoRoot the run opens no root span: its chat and execute_tool spans
+// are children of the caller's span, and ending the run leaves that span open.
+func TestHandlerRunNoRoot(t *testing.T) {
+	exp := withSpans(t)
+	ctx, parent := otel.Tracer("t").Start(bg, "parent")
+	r := kitStartHandlerRun(ctx, kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/t", Name: "root", System: "s", RequestModel: "m", NoRoot: true}, HandlerRequest{}, prompt{System: "sys"})
+	r.EndChat(r.StartChat(""), "m", kitbase.SpanUsage{Input: 1, Output: 1}, "stop")
+	r.EndTool(r.StartTool("x", "c1"), nil)
+	r.Finish("m", "out")
+	if got := exp.GetSpans(); len(got) != 2 {
+		t.Fatalf("ended spans = %d, want chat and tool only", len(got))
+	}
+	parent.End()
+	for _, s := range exp.GetSpans() {
+		if s.Name == "root" {
+			t.Error("a root span was opened")
+		}
+		if s.Name != "parent" && s.Parent.SpanID() != parent.SpanContext().SpanID() {
+			t.Errorf("%s is not a child of the caller's span", s.Name)
+		}
+	}
+}

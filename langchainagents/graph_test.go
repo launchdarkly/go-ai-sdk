@@ -361,9 +361,25 @@ func TestToLangGraphRun(t *testing.T) {
 		spans[0].Status().Code != codes.Ok || spans[0].EndTime().IsZero() {
 		t.Errorf("graph span = %v %v", a, spans[0].Status())
 	}
-	for k := range a {
-		if strings.HasPrefix(k, "context.") {
-			t.Errorf("graph span carries identity %s", k)
+	// With no per-node root, the graph span carries the run's context identity.
+	if a["context.contextKeys.user"] != "u-1" {
+		t.Errorf("graph span context identity = %q, want u-1", a["context.contextKeys.user"])
+	}
+	// The run has no per-node invoke_agent root: each node's chat and
+	// execute_tool spans are children of the graph span, which identifies the
+	// node through its $ld:ai:graph:node event.
+	byName := spansByName(exp)
+	if n := len(byName[SpanName]); n != 0 {
+		t.Errorf("per-node %s spans = %d, want 0", SpanName, n)
+	}
+	if len(byName["chat triage-model"]) == 0 || len(byName["chat billing-model"]) == 0 {
+		t.Errorf("node chat spans missing: %v", byName)
+	}
+	for name, ss := range byName {
+		for _, s := range ss {
+			if name != kitbase.GraphSpanName && s.Parent().SpanID() != spans[0].SpanContext().SpanID() {
+				t.Errorf("%s is not a child of the graph span", name)
+			}
 		}
 	}
 }
@@ -641,20 +657,13 @@ func TestToLangGraphNodeSpansAndPayloads(t *testing.T) {
 
 	byName := spansByName(exp)
 	graphSpan := byName[kitbase.GraphSpanName][0]
-	nodes := byName[SpanName]
-	if len(nodes) != 2 {
-		t.Fatalf("node spans = %d", len(nodes))
+	if n := len(byName[SpanName]); n != 0 { // no per-node root; the node events carry the payloads above
+		t.Errorf("per-node %s spans = %d, want 0", SpanName, n)
 	}
-	for i, key := range []string{"triage", "billing"} {
-		s := nodes[i]
-		a := spanAttrs(s)
-		if s.Parent().SpanID() != graphSpan.SpanContext().SpanID() || a["launchdarkly.config.key"] != key || a["launchdarkly.graph.key"] != "g" ||
-			a["context.contextKeys.user"] != "u-1" || a["gen_ai.operation.name"] != "invoke_agent" || s.Status().Code != codes.Ok || s.EndTime().IsZero() {
-			t.Errorf("%s span = %v %v", key, a, s.Status())
+	for _, s := range byName["chat billing-model"] {
+		if s.Parent().SpanID() != graphSpan.SpanContext().SpanID() {
+			t.Errorf("leaf chat span is not a child of the graph span")
 		}
-	}
-	if a := spanAttrs(nodes[1]); a["gen_ai.usage.input_tokens"] != "6" || a["gen_ai.usage.total_tokens"] != "9" || a["gen_ai.completion.0.content"] != "refunded" {
-		t.Errorf("leaf span usage/content = %v", a)
 	}
 	for _, name := range []string{"execute_tool transfer_to_billing", "execute_tool refund"} {
 		if len(byName[name]) != 1 {

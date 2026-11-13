@@ -169,33 +169,27 @@ func TestToOpenAIAgentsRun(t *testing.T) {
 		t.Fatalf("graph spans = %v", spansByName(exp))
 	}
 	a := attrs(spans[0])
-	for k := range a {
-		if strings.HasPrefix(k, "context.contextKeys.") {
-			t.Errorf("launchdarkly.graph carries context identity %s; it belongs on handler root spans only", k)
-		}
+	// With no per-node root, the graph span carries the run's context identity.
+	if a["context.contextKeys.user"] != "u-1" {
+		t.Errorf("graph span context identity = %q, want u-1", a["context.contextKeys.user"])
 	}
 	if a["launchdarkly.graph.key"] != "g" || a["launchdarkly.graph.path"] != "triage->billing" || a["gen_ai.usage.total_tokens"] != "18" ||
 		spans[0].Status().Code != codes.Ok {
 		t.Errorf("graph span attrs = %v status %v", a, spans[0].Status())
 	}
-	// One invoke_agent span per node run under the graph span, with the
-	// node's association and the context identity; chat / execute_tool
-	// children carry neither.
+	// The run has no per-node invoke_agent root: each node's chat and
+	// execute_tool spans are children of the graph span, which identifies the
+	// node through its $ld:ai:graph:node event.
 	byName := spansByName(exp)
-	nodeSpans := byName[SpanName]
-	if len(nodeSpans) != 2 {
-		t.Fatalf("node spans = %d", len(nodeSpans))
+	if n := len(byName[SpanName]); n != 0 {
+		t.Errorf("per-node %s spans = %d, want 0", SpanName, n)
 	}
-	for i, key := range []string{"triage", "billing"} {
-		ns := nodeSpans[i]
-		na := attrs(ns)
-		if ns.Parent().SpanID() != spans[0].SpanContext().SpanID() || na["launchdarkly.config.key"] != key || na["context.contextKeys.user"] != "u-1" ||
-			na["gen_ai.operation.name"] != "invoke_agent" || ns.Status().Code != codes.Ok || ns.EndTime().IsZero() {
-			t.Errorf("%s span = %v", key, na)
+	for name, ss := range byName {
+		for _, s := range ss {
+			if name != kitbase.GraphSpanName && s.Parent().SpanID() != spans[0].SpanContext().SpanID() {
+				t.Errorf("%s is not a child of the graph span", name)
+			}
 		}
-	}
-	if na := attrs(nodeSpans[1]); na["gen_ai.usage.total_tokens"] != "14" || na["gen_ai.completion.0.content"] != "refunded" {
-		t.Errorf("leaf span = %v", na)
 	}
 	if len(byName["chat billing-model"]) != 2 || len(byName["execute_tool refund"]) != 1 {
 		t.Errorf("child spans = %v", byName)
@@ -245,8 +239,8 @@ func TestToOpenAIAgentsHandoffFailure(t *testing.T) {
 	if ge := ld.events("$ld:ai:generation:error"); len(ge) != 1 || ge[0].data["configKey"] != "billing" {
 		t.Errorf("generation:error = %+v", ge)
 	}
-	if ns := spansByName(exp)[SpanName]; len(ns) != 2 || ns[1].Status().Code != codes.Error || ns[1].EndTime().IsZero() {
-		t.Errorf("failed node span not ended ERROR")
+	if cs := spansByName(exp)["chat billing-model"]; len(cs) != 1 || cs[0].Status().Code != codes.Error || cs[0].EndTime().IsZero() {
+		t.Errorf("failed node's chat span not ended ERROR: %v", cs)
 	}
 }
 
@@ -416,7 +410,7 @@ func TestToOpenAIAgentsToolPanicEndsSpans(t *testing.T) {
 		_, _ = must(ToOpenAIAgents(resolve(t, ld, "g"), &NativeGraphOptions{ToolHandlers: tools, Context: user, Handler: Options{Client: c}})).Invoke(bg, "q")
 	}()
 	byName := spansByName(exp)
-	for _, name := range []string{kitbase.GraphSpanName, SpanName, "execute_tool lookup"} {
+	for _, name := range []string{kitbase.GraphSpanName, "execute_tool lookup"} {
 		if s := byName[name]; len(s) != 1 || s[0].Status().Code != codes.Error {
 			t.Errorf("%s not ended ERROR: %v", name, s)
 		}

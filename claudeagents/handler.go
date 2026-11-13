@@ -269,17 +269,10 @@ type runResult struct {
 	abandoned  bool
 }
 
-// spanIdentity is the LaunchDarkly association a ToClaudeAgents node writes
-// on its root span. The core only reads the typed context from variables it
-// builds itself, so the adapter passes it here instead of through __ld.
-type spanIdentity struct {
-	td      aiserver.TrackData
-	userCtx ldcontext.Context
-}
-
 // run is the agent loop shared by both paths; onText is nil when blocking.
-// ident is nil for handler calls, whose __ld variable carries the association.
-func (a *agent) run(ctx context.Context, req aiserver.HandlerRequest, extra []localTool, ident *spanIdentity, onText func(string) bool) (runResult, error) {
+// graphNode is true for a ToClaudeAgents node, which opens no root span: its
+// spans nest under the graph span, and its $ld:ai:graph:node event names it.
+func (a *agent) run(ctx context.Context, req aiserver.HandlerRequest, extra []localTool, graphNode bool, onText func(string) bool) (runResult, error) {
 	var res runResult
 	model := req.Config.Model.Name
 	p := handlerkit.ComposePrompt(req, aiserver.ModeAgent)
@@ -287,12 +280,9 @@ func (a *agent) run(ctx context.Context, req aiserver.HandlerRequest, extra []lo
 		p.System = kitbase.WithOutputFormat(p.System, req.Config.OutputFormat)
 	}
 	r := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
-		Tracer: PackageName, Name: SpanName, System: "anthropic", Operation: "invoke_agent", RequestModel: model,
+		Tracer: PackageName, Name: SpanName, System: "anthropic", Operation: "invoke_agent", RequestModel: model, NoRoot: graphNode,
 	}, req, p)
 	defer r.EndOnPanic()
-	if ident != nil {
-		handlerkit.SetLDSpanAttributesFor(r.RootSpan(), ident.td, ident.userCtx)
-	}
 
 	ts, err := buildTools(req.Config, req.ToolHandlers, extra, a.workDir)
 	if err != nil {
@@ -429,7 +419,7 @@ func (a *agent) turn(ctx context.Context, params anthropic.MessageNewParams, req
 }
 
 func (a *agent) invoke(ctx context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
-	res, err := a.run(ctx, req, nil, nil, nil)
+	res, err := a.run(ctx, req, nil, false, nil)
 	if err != nil {
 		return aiserver.HandlerResult{}, err
 	}
@@ -438,7 +428,7 @@ func (a *agent) invoke(ctx context.Context, req aiserver.HandlerRequest) (aiserv
 
 func (a *agent) stream(ctx context.Context, req aiserver.HandlerRequest) iter.Seq2[aiserver.HandlerStreamEvent, error] {
 	return func(yield func(aiserver.HandlerStreamEvent, error) bool) {
-		res, err := a.run(ctx, req, nil, nil, func(t string) bool {
+		res, err := a.run(ctx, req, nil, false, func(t string) bool {
 			return yield(aiserver.HandlerStreamEvent{Type: aiserver.EventChunk, Text: t}, nil)
 		})
 		if res.abandoned {

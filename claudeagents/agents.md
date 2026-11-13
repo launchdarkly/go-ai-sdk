@@ -108,9 +108,9 @@ own sub-agent tools, and then tracks `$ld:ai:graph:handoff_success` (`sourceKey`
 `:handoff_failure` when the child failed. `$ld:ai:graph:*` events carry the graph's `TrackData`
 (as `aiserver.Graph`); a definition resolved without a context tracks nothing. Each Anthropic
 node tracks its own generation, duration and token events under a node `TrackData` that shares
-the graph's run id. Each node's `invoke_agent` root span gets the LaunchDarkly association
-(including `launchdarkly.graph.key`) and the user's context identity through `spanIdentity`,
-because the core only reads the typed context from variables it builds itself. A non-Anthropic node runs through `GraphDefinition.RunNode` and gets no
+the graph's run id. A node opens no `invoke_agent` root: its `chat` / `execute_tool` spans nest
+under the graph span (a sub-agent's under the calling tool span), and its `$ld:ai:graph:node`
+event identifies it. A non-Anthropic node runs through `GraphDefinition.RunNode` and gets no
 sub-agent tools. The `launchdarkly.graph` span carries `launchdarkly.graph.key`, `launchdarkly.graph.path` and
 the summed usage and is ended on every path; the result is the root's final text.
 
