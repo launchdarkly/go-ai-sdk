@@ -183,7 +183,7 @@ func newEnv(t *testing.T, rows int) *fakeEnv {
 		items[i] = map[string]any{"rowIndex": i, "input": fmt.Sprintf("q%d", i), "expectedOutput": fmt.Sprintf("a%d", i)}
 	}
 	e.route("GET", "projects/proj/datasets/ds/rows", resp{body: map[string]any{"items": items, "totalCount": rows}})
-	e.route("POST", "projects/proj/evaluations", resp{status: 201, body: map[string]any{"id": "eval-1", "version": 3}})
+	e.route("POST", "projects/proj/offline-evaluations", resp{status: 201, body: map[string]any{"id": "eval-1", "version": 3}})
 	e.route("POST", "projects/proj/evaluations/eval-1/runs", resp{status: 201, body: map[string]any{"id": "run-1", "evaluationId": "eval-1", "state": "PENDING"}})
 	e.route("POST", "projects/proj/evaluations/eval-1/runs/run-1/dataset-rows", resp{body: map[string]any{}})
 	e.route("GET", "projects/proj/evaluations/eval-1/runs/run-1/summary", resp{body: map[string]any{"statusCounts": map[string]any{"total": rows, "passed": rows}}})

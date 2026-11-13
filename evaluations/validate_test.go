@@ -32,6 +32,14 @@ func TestRunValidationBeforeIO(t *testing.T) {
 		want   []string
 	}{
 		{"blank key", func(a *RunOptions) { a.Key = "" }, []string{"Key must not be blank"}},
+		{"uppercase key", func(a *RunOptions) { a.Key = "Eval-Key" }, []string{"Key must match"}},
+		{"colon key", func(a *RunOptions) { a.Key = "eval:key" }, []string{"Key must match"}},
+		{"space key", func(a *RunOptions) { a.Key = "eval key" }, []string{"Key must match"}},
+		{"leading hyphen", func(a *RunOptions) { a.Key = "-eval" }, []string{"Key must match"}},
+		{"leading dot", func(a *RunOptions) { a.Key = ".eval" }, []string{"Key must match"}},
+		{"leading underscore", func(a *RunOptions) { a.Key = "_eval" }, []string{"Key must match"}},
+		{"dotdot key", func(a *RunOptions) { a.Key = ".." }, []string{"Key must match"}},
+		{"key too long", func(a *RunOptions) { a.Key = strings.Repeat("a", 129) }, []string{"128"}},
 		{"nil dataset", func(a *RunOptions) { a.Dataset = nil }, []string{"dataset is required", "DatasetKey or InlineRows"}},
 		{"blank dataset", func(a *RunOptions) { a.Dataset = DatasetKey("  ") }, []string{"dataset must not be blank"}},
 		{"empty inline dataset", func(a *RunOptions) { a.Dataset = InlineRows{} }, []string{"Inline dataset is empty"}},

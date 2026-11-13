@@ -153,13 +153,14 @@ func (m *EvaluationsModule) resolveClient(ctx context.Context) (aiserver.LDClien
 	return c, nil
 }
 
-// Run creates an evaluation and a run, generates every dataset row with the
-// pool, scores each generated row against the criteria, reports every result
-// as an event, and polls the run summary until LaunchDarkly has accounted
-// for every row. When that summary reports a criterion with a pass rate
-// threshold, Run then reads the run's verdict, waiting up to 30s for
-// LaunchDarkly to record it; EvalRunResult.Passed follows the verdict when
-// there is one.
+// Run reconciles the offline evaluation named by args.Key, creates a run,
+// generates every dataset row with the pool, scores each generated row
+// against the criteria, reports every result as an event, and polls the run
+// summary until LaunchDarkly has accounted for every row. When that summary
+// reports a criterion with a pass rate threshold, Run then reads the run's
+// verdict, waiting up to 30s for LaunchDarkly to record it;
+// EvalRunResult.Passed follows the verdict when there is one. The result URL
+// is the run URL.
 func (m *EvaluationsModule) Run(ctx context.Context, args RunOptions) (*EvalRunResult, error) {
 	r, err := m.prepare(args)
 	if err != nil {
