@@ -484,8 +484,10 @@ func TestToLangGraphUsageAndContent(t *testing.T) {
 	}
 }
 
-// history reaches the root only, in native (image) form.
-func TestToLangGraphHistoryRootOnly(t *testing.T) {
+// The caller's history stays in the graph state: the root reads it natively,
+// and a hand-off target receives it with the rest of the earlier turns, as text
+// for AI messages and unchanged for human ones.
+func TestToLangGraphHistoryReachesHandoffTarget(t *testing.T) {
 	installClient(t, twoNode())
 	def := resolve("g")
 	fm := map[string]*fakeModel{
@@ -500,12 +502,14 @@ func TestToLangGraphHistoryRootOnly(t *testing.T) {
 	if _, ok := root[1].Parts[0].(llms.BinaryContent); !ok || len(root) != 4 || text(root[3]) != "what colour?" {
 		t.Errorf("root input = %v", turns(root))
 	}
-	for _, m := range fm["billing"].call(0).msgs {
-		for _, p := range m.Parts {
-			if _, ok := p.(llms.BinaryContent); ok || text(m) == "an image" {
-				t.Errorf("leaf received history: %v", turns(fm["billing"].call(0).msgs))
-			}
-		}
+	leaf := fm["billing"].call(0).msgs
+	want := []turn{{sys, "Bill"}, {human, ""}, {ai, "an image"}, {human, "what colour?"},
+		{ai, "[Tool call] transfer_to_billing {}"}, {human, "[Tool result] transfer_to_billing: Handed off to billing."}}
+	if got := turns(leaf); !reflect.DeepEqual(got, want) {
+		t.Errorf("leaf input =\n%v\nwant\n%v", got, want)
+	}
+	if _, ok := leaf[1].Parts[0].(llms.BinaryContent); !ok {
+		t.Errorf("leaf lost the history image: %v", turns(leaf))
 	}
 }
 

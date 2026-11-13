@@ -76,8 +76,8 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
   function runs that node's ReAct agent (its own inner `stategraph.Graph`, which holds the ToolNode
   equivalent) over the graph's messages. A `transfer_to_<target>` tool returns
   `&stategraph.Command{Goto: target}`; the inner graph ends, and the outer node returns a `Command`
-  with the new messages, which the runner follows instead of the static edge. History is read by
-  the root node only and never enters the shared state. A node receives the messages from before
+  with the new messages, which the runner follows instead of the static edge. The caller's history
+  and input seed the shared state, so every node sees them, as JS and Python do. A node receives the messages from before
   it was entered as provider-neutral text (`neutralHistory`): each AI message's text plus one
   `[Tool call] <name> <args>` line per call, and its tool results as one human message of
   `[Tool result] <name>: <text>` lines; the messages its own tool loop adds stay native. A target

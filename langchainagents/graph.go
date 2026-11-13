@@ -91,7 +91,8 @@ func handoffCommand(targetKey string) *stategraph.Command {
 }
 
 // Invoke runs the graph from the root with input; variables fill each node's
-// instruction templates and history (root only) precedes input as messages.
+// instruction templates, and history precedes input in the graph's messages,
+// which every node sees (a hand-off target as text, see neutralHistory).
 // It returns the last AI message's text and the run's total usage.
 func (g *LangGraph) Invoke(ctx context.Context, input string, opts ...aiserver.CallOption) (aiserver.GraphResponse, error) {
 	co := aiserver.NewCallOptions(opts...)
@@ -152,9 +153,6 @@ type graphRun struct {
 	userCtx   ldcontext.Context
 	tracking  bool
 	graphTD   aiserver.TrackData
-
-	// rootHistory is the caller's history, read only by the root node.
-	rootHistory []llms.MessageContent
 
 	path  []string
 	usage kitbase.SpanUsage
@@ -227,16 +225,15 @@ func (r *graphRun) run(ctx context.Context, input string, history []aiserver.Mes
 	if err != nil {
 		return "", fmt.Errorf("langchainagents: compile graph %q: %w", r.g.def.Key, err)
 	}
-	// The graph state starts with the current user turn. History reaches
-	// the root only: the root's agent reads it ahead of the state, and
-	// it never enters the state other nodes see.
+	// The graph state starts with the caller's history and the current user
+	// turn, so every node sees them: the root as they are, a later node under
+	// neutralHistory's rewrite of what came before it was entered.
 	turns := handlerkit.ComposePrompt(aiserver.HandlerRequest{UserInput: input, History: history}, aiserver.ModeAgent).Turns
 	msgs := langchainwire.ToMessages(handlerkit.Prompt{Turns: turns})
 	if len(msgs) == 0 { // history of system turns only, and no input
 		msgs = []llms.MessageContent{langchainwire.TextParts(llms.ChatMessageTypeHuman, "")}
 	}
-	r.rootHistory = msgs[:len(msgs)-1]
-	final, err := compiled.Invoke(ctx, map[string]any{messagesKey: msgs[len(msgs)-1:]})
+	final, err := compiled.Invoke(ctx, map[string]any{messagesKey: msgs})
 	if r.err != nil {
 		return "", r.err
 	}
@@ -284,9 +281,6 @@ func (r *graphRun) nodeFunc(n *aiserver.GraphNode) func(context.Context, any) (a
 		cfg := langchainwire.ModelConfig(n.Config)
 
 		in := messagesOf(state)
-		if n == r.g.def.Root {
-			in = append(slices.Clip(r.rootHistory), in...)
-		}
 		// The node's own tool loop runs inside a.invoke, so everything in is
 		// from before this entry: send it as text, not provider tool blocks.
 		in = neutralHistory(in)
