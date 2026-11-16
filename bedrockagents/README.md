@@ -135,7 +135,7 @@ All are read by the AWS SDK when the handler builds its own client; none is read
 
 ```go
 const PackageName = "github.com/launchdarkly/go-ai-sdk/bedrockagents"
-const PackageVersion = "0.1.0"
+const PackageVersion = "1.0.0" // x-release-please-version
 const SpanName = "invoke_agent"
 const GenAISystem = "aws.bedrock"
 const DefaultMaxSteps = 10

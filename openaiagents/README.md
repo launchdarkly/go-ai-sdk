@@ -130,7 +130,7 @@ tools := map[string]aiserver.ToolHandler{"search": &aiserver.NativeTool{ToolName
 
 ```go
 const PackageName = "github.com/launchdarkly/go-ai-sdk/openaiagents"
-const PackageVersion = "0.1.0"
+const PackageVersion = "1.0.0" // x-release-please-version
 const SpanName = "invoke_agent" // root span, blocking and streaming
 var ErrMaxTurns, ErrToolNotOffered, ErrNoRoot, ErrNilGraph error
 
