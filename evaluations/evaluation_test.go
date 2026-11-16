@@ -23,9 +23,9 @@ func TestNoCriteriaSkipsThePhase(t *testing.T) {
 	if len(e.ld.events(criterionEventName)) != 0 || len(e.judgeCalls) != 0 {
 		t.Fatal("criterion phase ran without criteria")
 	}
-	assertSequence(t, e, "GET projects/proj/datasets/ds", rowsPath, evalPath, runPath, summaryPath)
-	if _, has := e.body("POST", "projects/proj/evaluations").(map[string]any)["criteria"]; has {
-		t.Fatal("criteria must be absent from the create body")
+	assertSequence(t, e, "GET projects/proj/datasets/ds", rowsPath, offlineGet, offlinePost, runPath, summaryPath)
+	if got := e.body("POST", "projects/proj/offline-evaluations").(map[string]any)["criteria"]; !reflect.DeepEqual(got, []any{}) {
+		t.Fatalf("empty criteria must be sent so a later PATCH can clear them, got %v", got)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestPinnedCriteria(t *testing.T) {
 		map[string]any{"criterionType": "acc", "kind": "judge", "judgeKey": "acc", "options": map[string]any{"threshold": 0.5, "passRateThreshold": 0.95}},
 		map[string]any{"criterionType": "regex_hits", "kind": "scorer", "successDirection": "lower_is_better", "options": map[string]any{"threshold": 0.2, "passRateThreshold": 0.95}},
 	}
-	if got := e.body("POST", "projects/proj/evaluations").(map[string]any)["criteria"]; !reflect.DeepEqual(got, want) {
+	if got := e.body("POST", "projects/proj/offline-evaluations").(map[string]any)["criteria"]; !reflect.DeepEqual(got, want) {
 		t.Fatalf("criteria\n got %s\nwant %s", toJSON(got), toJSON(want))
 	}
 	t.Run("ground truth context is pinned", func(t *testing.T) {

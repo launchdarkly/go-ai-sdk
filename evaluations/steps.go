@@ -3,9 +3,11 @@ package evaluations
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
+	"net/http"
 	"strings"
 	"time"
 
@@ -326,12 +328,23 @@ func (r *runState) fetchDataset(ctx context.Context) error {
 	return nil
 }
 
-func (r *runState) createEvaluation(ctx context.Context) error {
+// evaluationConfigBody is the offline-evaluation create or PATCH snapshot.
+// Create includes key and name (name defaults to the key). PATCH omits both
+// so a UI rename survives the next reconcile. parameters, promptSnippets,
+// tools and criteria are always present, including empty values, so a PATCH
+// can clear a previous pin.
+func (r *runState) evaluationConfigBody(includeKey bool) map[string]any {
 	g := r.gen
-	body := map[string]any{"name": r.args.Key, "generationProvider": g.Provider, "generationModel": g.Model}
-	if g.Parameters != nil {
-		body["parameters"] = g.Parameters
+	body := map[string]any{"generationProvider": g.Provider, "generationModel": g.Model}
+	if includeKey {
+		body["key"] = r.args.Key
+		body["name"] = r.args.Key
 	}
+	params := g.Parameters
+	if params == nil {
+		params = map[string]any{}
+	}
+	body["parameters"] = params
 	switch {
 	case g.Instructions != "":
 		body["messages"] = []any{map[string]any{"role": "system", "content": g.Instructions}}
@@ -340,31 +353,114 @@ func (r *runState) createEvaluation(ctx context.Context) error {
 	default:
 		body["messages"] = []any{}
 	}
-	if g.PromptSnippets != nil {
-		body["promptSnippets"] = g.PromptSnippets
+	snippets := g.PromptSnippets
+	if snippets == nil {
+		snippets = map[string]string{}
 	}
-	if len(r.tools) > 0 {
-		tools := make([]any, len(r.tools))
-		for i, t := range r.tools {
-			if t.inline {
-				tools[i] = map[string]any{"key": t.key, "schema": cloneJSON(t.schema), "description": t.description, "source": "inline"}
-			} else {
-				tools[i] = map[string]any{"key": t.key, "version": t.version, "source": "library"}
-			}
+	body["promptSnippets"] = snippets
+	tools := make([]any, 0, len(r.tools))
+	for _, t := range r.tools {
+		if t.inline {
+			tools = append(tools, map[string]any{"key": t.key, "schema": cloneJSON(t.schema), "description": t.description, "source": "inline"})
+		} else {
+			tools = append(tools, map[string]any{"key": t.key, "version": t.version, "source": "library"})
 		}
-		body["tools"] = tools
 	}
-	if len(r.criteria) > 0 {
-		criteria := make([]any, len(r.criteria))
-		for i, c := range r.criteria {
-			criteria[i] = c.wire()
+	body["tools"] = tools
+	criteria := make([]any, 0, len(r.criteria))
+	for _, c := range r.criteria {
+		criteria = append(criteria, c.wire())
+	}
+	body["criteria"] = criteria
+	return body
+}
+
+func (r *runState) offlineCollection() string {
+	return "projects/" + r.project() + "/offline-evaluations"
+}
+
+// getOfflineEvaluation returns the evaluation, or (nil, nil) on 404. Any
+// other status is returned as-is.
+func (r *runState) getOfflineEvaluation(ctx context.Context) (map[string]any, error) {
+	raw, err := r.m.api.get(ctx, r.offlineCollection()+"/"+segment(r.args.Key))
+	if err != nil {
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
+			return nil, nil
 		}
-		body["criteria"] = criteria
+		return nil, err
 	}
-	raw, err := r.m.api.post(ctx, "projects/"+r.project()+"/evaluations", body, false)
+	return asObject(raw, "offline evaluation")
+}
+
+// ensureEvaluation reconciles by key: GET, POST on 404, otherwise PATCH,
+// then the caller creates a run on the legacy by-id path. A POST 409 re-GETs
+// and continues on the PATCH path. A PATCH 409 re-GETs and retries once.
+func (r *runState) ensureEvaluation(ctx context.Context) error {
+	existing, err := r.getOfflineEvaluation(ctx)
 	if err != nil {
 		return err
 	}
+	if existing == nil {
+		raw, postErr := r.m.api.post(ctx, r.offlineCollection(), r.evaluationConfigBody(true), false)
+		if postErr == nil {
+			return r.applyEvaluationRef(raw)
+		}
+		var apiErr *APIError
+		if !errors.As(postErr, &apiErr) || apiErr.Status != http.StatusConflict {
+			return postErr
+		}
+		existing, err = r.getOfflineEvaluation(ctx)
+		if err != nil || existing == nil {
+			if err == nil {
+				err = postErr
+			}
+			return fmt.Errorf("evaluations: %w: offline evaluation %q reported a key conflict but could not be re-fetched: %w", ErrAPI, r.args.Key, err)
+		}
+	}
+	raw, err := r.patchOfflineEvaluation(ctx)
+	if err != nil {
+		return err
+	}
+	return r.applyEvaluationRef(raw)
+}
+
+// patchOfflineEvaluation sends the snapshot. A 409 optimistic-lock collision
+// re-GETs and retries once; a second 409 is an error. The call is not
+// idempotent, so a 5xx is not replayed.
+func (r *runState) patchOfflineEvaluation(ctx context.Context) (any, error) {
+	path := r.offlineCollection() + "/" + segment(r.args.Key)
+	body := r.evaluationConfigBody(false)
+	raw, err := r.m.api.patch(ctx, path, body, false)
+	if err == nil {
+		return raw, nil
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusConflict {
+		return nil, err
+	}
+	refetched, reErr := r.getOfflineEvaluation(ctx)
+	if reErr != nil || refetched == nil {
+		if reErr == nil {
+			reErr = err
+		}
+		return nil, fmt.Errorf("evaluations: %w: offline evaluation %q reported an update conflict but could not be re-fetched: %w", ErrAPI, r.args.Key, reErr)
+	}
+	raw, retryErr := r.m.api.patch(ctx, path, body, false)
+	if retryErr == nil {
+		return raw, nil
+	}
+	var retryAPI *APIError
+	if errors.As(retryErr, &retryAPI) && retryAPI.Status == http.StatusConflict {
+		return nil, fmt.Errorf("evaluations: %w: offline evaluation %q could not be updated because another writer changed it; retry the run or serialize callers that share this key: %w", ErrAPI, r.args.Key, retryErr)
+	}
+	return nil, retryErr
+}
+
+// applyEvaluationRef reads id and version. A non-empty response key is the
+// evaluation key; otherwise the caller key is used. name is ignored, because
+// PATCH does not send it and a rename can diverge from the key.
+func (r *runState) applyEvaluationRef(raw any) error {
 	obj, err := asObject(raw, "evaluation")
 	if err != nil {
 		return err
@@ -378,8 +474,8 @@ func (r *runState) createEvaluation(ctx context.Context) error {
 	}
 	r.evalVersion = v
 	r.evaluationKey = r.args.Key
-	if name, ok := obj["name"].(string); ok && name != "" {
-		r.evaluationKey = name
+	if k, ok := obj["key"].(string); ok && k != "" {
+		r.evaluationKey = k
 	}
 	return nil
 }

@@ -31,7 +31,8 @@ func assertNoURL(t *testing.T, e *fakeEnv, substr string) {
 }
 
 const (
-	evalPath    = "POST projects/proj/evaluations"
+	offlineGet  = "GET projects/proj/offline-evaluations/eval-key"
+	offlinePost = "POST projects/proj/offline-evaluations"
 	runPath     = "POST projects/proj/evaluations/eval-1/runs"
 	summaryPath = "GET projects/proj/evaluations/eval-1/runs/run-1/summary"
 	rowsPath    = "GET projects/proj/datasets/ds/rows?mode=all&limit=200&offset=0"
@@ -44,7 +45,7 @@ func TestHappyPathHostedSequence(t *testing.T) {
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
 	args.Tools = []EvalTool{e.libTool(m, "lookup", noopTool, map[string]any{"version": 4, "description": "d", "schema": map[string]any{"type": "object"}})}
 	res := mustRun(t, m, args)
-	assertSequence(t, e, "GET projects/proj/datasets/ds", rowsPath, evalPath, runPath, summaryPath)
+	assertSequence(t, e, "GET projects/proj/datasets/ds", rowsPath, offlineGet, offlinePost, runPath, summaryPath)
 	for _, bad := range []string{"/generation-results", "/evaluation-results", "dataset-rows", "/cancel"} {
 		assertNoURL(t, e, bad)
 	}
@@ -67,7 +68,7 @@ func TestHappyPathAllInlineToolsSequence(t *testing.T) {
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
 	args.Tools = []EvalTool{{Key: "lookup", Implementation: noopTool, Schema: map[string]any{}}}
 	mustRun(t, e.module(), args)
-	assertSequence(t, e, "GET projects/proj/datasets/ds", rowsPath, evalPath, runPath, summaryPath)
+	assertSequence(t, e, "GET projects/proj/datasets/ds", rowsPath, offlineGet, offlinePost, runPath, summaryPath)
 	assertNoURL(t, e, "/ai-tools")
 }
 
@@ -82,7 +83,7 @@ func TestMixedToolsIssueNoToolRequest(t *testing.T) {
 	args.Tools = []EvalTool{gamma, {Key: "beta", Implementation: noopTool, Schema: map[string]any{}}, alpha}
 	mustRun(t, m, args)
 	assertNoURL(t, e, "/ai-tools")
-	got := e.body("POST", "projects/proj/evaluations").(map[string]any)["tools"]
+	got := e.body("POST", "projects/proj/offline-evaluations").(map[string]any)["tools"]
 	want := []any{
 		map[string]any{"key": "gamma", "version": 3.0, "source": "library"},
 		map[string]any{"key": "beta", "schema": map[string]any{}, "description": "", "source": "inline"},
@@ -99,7 +100,7 @@ func TestHappyPathInlineDatasetSequence(t *testing.T) {
 	args.Dataset = InlineRows{map[string]any{"input": "a"}, map[string]any{"input": "b"}}
 	args.Tools = []EvalTool{{Key: "lookup", Implementation: noopTool, Schema: map[string]any{}}}
 	mustRun(t, e.module(), args)
-	assertSequence(t, e, evalPath, runPath, uploadPath, summaryPath)
+	assertSequence(t, e, offlineGet, offlinePost, runPath, uploadPath, summaryPath)
 	assertNoURL(t, e, "/datasets/")
 	if b := e.body("POST", "projects/proj/evaluations/eval-1/runs"); !reflect.DeepEqual(b, map[string]any{"source": "api"}) {
 		t.Fatalf("inline run body %v", b)
@@ -113,7 +114,7 @@ func TestInlineDatasetWithLibraryTool(t *testing.T) {
 	args.Dataset = InlineRows{map[string]any{"input": "a"}}
 	args.Tools = []EvalTool{e.libTool(m, "lookup", noopTool, map[string]any{"version": 1})}
 	mustRun(t, m, args)
-	assertSequence(t, e, evalPath, runPath, uploadPath, summaryPath)
+	assertSequence(t, e, offlineGet, offlinePost, runPath, uploadPath, summaryPath)
 }
 
 func TestToolsGet(t *testing.T) {
@@ -246,27 +247,32 @@ func TestEvaluationCreateBody(t *testing.T) {
 		want   map[string]any
 	}{
 		{"no tools", func(*RunOptions, EvalTool) {}, map[string]any{
-			"name": "eval-key", "generationProvider": "OpenAI", "generationModel": "gpt-4o", "messages": []any{}}},
+			"key": "eval-key", "name": "eval-key", "generationProvider": "OpenAI", "generationModel": "gpt-4o",
+			"parameters": map[string]any{}, "messages": []any{}, "promptSnippets": map[string]any{},
+			"tools": []any{}, "criteria": []any{}}},
 		{"library only, with parameters and snippets", func(a *RunOptions, lib EvalTool) {
 			a.Tools = []EvalTool{lib}
 			a.Generation.Parameters = map[string]any{"temperature": 0.2}
 			a.Generation.PromptSnippets = map[string]string{"tone": "kind"}
 			a.Generation.Messages = []aiserver.Message{{Role: "system", Text: "be {{snippet.tone}}"}}
 		}, map[string]any{
-			"name": "eval-key", "generationProvider": "OpenAI", "generationModel": "gpt-4o",
+			"key": "eval-key", "name": "eval-key", "generationProvider": "OpenAI", "generationModel": "gpt-4o",
 			"parameters": map[string]any{"temperature": 0.2}, "promptSnippets": map[string]any{"tone": "kind"},
 			"messages": []any{map[string]any{"role": "system", "content": "be {{snippet.tone}}"}},
-			"tools":    []any{map[string]any{"key": "lib", "version": 4.0, "source": "library"}}}},
+			"tools":    []any{map[string]any{"key": "lib", "version": 4.0, "source": "library"}},
+			"criteria": []any{}}},
 		{"mixed, in list order, instructions wrapped", func(a *RunOptions, lib EvalTool) {
 			a.Handler = handler("OpenAI", aiserver.ModeAgent, nil)
 			a.Generation.Mode, a.Generation.Instructions = GenerationModeAgent, "act"
 			a.Tools = []EvalTool{lib, {Key: "aaa", Implementation: noopTool, Schema: map[string]any{"type": "object"}}}
 		}, map[string]any{
-			"name": "eval-key", "generationProvider": "OpenAI", "generationModel": "gpt-4o",
+			"key": "eval-key", "name": "eval-key", "generationProvider": "OpenAI", "generationModel": "gpt-4o",
+			"parameters": map[string]any{}, "promptSnippets": map[string]any{},
 			"messages": []any{map[string]any{"role": "system", "content": "act"}},
 			"tools": []any{
 				map[string]any{"key": "lib", "version": 4.0, "source": "library"},
-				map[string]any{"key": "aaa", "schema": map[string]any{"type": "object"}, "description": "", "source": "inline"}}}},
+				map[string]any{"key": "aaa", "schema": map[string]any{"type": "object"}, "description": "", "source": "inline"}},
+			"criteria": []any{}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -276,7 +282,7 @@ func TestEvaluationCreateBody(t *testing.T) {
 			args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
 			tc.mutate(&args, lib)
 			mustRun(t, m, args)
-			if got := e.body("POST", "projects/proj/evaluations"); !reflect.DeepEqual(got, tc.want) {
+			if got := e.body("POST", "projects/proj/offline-evaluations"); !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("create body\n got: %s\nwant: %s", toJSON(got), toJSON(tc.want))
 			}
 		})
@@ -289,8 +295,8 @@ func TestRecordResponsesAreValidated(t *testing.T) {
 		body any
 		want string
 	}{
-		"evaluation without id":      {"projects/proj/evaluations", map[string]any{"version": 1}, `"id"`},
-		"evaluation with only an id": {"projects/proj/evaluations", map[string]any{"id": "eval-1"}, `"version"`},
+		"evaluation without id":      {"projects/proj/offline-evaluations", map[string]any{"version": 1}, `"id"`},
+		"evaluation with only an id": {"projects/proj/offline-evaluations", map[string]any{"id": "eval-1"}, `"version"`},
 		"run without id":             {"projects/proj/evaluations/eval-1/runs", map[string]any{"evaluationId": "eval-1", "state": "PENDING"}, `"id"`},
 		"run without evaluationId":   {"projects/proj/evaluations/eval-1/runs", map[string]any{"id": "run-1", "state": "PENDING"}, `"evaluationId"`},
 		"run without state":          {"projects/proj/evaluations/eval-1/runs", map[string]any{"id": "run-1", "evaluationId": "eval-1"}, `"state"`},
@@ -320,7 +326,7 @@ func TestPathSegmentsAreEncoded(t *testing.T) {
 	e.route("GET", base+"/ai-tools/"+enc(tool), resp{body: map[string]any{"version": 1}})
 	e.route("GET", base+"/datasets/"+enc(ds), resp{body: map[string]any{"id": "x"}})
 	e.route("GET", base+"/datasets/"+enc(ds)+"/rows", resp{body: map[string]any{"items": []any{map[string]any{"rowIndex": 0, "input": "q"}}, "totalCount": 1}})
-	e.route("POST", base+"/evaluations", resp{body: map[string]any{"id": ev, "version": 1}})
+	e.route("POST", base+"/offline-evaluations", resp{body: map[string]any{"id": ev, "version": 1}})
 	runs := base + "/evaluations/" + enc(ev) + "/runs"
 	e.route("POST", runs, resp{body: map[string]any{"id": run, "evaluationId": ev, "state": "PENDING"}})
 	e.route("GET", runs+"/"+enc(run)+"/summary", resp{body: map[string]any{"total": 1, "passed": 1}})
@@ -338,7 +344,7 @@ func TestPathSegmentsAreEncoded(t *testing.T) {
 	}
 	// Inline upload and cancel paths too.
 	e2 := newEnv(t, 1)
-	e2.route("POST", base+"/evaluations", resp{body: map[string]any{"id": ev, "version": 1}})
+	e2.route("POST", base+"/offline-evaluations", resp{body: map[string]any{"id": ev, "version": 1}})
 	e2.route("POST", runs, resp{body: map[string]any{"id": run, "evaluationId": ev, "state": "PENDING"}})
 	e2.route("POST", runs+"/"+enc(run)+"/dataset-rows", resp{status: 400})
 	e2.route("POST", runs+"/"+enc(run)+"/cancel", resp{status: 200})

@@ -7,11 +7,11 @@ by provider and mode. Its exported names are pinned in `surface_test.go`.
 | File | Responsibility |
 | --- | --- |
 | `module.go` | `InitEvaluationsOptions`, `EvaluationsModule`, `InitEvaluations` (project key, token, SDK key, in that order; reports `client.initEvaluations` before any check), client resolution, `Run`. |
-| `api.go` | Management API client: host resolved at init (never `LD_BASE_URI`), headers, retry policy (429 always; 5xx/transport only for GET/HEAD and idempotent POSTs), `Retry-After`, injectable sleep/jitter. `APIError`. |
+| `api.go` | Management API client: host resolved at init (never `LD_BASE_URI`), headers, retry policy (429 always; 5xx/transport only for GET/HEAD and idempotent POSTs; reconcile PATCH is not idempotent), `Retry-After`, injectable sleep/jitter. `APIError`. |
 | `types.go` | Public types, sentinel errors, criterion constructors (`NewJudge`, `NewScorer`) and wire shapes. |
 | `tools.go` | `ToolsClient` (`EvaluationsModule.Tools`): `Get` validates the key and implementation, reads `ai-tools/<key>` and returns a library `EvalTool` with its pinned version and project. The only tool request. |
 | `validate.go` | Every pre-I/O check: pool, generation mode/coverage/prompt, tools (key, implementation, inline schema or library project, case-folded collisions, in list order), inline rows (strict JSON), criteria. Shared `selectHandler`. |
-| `steps.go` | Management API steps, in order: AI Config reads (variation tool warnings), dataset resolution, record creation, inline upload/cancel, summary polling, run verdict wait. No tool request. |
+| `steps.go` | Management API steps, in order: AI Config reads (variation tool warnings), dataset resolution, keyed offline-evaluation reconcile (GET, POST on 404, else PATCH), run creation, inline upload/cancel, summary polling, run verdict wait. No tool request. |
 | `runner.go` | Validation entry, orchestration, bounded worker pool, generation phase (trajectory recorder per row), judge resolution and invocation, scorers. |
 | `spans.go` | Row, criterion, and fallback `chat` / `execute_tool` spans; content on them follows the capture setting. |
 | `events.go` | RFC 8785 canonical JSON, `eventId` and `contentHash` (the generation event sends the normalized output it hashed: NaN and ±Inf as null), payload building, flush-bounded emitter with per-event failure isolation. |

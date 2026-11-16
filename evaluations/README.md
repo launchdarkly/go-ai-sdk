@@ -54,7 +54,7 @@ if err != nil { log.Fatal(err) }
 handler, err := openaimessages.NewHandler(openaimessages.Options{})
 if err != nil { log.Fatal(err) }
 res, err := evals.Run(ctx, evaluations.RunOptions{
-	Key:        "support-bot-" + time.Now().Format("20060102-150405"), // unique per run
+	Key:        "support-qa", // stable; a later Run reuses this evaluation
 	Dataset:    evaluations.DatasetKey("support-questions"),
 	Handler:    handler,
 	Generation: &evaluations.GenerationConfig{
@@ -72,6 +72,7 @@ if !res.Passed { os.Exit(1) }
 
 | Argument | Meaning |
 | --- | --- |
+| `Key` | Stable offline-evaluation key: `^[a-z0-9][a-z0-9._-]*$`, at most 128 characters, checked before any network I/O. `Run` GETs `…/offline-evaluations/{key}`, POSTs (`key` and `name`) when the evaluation is missing, or PATCHes a full config snapshot when it exists, then creates a new run. PATCH omits `name`. The result `URL` stays the run link. Requires the offline-evaluations API. |
 | `Dataset` | `DatasetKey("...")` for a hosted dataset, or `InlineRows{...}` (`map[string]any` values with `input`, `expectedOutput`, `variables`, `metadata`, optional `rowIdx`; a `DatasetRow` is rejected). |
 | `Handler` / `Handlers` | Exactly one. Each config (generation and every judge) picks its handler by provider and mode; an exact provider beats `*`; there is no mode fallback. |
 | `Generation` / `AIConfig` | Exactly one. `AIConfig: &AIConfigRef{Key, Variation}` reads the latest variation version; `Overrides` replace single fields. |

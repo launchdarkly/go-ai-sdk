@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -136,11 +137,21 @@ func orNil(s *string) any {
 
 func (r *runState) project() string { return segment(r.m.projectKey) }
 
+// offlineEvaluationKeyPattern is the server create rule: lowercase, a leading
+// alphanumeric, then '.', '_' or '-', at most offlineEvaluationKeyMaxLen.
+// Checked before any network I/O.
+var offlineEvaluationKeyPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+
+const offlineEvaluationKeyMaxLen = 128
+
 // --- validation before any I/O ------------------------------------
 
 func (m *EvaluationsModule) prepare(a RunOptions) (*runState, error) {
 	if strings.TrimSpace(a.Key) == "" {
 		return nil, invalid("Key must not be blank")
+	}
+	if len(a.Key) > offlineEvaluationKeyMaxLen || !offlineEvaluationKeyPattern.MatchString(a.Key) {
+		return nil, invalid("Key must match '^[a-z0-9][a-z0-9._-]*$' and be at most %d characters, got %q", offlineEvaluationKeyMaxLen, a.Key)
 	}
 	r := &runState{m: m, args: a, judges: map[string]*resolvedJudge{}}
 	switch d := a.Dataset.(type) {
@@ -252,7 +263,7 @@ func (r *runState) execute(ctx context.Context) (*EvalRunResult, error) {
 	} else if err := r.fetchDataset(ctx); err != nil {
 		return nil, err
 	}
-	if err := r.createEvaluation(ctx); err != nil {
+	if err := r.ensureEvaluation(ctx); err != nil {
 		return nil, err
 	}
 	if err := r.createRun(ctx); err != nil {
