@@ -32,6 +32,9 @@ type fakeAnthropic struct {
 	responses []string // JSON bodies, SSE streams ("event:" prefix), "STATUS400" or "STATUS529"
 	requests  []map[string]any
 	headers   []http.Header
+	// during, when set, runs before each response is written, while the
+	// request is in flight.
+	during func(body map[string]any)
 }
 
 func (f *fakeAnthropic) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +45,11 @@ func (f *fakeAnthropic) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.requests = append(f.requests, body)
 	f.headers = append(f.headers, r.Header.Clone())
 	i := len(f.requests) - 1
+	during := f.during
 	f.mu.Unlock()
+	if during != nil {
+		during(body)
+	}
 	if i >= len(f.responses) {
 		http.Error(w, `{"type":"error","error":{"type":"api_error","message":"no more"}}`, 500)
 		return
