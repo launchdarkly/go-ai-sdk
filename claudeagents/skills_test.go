@@ -730,10 +730,12 @@ func TestSkillsTempDirSymlink(t *testing.T) {
 		if !created {
 			t.Fatal("no invoke dir in the symlink's target during the run")
 		}
-		if r := e.api.reqs(); len(r) == 2 {
-			if text, isErr := lastToolResult(t, r[1]); text != "a v1" || isErr {
-				t.Errorf("Skill result after the retarget = %q (error %v), want a v1", text, isErr)
-			}
+		r := e.api.reqs()
+		if len(r) != 2 {
+			t.Fatalf("%d model requests, want 2 (the Skill call, then its result)", len(r))
+		}
+		if text, isErr := lastToolResult(t, r[1]); text != "a v1" || isErr {
+			t.Errorf("Skill result after the retarget = %q (error %v), want a v1", text, isErr)
 		}
 		if d := append(invokeDirs(t, real1), invokeDirs(t, real2)...); len(d) != 0 {
 			t.Errorf("not removed: %v", d)
