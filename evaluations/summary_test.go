@@ -95,7 +95,7 @@ func TestSummaryTimeout(t *testing.T) {
 			e := newEnv(t, 3)
 			e.route("GET", summaryRoute, resp{body: map[string]any{"statusCounts": tc.counts}})
 			args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-			args.PollTimeout = time.Nanosecond
+			args.PollTimeout = new(time.Duration(0)) // zero is a valid timeout: one poll, then the deadline
 			if tc.criteria {
 				args.Criteria = []Criterion{mustScorer(t, "s", constScorer(1), nil)}
 			}
@@ -115,9 +115,14 @@ func TestPollDefaults(t *testing.T) {
 		t.Fatalf("interval %v timeout %v", r.interval, r.timeout)
 	}
 	args := baseArgs(handler("OpenAI", aiserver.ModeMessages, nil))
-	args.PollTimeout = 0
+	args.PollTimeout = nil
 	if r, _ = e.module().prepare(args); r.timeout != 3*time.Minute {
 		t.Fatalf("default timeout %v", r.timeout)
+	}
+	// Zero is a valid interval and timeout, not "use the default".
+	args.PollInterval, args.PollTimeout = new(time.Duration(0)), new(time.Duration(0))
+	if r, err = e.module().prepare(args); err != nil || r.interval != 0 || r.timeout != 0 {
+		t.Fatalf("zero settings gave interval %v timeout %v (%v)", r.interval, r.timeout, err)
 	}
 }
 
