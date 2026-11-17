@@ -7,5 +7,7 @@ package procgroup
 import "os/exec"
 
 // KillOnCancel is a no-op where process groups are unavailable; when the
-// command's context is done only the command itself is killed.
+// command's context is done only the command itself is killed. Call it
+// before Start or Run, as on Unix, where it overwrites cmd.SysProcAttr and
+// cmd.Cancel.
 func KillOnCancel(*exec.Cmd) {}
