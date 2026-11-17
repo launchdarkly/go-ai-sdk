@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
+
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/skills"
 )
@@ -78,6 +80,42 @@ func usageRows(ctx context.Context, fail bool) []struct {
 			_, w, err := skills.WatchAllSkills(ctx, t.TempDir(), nil)
 			return closeW(w, err)
 		}},
+		{"client.writeSkills", func(t *testing.T) error {
+			_, err := skills.WriteSkillsFrom(ctx, source(t, fail), t.TempDir(), wopts)
+			return err
+		}},
+		{"client.watchSkills", func(t *testing.T) error {
+			_, w, err := skills.WatchSkillsFrom(ctx, source(t, fail), t.TempDir(), nil)
+			return closeW(w, err)
+		}},
+	}
+}
+
+// source is a hand-built SkillSource answering skill "a"; with fail set it
+// is the zero SkillSource, which every call refuses.
+func source(t *testing.T, fail bool) skills.SkillSource {
+	t.Helper()
+	if fail {
+		return skills.SkillSource{}
+	}
+	src, err := skills.NewSkillSource(func(context.Context) ([]skills.SkillReference, error) {
+		return []skills.SkillReference{skills.NewSkillReference("a", 1)}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return src
+}
+
+// ConfigSkills reports client.configSkills when it is called, an invalid key
+// included, and building a source by hand reports nothing.
+func TestConfigSkillsUsageAtCallTime(t *testing.T) {
+	fake, _ := freshClient(t)
+	_ = skills.ConfigSkills("agent", ldcontext.New("u"))
+	_ = skills.ConfigSkills("", ldcontext.New("u"))
+	_ = source(t, false)
+	if got := fake.usage(); !slices.Equal(got, []string{"client.configSkills"}) {
+		t.Fatalf("usage events %v", got)
 	}
 }
 
@@ -211,4 +249,17 @@ func TestSkillsInternalCallsDoNotReport(t *testing.T) {
 			t.Fatalf("usage events %v", got)
 		}
 	})
+}
+
+// A ConfigSkills source is read without the public SkillRefs: writing from it
+// reports client.writeSkills and nothing for its reads.
+func TestConfigSkillsSourceReadsReportNothing(t *testing.T) {
+	fake, _ := freshClient(t)
+	src := skills.ConfigSkills("agent", ldcontext.New("u"))
+	for range 2 {
+		_, _ = skills.WriteSkillsFrom(context.Background(), src, t.TempDir(), nil)
+	}
+	if got := fake.usage(); !slices.Equal(got, []string{"client.configSkills", "client.writeSkills"}) {
+		t.Fatalf("usage events %v", got)
+	}
 }
