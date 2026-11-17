@@ -249,6 +249,9 @@ func TestScopedWildcardJudgeSelection(t *testing.T) {
 		if h, _, ok := pickJudgeHandler(nil, []*ProviderHandler{unscoped, bedrock}, "Anthropic", ModeMessages); !ok || h != unscoped {
 			t.Errorf("unscoped still covers any provider: got %v", h)
 		}
+		if _, _, ok := pickJudgeHandler(&ProviderHandler{}, nil, "Anthropic", ModeMessages); ok {
+			t.Error("a parent without ProvidesFor covers no judge")
+		}
 		two := scoped(ModeMessages, "two", "Bedrock", "Anthropic")
 		if h, _, ok := pickJudgeHandler(nil, []*ProviderHandler{two, bedrock}, "Bedrock", ModeMessages); !ok || h != bedrock {
 			t.Errorf("the shorter list wins: got %v", h)

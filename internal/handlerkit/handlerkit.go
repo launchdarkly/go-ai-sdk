@@ -67,6 +67,10 @@ var (
 	TrackGraphEvent, _ = bridge.TrackGraphEvent.(func(event string, userCtx ldcontext.Context, td aiserver.TrackData, extra map[string]any, metric float64))
 	// SelectHandler picks the handler for a provider and mode.
 	SelectHandler, _ = bridge.SelectHandler.(func([]*aiserver.ProviderHandler, string, aiserver.Mode) (*aiserver.ProviderHandler, error))
+	// SameHandlerIdentity reports that two handlers have one Registry
+	// identity: ProvidesFor with the mode normalized, plus the provider set on
+	// a "*" handler.
+	SameHandlerIdentity, _ = bridge.SameHandlerIdentity.(func(a, b *aiserver.ProviderHandler) bool)
 	// ImageURL returns a URL-sourced image's URL, or a data: URL for base64 data.
 	ImageURL, _ = bridge.ImageURL.(func(aiserver.ImageSource) string)
 	// ContentText flattens a message to text: Text, or the joined text blocks.

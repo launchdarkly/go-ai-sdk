@@ -79,7 +79,8 @@ type Options struct {
 }
 
 // NewHandler returns the LangChain messages handler (createLangChainMessagesHandler).
-// It returns an error for an invalid option (see Options.MaxRetries).
+// It returns an error for an invalid option (see Options.MaxRetries and
+// Options.Providers).
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error) {
 	handlerkit.ReportUsage("langchain-messages.createLangChainMessagesHandler", PackageName, PackageVersion)
 	return newHandler(opts)
@@ -104,7 +105,11 @@ func newHandler(opts Options) (*aiserver.ProviderHandler, error) {
 		return nil, err
 	}
 	h := &handler{opts: opts}
-	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent), nil
+	ph := sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent)
+	if opts.Providers == nil {
+		return ph, nil
+	}
+	return ph.WithProviders(opts.Providers...)
 }
 
 // InvokeOptions are the optional arguments to LangChainMessages.
