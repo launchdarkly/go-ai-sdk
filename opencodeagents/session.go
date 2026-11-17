@@ -154,7 +154,7 @@ func runSession(ctx context.Context, s *server, perm []rule, msg message, onEven
 				return sessionID, nil
 			}
 			if err == nil {
-				err = io.ErrUnexpectedEOF
+				return sessionID, fmt.Errorf("opencodeagents: GET /event closed before the message POST returned: %w", io.ErrUnexpectedEOF)
 			}
 			return sessionID, fmt.Errorf("opencodeagents: GET /event: %w", err)
 		case line := <-lines:
