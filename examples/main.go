@@ -28,6 +28,7 @@ var scenarios = map[string]scenario{
 	"native-graph":           nativeGraph,
 	"native-graph-langchain": nativeGraphLangChain,
 	"judge":                  judge,
+	"opencode-agents":        opencodeAgents,
 }
 
 func usage() {

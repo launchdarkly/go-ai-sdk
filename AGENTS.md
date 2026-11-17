@@ -14,7 +14,7 @@ Tier 0  aiserver                 core: no provider SDK imports
         internal/kitbase     type-free handler-kit helpers (SpanUsage, HandlerSpanOptions, Run, ...); imports nothing from aiserver
         internal/handlerkit  typed access to the handler kit that stays unexported in aiserver; imports aiserver, never imported by it
 Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
-        claudeagents   openaiagents   bedrockagents
+        claudeagents   openaiagents   bedrockagents   opencodeagents
         internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers for each provider's messages/agents pair; bedrockwire is also used by llms and langchainwire
         internal/procgroup  runs a child in its own process group, killed as a group on cancel (Unix; no-op elsewhere)
         internal/langchainwire  LangChain wire helper for langchainmessages/langchainagents; builds the built-in llms models (imports llms and internal/bedrockwire, plus the anthropic/openai option packages and bedrockruntime for retries)
@@ -22,7 +22,7 @@ Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         evaluations    Evaluations from Code (core; imports aiserver and golang.org/x/text, no provider SDK)
 ```
 
-Tier 1 packages import `aiserver` and their provider SDK only (`skills` and `evaluations` have none). `aiserver`
+Tier 1 packages import `aiserver` and their provider SDK only (`skills`, `evaluations` and `opencodeagents` have none). `aiserver`
 never imports a Tier 1 package, and core never names an experimental type:
 the two meet only through `internal/bridge`. The handler kit (prompt
 composition, span tree, usage reporting, tool wrapping) is not public API:
@@ -77,6 +77,7 @@ Built-ins per provider (only the agent handlers wire `NativeTool`; every
 |---|---|---|---|
 | Anthropic | `claudeagents` (`builtins.go`, `handler.go` `serverTool`, `hosttools.go`) | `ClaudeWebSearch` (`WebSearch`) → `web_search_20250305`; `ClaudeWebFetch` (`WebFetch`) → `web_fetch_20250910` server tools. `ClaudeBash`, `ClaudeRead`, `ClaudeEdit`, `ClaudeWrite`, `ClaudeGlob`, `ClaudeGrep`, `ClaudeTodoWrite`, `ClaudeNotebookEdit` → function tools under the Claude Code name and schema, executed on the host; file tools confined to `Options.WorkDir` (`os.Root`), Bash not sandboxed. `handlerkit.TrackNativeTool` fires per call. | Any other `ToolName`: the config fails with `ErrUnsupportedNativeTool` |
 | OpenAI | `openaiagents` (`runner.go` `newAgent`, `openaiwire.HostedTool`) | No exported sentinels: `&aiserver.NativeTool{ToolName: "web_search"}` (or any hosted Responses tool type, e.g. `file_search`, `code_interpreter`) becomes a hosted tool `{"type": ToolName, ...customParameters}`. `handlerkit.TrackNativeTool` fires on the matching `<type>_call` output item. | — (the type is passed through; the API rejects unknown types) |
+| OpenCode (any provider) | `opencodeagents` (`builtins.go`, `handler.go` `planTools`, `reducer.go`) | `OpenCodeBash`, `OpenCodeRead`, `OpenCodeEdit`, `OpenCodeWrite`, `OpenCodeGlob`, `OpenCodeGrep`, `OpenCodeTask`, `OpenCodeSkill`, `OpenCodeTodoWrite`, `OpenCodeWebFetch`, `OpenCodeWebSearch`, `OpenCodeApplyPatch` → allowed in the session's permission ruleset (`edit`/`write`/`apply_patch` are one `edit` grant); OpenCode runs them. `handlerkit.TrackNativeTool` fires once per tool call id. | Any other `ToolName` is allowed under that name; OpenCode ignores names it has no tool for |
 | Bedrock | `bedrockagents` | none | `NativeTool` is not wired |
 | LangChain | `langchainmessages` | none | `NativeTool` is not wired |
 
@@ -221,7 +222,7 @@ provider's Tier 1 packages, their `internal/*wire` helper and `llms`.
 ## Common pitfalls
 
 - **A `NativeTool` on a messages handler or Bedrock/LangChain is dropped
-  silently.** Only `claudeagents` and `openaiagents` wire built-ins; elsewhere
+  silently.** Only `claudeagents`, `openaiagents` and `opencodeagents` wire built-ins; elsewhere
   the tool is just not offered.
 - **Tool keys must match the variation's `tools` map exactly.** A handler
   under a differently-cased key is never offered to the model.

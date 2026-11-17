@@ -440,6 +440,7 @@ func TestReducer(t *testing.T) {
 		want   string
 	}{
 		{"a snapshot does not repeat deltas", []map[string]any{assistant("m1"), delta("m1", "p1", "Hel"), delta("m1", "p1", "lo"), snapshot("m1", "p1", "Hello"), completed("m1", 1, 1), idle("ses")}, "Hello"},
+		{"a snapshot that does not extend the text adds nothing", []map[string]any{assistant("m1"), delta("m1", "p1", "abc"), snapshot("m1", "p1", "wxyz"), completed("m1", 1, 1), idle("ses")}, "abc"},
 		{"later deltas append to a snapshot", []map[string]any{assistant("m1"), snapshot("m1", "p1", "Hi"), delta("m1", "p1", " there"), completed("m1", 1, 1), idle("ses")}, "Hi there"},
 		{"user text is not the reply", []map[string]any{userMessage("u1"), delta("u1", "pu", "question"), assistant("m1"), delta("m1", "p1", "answer"), completed("m1", 1, 1), idle("ses")}, "answer"},
 		{"a delta without a part id is dropped", []map[string]any{assistant("m1"), delta("m1", "", "dropped"), delta("m1", "p1", "kept"), completed("m1", 1, 1), idle("ses")}, "kept"},

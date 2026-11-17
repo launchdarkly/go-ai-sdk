@@ -30,6 +30,7 @@ LaunchDarkly), `OTEL_EXPORTER_OTLP_ENDPOINT`, `LD_SERVICE_NAME`,
 | `graph-streaming` | `Graph().Stream` built inside a conversation scope and iterated after it; text on stdout, `[node_start]` / `[node_done]` / `[handoff]` on stderr; no JSON file | `travel-agent-flow` |
 | `graph-history` | `Graph().Invoke` with a generated image in history, two shapes; fails unless both answers name the colour | `travel-agent-flow` |
 | `native-graph` | `ResolveGraph` + `claudeagents.ToClaudeAgents` | `travel-agent-flow` |
+| `opencode-agents` | `opencodeagents.OpenCodeAgents`: one `opencode serve` child per call, a `ToolFunc` over the MCP bridge and the `read` built-in; needs `opencode` on PATH and `OPENCODE_CONFIG_PATH` (default `./opencode.json`); the child gets only an allowlisted environment | `launch-darkly-documentation-summarizer` (agent mode) |
 | `native-graph-langchain` | `ResolveGraph` + `langchainagents.ToLangGraph`: the graph runs as one state graph on the SDK's own runner; tracked for the example context | `travel-agent-flow` |
 
 Failure cases exit 1 with one `Error: …` line, e.g.
