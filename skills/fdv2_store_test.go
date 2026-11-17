@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"reflect"
 	"slices"
 	"strconv"
@@ -176,6 +177,7 @@ func start(t *testing.T, s *LaunchDarklySkillStore) {
 
 func TestFDv2KindsOnEveryRequest(t *testing.T) {
 	_, _ = setup(t)
+	clearEndpointEnv(t)
 	ft := &fakeTransport{}
 	for i := range 3 {
 		ft.push(fakeResp{body: sse(commitEvents("p", fmt.Sprintf("(p:p:%d)", i+1), put("a:1", "a"))...)})
@@ -209,8 +211,19 @@ func TestFDv2KindsOnEveryRequest(t *testing.T) {
 	}
 }
 
+// clearEndpointEnv unsets LD_BASE_URI and LD_STREAM_URI for one test, so a
+// developer shell that sets them cannot move a default-host assertion.
+func clearEndpointEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{"LD_BASE_URI", "LD_STREAM_URI"} {
+		t.Setenv(k, "") // registers the restore
+		os.Unsetenv(k)
+	}
+}
+
 func TestFDv2Endpoints(t *testing.T) {
 	_, _ = setup(t)
+	clearEndpointEnv(t)
 	s, _ := NewLaunchDarklySkillStore("sdk-x", nil)
 	if s.baseURI != "https://sdk.launchdarkly.com" || s.streamURI != "https://stream.launchdarkly.com" {
 		t.Fatalf("defaults %s %s", s.baseURI, s.streamURI)
@@ -223,10 +236,78 @@ func TestFDv2Endpoints(t *testing.T) {
 	if s.baseURI != "https://a.example" || s.streamURI != "https://b.example" {
 		t.Fatal("separate overrides")
 	}
-	for _, bad := range []LaunchDarklySkillStoreOptions{{BaseURI: "http://sdk.example"}, {StreamURI: "http://localhost"}, {BaseURI: "https://"}, {BaseURI: "ftp://x"}} {
-		if _, err := NewLaunchDarklySkillStore("sdk-x", &bad); !errors.Is(err, ErrInvalidArgument) {
-			t.Fatalf("%+v accepted", bad)
+	bad := []LaunchDarklySkillStoreOptions{
+		{BaseURI: "http://sdk.example"}, {StreamURI: "http://sdk.example"}, {BaseURI: "http://10.0.0.1"},
+		{BaseURI: "http://192.168.1.5:8080"}, {BaseURI: "http://localhost.example"}, {BaseURI: "http://"},
+		{BaseURI: "https://"}, {BaseURI: "ftp://x"}, {BaseURI: "ftp://localhost"},
+	}
+	for _, o := range bad {
+		if _, err := NewLaunchDarklySkillStore("sdk-x", &o); !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("%+v accepted", o)
 		}
+	}
+	// Plain http is accepted only to a loopback host, for a local test double.
+	for _, uri := range []string{"http://localhost", "http://localhost:8030", "http://127.0.0.1:8030", "http://[::1]:8030"} {
+		for _, o := range []LaunchDarklySkillStoreOptions{{BaseURI: uri}, {StreamURI: uri}} {
+			if _, err := NewLaunchDarklySkillStore("sdk-x", &o); err != nil {
+				t.Fatalf("%+v refused: %v", o, err)
+			}
+		}
+	}
+}
+
+func TestFDv2EndpointEnvironment(t *testing.T) {
+	_, _ = setup(t)
+	build := func(env map[string]string, opts *LaunchDarklySkillStoreOptions) (*LaunchDarklySkillStore, error) {
+		t.Helper()
+		clearEndpointEnv(t)
+		for k, v := range env {
+			t.Setenv(k, v)
+		}
+		return NewLaunchDarklySkillStore("sdk-x", opts)
+	}
+	cases := []struct {
+		name         string
+		env          map[string]string
+		opts         *LaunchDarklySkillStoreOptions
+		base, stream string
+	}{
+		{"unset", nil, nil, "https://sdk.launchdarkly.com", "https://stream.launchdarkly.com"},
+		{"blank", map[string]string{"LD_BASE_URI": "", "LD_STREAM_URI": ""}, nil, "https://sdk.launchdarkly.com", "https://stream.launchdarkly.com"},
+		{"whitespace", map[string]string{"LD_BASE_URI": "  ", "LD_STREAM_URI": "\t"}, nil, "https://sdk.launchdarkly.com", "https://stream.launchdarkly.com"},
+		{"base alone moves both", map[string]string{"LD_BASE_URI": "https://relay.example/"}, nil, "https://relay.example", "https://relay.example"},
+		{"both", map[string]string{"LD_BASE_URI": "https://a.example", "LD_STREAM_URI": "https://b.example"}, nil, "https://a.example", "https://b.example"},
+		{"stream alone", map[string]string{"LD_STREAM_URI": "https://b.example"}, nil, "https://sdk.launchdarkly.com", "https://b.example"},
+		{"base option wins as a set", map[string]string{"LD_STREAM_URI": "https://env.example"}, &LaunchDarklySkillStoreOptions{BaseURI: "https://opt.example"}, "https://opt.example", "https://opt.example"},
+		{"stream option wins as a set", map[string]string{"LD_BASE_URI": "https://env.example"}, &LaunchDarklySkillStoreOptions{StreamURI: "https://opt.example"}, "https://sdk.launchdarkly.com", "https://opt.example"},
+		{"loopback http", map[string]string{"LD_BASE_URI": "http://localhost:8030"}, nil, "http://localhost:8030", "http://localhost:8030"},
+	}
+	for _, c := range cases {
+		s, err := build(c.env, c.opts)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if s.baseURI != c.base || s.streamURI != c.stream {
+			t.Fatalf("%s: got %s %s, want %s %s", c.name, s.baseURI, s.streamURI, c.base, c.stream)
+		}
+	}
+	for _, name := range []string{"LD_BASE_URI", "LD_STREAM_URI"} {
+		_, err := build(map[string]string{name: "http://sdk.example"}, nil)
+		if !errors.Is(err, ErrInvalidArgument) || !strings.Contains(err.Error(), name) {
+			t.Fatalf("non-https %s: %v", name, err)
+		}
+		if strings.Contains(err.Error(), "BaseURI") || strings.Contains(err.Error(), "StreamURI") {
+			t.Fatalf("the error names an option the caller never passed: %v", err)
+		}
+	}
+	// Read once, at construction.
+	s, _ := build(map[string]string{"LD_BASE_URI": "https://a.example"}, nil)
+	t.Setenv("LD_BASE_URI", "https://moved.example")
+	if s.baseURI != "https://a.example" || s.streamURI != "https://a.example" {
+		t.Fatalf("a built store moved: %s %s", s.baseURI, s.streamURI)
+	}
+	if fdv2DefaultBaseURI != "https://sdk.launchdarkly.com" || fdv2DefaultStreamURI != "https://stream.launchdarkly.com" {
+		t.Fatal("the production defaults changed")
 	}
 }
 
@@ -395,7 +476,8 @@ func TestFDv2WaitAfterRestartWaitsForTheNewRun(t *testing.T) {
 }
 
 func TestFDv2FatalStatuses(t *testing.T) {
-	for _, status := range []int{401, 403, 404, 405, 406, 414, 422, 501} {
+	// A redirect is never followed, so every 3xx but 304 is fatal.
+	for _, status := range []int{300, 301, 302, 303, 305, 307, 308, 401, 403, 404, 405, 406, 414, 422, 501} {
 		_, _ = setup(t)
 		ft := &fakeTransport{}
 		ft.push(fakeResp{status: status})
