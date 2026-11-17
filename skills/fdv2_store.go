@@ -63,11 +63,13 @@ type LaunchDarklySkillStoreOptions struct {
 	// BaseURI is the origin for GET /sdk/poll (default
 	// https://sdk.launchdarkly.com). Given without StreamURI it serves both
 	// endpoints, for a relay or private instance. Must be https, except plain
-	// http to localhost, 127.0.0.1 or ::1 for a local test double.
+	// http to localhost, 127.0.0.1 or ::1 for a local test double. Surrounding
+	// whitespace is trimmed, so a blank value is unset.
 	//
 	// With neither BaseURI nor StreamURI set, NewLaunchDarklySkillStore reads
 	// LD_BASE_URI and LD_STREAM_URI in their place, once, under the same
-	// rules (LD_BASE_URI alone moves both endpoints; a blank value is unset).
+	// rules (LD_BASE_URI alone moves both endpoints; a blank or
+	// whitespace-only value is unset).
 	BaseURI string
 	// StreamURI is the origin for GET /sdk/stream (default
 	// https://stream.launchdarkly.com). The same scheme rule as BaseURI.
@@ -157,7 +159,7 @@ func NewLaunchDarklySkillStore(sdkKey string, opts *LaunchDarklySkillStoreOption
 	case !strings.HasPrefix(key, "sdk-"):
 		currentLogger().Warn("the credential given to LaunchDarklySkillStore does not look like a LaunchDarkly server-side SDK key (sdk-...)")
 	}
-	base, stream := opts.BaseURI, opts.StreamURI
+	base, stream := strings.TrimSpace(opts.BaseURI), strings.TrimSpace(opts.StreamURI)
 	baseName, streamName := "BaseURI", "StreamURI"
 	if base == "" && stream == "" {
 		// Options win as a set: the environment is read only when neither is
@@ -240,7 +242,7 @@ func allowedOrigin(uri string) bool {
 	case "https":
 		return true
 	case "http":
-		h := parsed.Hostname()
+		h := strings.ToLower(parsed.Hostname())
 		return h == "localhost" || h == "127.0.0.1" || h == "::1"
 	}
 	return false
