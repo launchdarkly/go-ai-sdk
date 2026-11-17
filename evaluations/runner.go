@@ -771,16 +771,17 @@ func criterionFields(c *critResult) map[string]any {
 }
 
 // pollSetting resolves one poll setting: the Exact field when set (zero
-// included), else the plain field, where 0 means the default.
+// included), else the plain field, where 0 means the default. Both fields
+// are validated, so a negative plain value fails even when Exact is set.
 func pollSetting(name string, d time.Duration, exact *time.Duration, def time.Duration) (time.Duration, error) {
+	if d < 0 {
+		return 0, invalid(name + " must not be negative")
+	}
 	if exact != nil {
 		if *exact < 0 {
 			return 0, invalid(name + "Exact must not be negative")
 		}
 		return *exact, nil
-	}
-	if d < 0 {
-		return 0, invalid(name + " must not be negative")
 	}
 	return cmp.Or(d, def), nil
 }

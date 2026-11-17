@@ -115,6 +115,12 @@ func TestRunValidationBeforeIO(t *testing.T) {
 		{"negative poll timeout", func(a *RunOptions) { a.PollTimeout = -time.Second }, []string{"PollTimeout"}},
 		{"negative exact poll interval", func(a *RunOptions) { a.PollIntervalExact = new(-time.Second) }, []string{"PollIntervalExact"}},
 		{"negative exact poll timeout", func(a *RunOptions) { a.PollTimeoutExact = new(-time.Second) }, []string{"PollTimeoutExact"}},
+		{"negative poll interval with exact set", func(a *RunOptions) {
+			a.PollInterval, a.PollIntervalExact = -time.Second, new(time.Second)
+		}, []string{"PollInterval must not be negative"}},
+		{"negative poll timeout with exact set", func(a *RunOptions) {
+			a.PollTimeout, a.PollTimeoutExact = -time.Second, new(time.Second)
+		}, []string{"PollTimeout must not be negative"}},
 		{"duplicate criteria", func(a *RunOptions) {
 			a.Criteria = []Criterion{mustJudge(t, "accuracy", nil), mustScorer(t, "accuracy", constScorer(1), nil)}
 		}, []string{"duplicate", "accuracy"}},
