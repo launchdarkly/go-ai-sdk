@@ -12,7 +12,7 @@ Go version.
 | File | Responsibility |
 | --- | --- |
 | `handler.go` | Package doc, constants, sentinel errors, `Options`, `NewHandler`, `OpenAIAgents`, and the handler's blocking and streaming entry points. |
-| `runner.go` | The agent / runner model: building agents from configs, request construction, the turn loop, tool and handoff execution, run hooks. |
+| `runner.go` | The agent model (building agents from configs, handoff tools, request construction) and `responsesModel`, the Responses API wire for the shared `internal/agentloop` run loop (turns, tool and handoff execution, run hooks). |
 | `outputtype.go` | Unexported `outputType` and `buildOutputType` (structured-output `text.format`). |
 | `graph.go` | `OpenAIGraph` and the native adapter `ToOpenAIAgents` / `NativeGraph`. |
 | `fake_test.go` | `httptest` OpenAI server, per-key fake LaunchDarkly client, span exporter helpers. |
@@ -67,7 +67,7 @@ The handler receives `aiserver.HandlerRequest{Config, UserInput, ToolHandlers, V
   `handlerkit.StartHandlerRun` writes onto the root span.
 - **`History`**: spliced by `handlerkit.ComposePrompt` into input items before `userInput`.
 
-Run loop (`runner.run`): each turn sends the active agent's instructions, tools, handoff tools and
+Run loop (`agentloop.Runner.Run`, with `responsesModel` as its model): each turn sends the active agent's instructions, tools, handoff tools and
 `text.format`; follow-up turns chain with `previous_response_id` and send only the
 `function_call_output` items. A turn with no function calls is final. A `transfer_to_<agent>`
 call switches the active agent (the first one per turn wins; the output is
@@ -112,6 +112,7 @@ the connection.
 | --- | --- |
 | `github.com/launchdarkly/go-ai-sdk/aiserver` | Handler contract, prompt composition, span kit, graph definition, tracking, usage reporting. |
 | `github.com/launchdarkly/go-ai-sdk/internal/openaiwire` | Responses API mapping shared with `openaimessages`. |
+| `github.com/launchdarkly/go-ai-sdk/internal/agentloop` | The agent run loop: turns, tool and handoff execution, run hooks. |
 | `github.com/openai/openai-go/v3` | Responses API client and types. |
 | `github.com/launchdarkly/go-sdk-common/v3` | `ldcontext.Context` for the wrapper and the native adapter. |
 | `github.com/google/uuid` | Per-run ids for native graph events. |
