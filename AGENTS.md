@@ -16,6 +16,7 @@ Tier 0  aiserver                 core: no provider SDK imports
 Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         claudeagents   openaiagents   bedrockagents
         internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers for each provider's messages/agents pair; bedrockwire is also used by llms and langchainwire
+        internal/chatwire  OpenAI-compatible Chat Completions wire helper for handlers that call a Chat Completions proxy or gateway (imports openai-go)
         internal/langchainwire  LangChain wire helper for langchainmessages/langchainagents; builds the built-in llms models (imports llms and internal/bedrockwire, plus the anthropic/openai option packages and bedrockruntime for retries)
         skills         Agent Skills (core; imports aiserver and golang.org/x/sys, no provider SDK)
         evaluations    Evaluations from Code (core; imports aiserver and golang.org/x/text, no provider SDK)
