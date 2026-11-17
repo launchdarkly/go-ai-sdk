@@ -408,6 +408,8 @@ type RunOptions struct {
 	// PollIntervalExact and PollTimeoutExact, when non-nil, replace
 	// PollInterval and PollTimeout and are used as given, so zero is a real
 	// zero: no wait between polls, or a single poll before the deadline.
+	// A negative PollInterval or PollTimeout is still rejected when its
+	// Exact field is set.
 	PollIntervalExact *time.Duration
 	PollTimeoutExact  *time.Duration
 }

@@ -80,7 +80,7 @@ if !res.Passed { os.Exit(1) }
 | `Criteria` | `*Judge` (`NewJudge`) and `*Scorer` (`NewScorer`). With `AIConfig`, nil uses the variation's judges and `[]Criterion{}` runs none. |
 | `Concurrency` | In-flight handler, judge and scorer calls (default 10). |
 | `PollInterval` / `PollTimeout` | Summary polling (default 2s / 3m; 0 means the default). Large datasets need a longer timeout. |
-| `PollIntervalExact` / `PollTimeoutExact` | Optional `*time.Duration` overrides used as given, so `new(time.Duration(0))` is a real zero (no wait between polls; one poll before the deadline). When set, they replace `PollInterval` / `PollTimeout`. Negative values are rejected. |
+| `PollIntervalExact` / `PollTimeoutExact` | Optional `*time.Duration` overrides used as given, so `new(time.Duration(0))` is a real zero (no wait between polls; one poll before the deadline). When set, they replace `PollInterval` / `PollTimeout`. A negative value in any of the four fields is rejected, even when the other field of the pair is set. |
 
 The SDK never computes a verdict: it reports scores, and LaunchDarkly rules on them against the
 thresholds pinned on the evaluation. Once the run's rows are all accounted for and the summary

@@ -97,16 +97,11 @@ func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context) (A
 		sdkLogger().Error("judge skipped: its config could not be resolved", "judge", key, "error", err)
 		return AiConfig{}, VariationMeta{}, ldvalue.Null(), false
 	}
-	if hasOutputFormat(cfg) {
+	if judging.HasOutputFormat(cfg.OutputFormat, cfg.Raw) {
 		sdkLogger().Warn("judge outputFormat is ignored: a judge always returns {score, reasoning}", "judge", key)
 		cfg = withoutOutputFormat(cfg)
 	}
 	return cfg, meta, value, true
-}
-
-func hasOutputFormat(cfg AiConfig) bool {
-	_, raw := cfg.Raw["outputFormat"]
-	return cfg.OutputFormat != nil || raw
 }
 
 // withoutOutputFormat drops a judge's own outputFormat, which would conflict
