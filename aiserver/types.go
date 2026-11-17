@@ -240,14 +240,6 @@ type ProviderHandler struct {
 	Providers []string
 }
 
-// WithProviders returns a copy of h scoped to providers: each name once, in
-// first-seen order, in a list the copy owns. h is not changed. An empty
-// list, a blank name or a name with surrounding whitespace returns an error
-// wrapping ErrInvalidProviders.
-func (h *ProviderHandler) WithProviders(providers ...string) (*ProviderHandler, error) {
-	return nil, ErrInvalidProviders // not implemented yet
-}
-
 // CreateHandler attaches providesFor and captureContent to a handler. Calling
 // the returned handler's Invoke or Stream directly applies captureContent
 // just as a call through Config does.

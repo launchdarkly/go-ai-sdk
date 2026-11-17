@@ -3,7 +3,7 @@
 ## Role and tier
 
 Tier 1 handler package. The handler's `ProvidesFor` field is `{"*", "agent"}`: the wildcard fallback for any
-agent-mode variation. Built on the SDK's own `llms` package; graphs run on the internal `internal/stategraph` runner. Also
+agent-mode variation, or, with `Options.Providers`, for the listed providers only (`ProviderHandler.WithProviders`; `NewHandler`, `LangChainAgents` and `LangChainGraph` build through `buildHandler`). Built on the SDK's own `llms` package; graphs run on the internal `internal/stategraph` runner. Also
 exports the `LangChainGraph` wrapper and the `ToLangGraph` native adapter.
 
 ## File map
@@ -29,7 +29,7 @@ one tool call) lives in
 const PackageName, PackageVersion, SpanName
 var ErrRecursionLimit, ErrNoToolHandler, ErrEmptyResponse, ErrNoRoot, ErrNilGraph, ErrNodeName
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
-type Options struct{ Model llms.Model; ModelFactory ModelFactory; CaptureContent aiserver.ContentCapture }
+type Options struct{ Model llms.Model; ModelFactory ModelFactory; CaptureContent aiserver.ContentCapture; Providers []string }
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func LangChainAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)

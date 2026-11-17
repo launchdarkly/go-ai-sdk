@@ -117,7 +117,7 @@ var handlerKitNames = []string{
 	"ContextIdentity", "ContextToMap", "DefaultOTLPEndpoint", "FormattingInstructions", "GraphSpanName",
 	"GraphTopology", "GraphTopologyEdge", "HandlerRun", "HandlerSpanOptions", "ImageURL", "NormalizeMode",
 	"OutputFormatInstruction", "ParseAiConfig", "ParseJSONWithPossibleFences", "ParseUsage", "Prompt",
-	"RegisterAiSdkPackage", "ReportUsage", "SelectHandler", "SetLDSpanAttributes", "SetLDSpanAttributesFor",
+	"RegisterAiSdkPackage", "ReportUsage", "SameHandlerIdentity", "SelectHandler", "SetLDSpanAttributes", "SetLDSpanAttributesFor",
 	"SetUsageSpanAttributes", "SpanUsage", "StartHandlerRun", "TracerPrefix", "TrackGraphEvent", "VarLD",
 	"VarLDContext", "WildcardProvider", "WithOutputFormat", "WrapToolHandlers",
 }
