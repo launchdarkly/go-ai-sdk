@@ -298,6 +298,9 @@ func finishEvaluate(span trace.Span, c *critResult) {
 	attrs := []attribute.KeyValue{
 		attribute.String("gen_ai.evaluation.name", c.criterion.criterionType()),
 		attribute.Float64("gen_ai.evaluation.score.value", c.score),
+		// Every offline criterion scores from 0 to 1.
+		attribute.Float64("launchdarkly.evaluation.score.min", 0),
+		attribute.Float64("launchdarkly.evaluation.score.max", 1),
 	}
 	if c.reason != "" && c.captureOn {
 		attrs = append(attrs, attribute.String("gen_ai.evaluation.explanation", c.reason))

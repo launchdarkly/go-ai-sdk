@@ -2,6 +2,7 @@ package aiserver
 
 import (
 	"context"
+	"maps"
 	"math/rand/v2"
 	"strings"
 
@@ -96,7 +97,26 @@ func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context) (A
 		sdkLogger().Error("judge skipped: its config could not be resolved", "judge", key, "error", err)
 		return AiConfig{}, VariationMeta{}, ldvalue.Null(), false
 	}
+	if hasOutputFormat(cfg) {
+		sdkLogger().Warn("judge outputFormat is ignored: a judge always returns {score, reasoning}", "judge", key)
+		cfg = withoutOutputFormat(cfg)
+	}
 	return cfg, meta, value, true
+}
+
+func hasOutputFormat(cfg AiConfig) bool {
+	_, raw := cfg.Raw["outputFormat"]
+	return cfg.OutputFormat != nil || raw
+}
+
+// withoutOutputFormat drops a judge's own outputFormat, which would conflict
+// with the {score, reasoning} verdict. Raw is cloned so the cached source
+// config keeps it.
+func withoutOutputFormat(cfg AiConfig) AiConfig {
+	cfg.OutputFormat = nil
+	cfg.Raw = maps.Clone(cfg.Raw)
+	delete(cfg.Raw, "outputFormat")
+	return cfg
 }
 
 // runJudges executes the configured judges inline. Judges never get
@@ -232,7 +252,7 @@ func RunJudge(ctx context.Context, task JudgeTask, handlers []*ProviderHandler) 
 	if h == nil {
 		return nil, nil
 	}
-	cfg := task.JudgeConfig
+	cfg := withoutOutputFormat(task.JudgeConfig) // a task from an older SDK may still carry it
 	if task.CollapseMessages {
 		cfg = collapseMessages(cfg)
 	}

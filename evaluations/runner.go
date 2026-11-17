@@ -204,13 +204,12 @@ func (m *EvaluationsModule) prepare(a RunOptions) (*runState, error) {
 	default:
 		r.concurrency = a.Concurrency
 	}
-	if a.PollInterval < 0 {
-		return nil, invalid("PollInterval must not be negative")
+	if r.interval, err = pollSetting("PollInterval", a.PollInterval, a.PollIntervalExact, defaultPollInterval); err != nil {
+		return nil, err
 	}
-	if a.PollTimeout < 0 {
-		return nil, invalid("PollTimeout must not be negative")
+	if r.timeout, err = pollSetting("PollTimeout", a.PollTimeout, a.PollTimeoutExact, defaultPollTimeout); err != nil {
+		return nil, err
 	}
-	r.interval, r.timeout = cmp.Or(a.PollInterval, defaultPollInterval), cmp.Or(a.PollTimeout, defaultPollTimeout)
 	if a.Criteria != nil {
 		if err := validateCriteria(a.Criteria); err != nil {
 			return nil, err
@@ -570,6 +569,13 @@ func (r *runState) resolveJudges(ctx context.Context) error {
 		cfg.Tools = nil
 		cfg.Raw = maps.Clone(cfg.Raw)
 		delete(cfg.Raw, "tools")
+		// The harness owns the {score, reasoning} verdict, so a judge's own
+		// outputFormat is dropped, with one warning per judge per run.
+		if _, has := cfg.Raw["outputFormat"]; has || cfg.OutputFormat != nil {
+			r.m.logger.Warn("judge outputFormat is ignored: a judge always returns {score, reasoning}", "judge", j.key)
+			cfg.OutputFormat = nil
+			delete(cfg.Raw, "outputFormat")
+		}
 		rj.config = cfg
 		rj.handler = selectHandler(r.pool, cfg.Provider.Name, mode)
 		switch {
@@ -669,7 +675,7 @@ func (r *runState) runJudge(ctx context.Context, g *genResult, j *Judge) *critRe
 	}
 	score, ok := judgeScore(raw)
 	if !ok || score < 0 || score > 1 {
-		return res.fail(causeInvalidScore, fmt.Sprintf("judge score must be a finite number between 0 and 1, got %#v", raw))
+		return res.fail(causeInvalidScore, fmt.Sprintf("judge score must be a finite number between 0 and 1, got %s", jsonName(raw)))
 	}
 	res.elapsed = time.Since(res.started)
 	res.status, res.score, res.reason, res.usage = statusComplete, score, reasoning, hr.Usage
@@ -689,6 +695,26 @@ func judgeScore(v any) (float64, bool) {
 	return float64(n), ok
 }
 
+// jsonName spells an invalid score as JSON (and JavaScript, for the
+// non-finite numbers) spells it, never as a Go repr.
+func jsonName(v any) string {
+	if f, ok := v.(float64); ok {
+		switch {
+		case math.IsNaN(f):
+			return "NaN"
+		case math.IsInf(f, 1):
+			return "Infinity"
+		case math.IsInf(f, -1):
+			return "-Infinity"
+		}
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprint(v)
+	}
+	return string(b)
+}
+
 func runScorer(ctx context.Context, g *genResult, s *Scorer) *critResult {
 	res := &critResult{rowIndex: g.row.index, criterion: s, started: time.Now()}
 	public := DatasetRow{RowIndex: g.row.index, Input: deref(g.row.input), ExpectedOutput: deref(g.row.expected),
@@ -698,7 +724,7 @@ func runScorer(ctx context.Context, g *genResult, s *Scorer) *critResult {
 		return res.fail(causeScorerRaised, err.Error())
 	}
 	if math.IsNaN(score) || math.IsInf(score, 0) || score < 0 || score > 1 {
-		return res.fail(causeInvalidScore, fmt.Sprintf("scorer %q must return a finite number between 0 and 1, got %v", s.name, score))
+		return res.fail(causeInvalidScore, fmt.Sprintf("scorer %q must return a finite number between 0 and 1, got %s", s.name, jsonName(score)))
 	}
 	res.elapsed = time.Since(res.started)
 	res.status, res.score = statusComplete, score
@@ -742,4 +768,19 @@ func criterionFields(c *critResult) map[string]any {
 		}
 	}
 	return f
+}
+
+// pollSetting resolves one poll setting: the Exact field when set (zero
+// included), else the plain field, where 0 means the default.
+func pollSetting(name string, d time.Duration, exact *time.Duration, def time.Duration) (time.Duration, error) {
+	if exact != nil {
+		if *exact < 0 {
+			return 0, invalid(name + "Exact must not be negative")
+		}
+		return *exact, nil
+	}
+	if d < 0 {
+		return 0, invalid(name + " must not be negative")
+	}
+	return cmp.Or(d, def), nil
 }

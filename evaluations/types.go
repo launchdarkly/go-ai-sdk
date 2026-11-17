@@ -405,6 +405,11 @@ type RunOptions struct {
 	// default (2s and 3m).
 	PollInterval time.Duration
 	PollTimeout  time.Duration
+	// PollIntervalExact and PollTimeoutExact, when non-nil, replace
+	// PollInterval and PollTimeout and are used as given, so zero is a real
+	// zero: no wait between polls, or a single poll before the deadline.
+	PollIntervalExact *time.Duration
+	PollTimeoutExact  *time.Duration
 }
 
 // EvalVerdict is LaunchDarkly's ruling on a run, or on one criterion, against a

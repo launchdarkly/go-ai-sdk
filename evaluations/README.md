@@ -79,7 +79,8 @@ if !res.Passed { os.Exit(1) }
 | `Tools` | One list of `EvalTool`. Define a tool in code with a literal (`EvalTool{Key, Implementation, Schema, Description}`; `Schema` is required, `{}` is valid). Use a library tool with `evals.Tools().Get(ctx, key, impl)`, which reads it and pins its version before `Run`; `Run` itself issues no tool request. Every key is non-blank and lowercase, may appear once, and must differ from every other under Unicode case folding (`straße` and `strasse` collide). A library tool must come from this module's project, and its `Key`, `Schema` and `Description` must stay as `Get` returned them (an edited copy fails `Run`; define an inline tool instead). With `AIConfig`, nil `Tools` fails when the variation lists tools, and `[]EvalTool{}` runs with no tools. |
 | `Criteria` | `*Judge` (`NewJudge`) and `*Scorer` (`NewScorer`). With `AIConfig`, nil uses the variation's judges and `[]Criterion{}` runs none. |
 | `Concurrency` | In-flight handler, judge and scorer calls (default 10). |
-| `PollInterval` / `PollTimeout` | Summary polling (default 2s / 3m). Large datasets need a longer timeout. |
+| `PollInterval` / `PollTimeout` | Summary polling (default 2s / 3m; 0 means the default). Large datasets need a longer timeout. |
+| `PollIntervalExact` / `PollTimeoutExact` | Optional `*time.Duration` overrides used as given, so `new(time.Duration(0))` is a real zero (no wait between polls; one poll before the deadline). When set, they replace `PollInterval` / `PollTimeout`. Negative values are rejected. |
 
 The SDK never computes a verdict: it reports scores, and LaunchDarkly rules on them against the
 thresholds pinned on the evaluation. Once the run's rows are all accounted for and the summary
