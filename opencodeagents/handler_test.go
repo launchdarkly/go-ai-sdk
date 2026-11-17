@@ -245,6 +245,16 @@ func TestDefaultModel(t *testing.T) {
 		{"OpenAI", "bedrock/anthropic.claude-haiku", "eu", "amazon-bedrock", "eu.anthropic.claude-haiku"},
 		{"Anthropic", "amazon-bedrock/anthropic.claude-haiku", "us", "amazon-bedrock", "us.anthropic.claude-haiku"},
 		{"OpenAI", "gpt-5", "us", "openai", "gpt-5"}, // only amazon-bedrock takes the region
+		// The region is trimmed and loses trailing dots.
+		{"Bedrock", "anthropic.claude-haiku", " us ", "amazon-bedrock", "us.anthropic.claude-haiku"},
+		{"Bedrock", "anthropic.claude-haiku", "us.", "amazon-bedrock", "us.anthropic.claude-haiku"},
+		{"Bedrock", "anthropic.claude-haiku", " . ", "amazon-bedrock", "anthropic.claude-haiku"},
+		// An id that already has a known profile prefix is not prefixed again.
+		{"Bedrock", "global.anthropic.claude-haiku", "us", "amazon-bedrock", "global.anthropic.claude-haiku"},
+		{"OpenAI", "bedrock/us-gov.anthropic.claude-haiku", "eu", "amazon-bedrock", "us-gov.anthropic.claude-haiku"},
+		// An application inference profile ARN takes no prefix. It holds a "/",
+		// so it is reached through the provider route.
+		{"Bedrock", "amazon-bedrock/arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc", "us", "amazon-bedrock", "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc"},
 	}
 	for _, tc := range cases {
 		c := aiserver.AiConfig{Model: aiserver.Model{Name: tc.name, Region: tc.region}}

@@ -357,9 +357,7 @@ func defaultModel(cfg *aiserver.AiConfig) (providerID, modelID string, err error
 		}
 	}
 	if providerID == "amazon-bedrock" {
-		if region := cfg.Model.Region; region != "" && !strings.HasPrefix(modelID, region+".") {
-			modelID = region + "." + modelID
-		}
+		modelID = handlerkit.BedrockModelID(modelID, cfg.Model.Region)
 	}
 	return providerID, modelID, nil
 }

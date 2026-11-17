@@ -107,8 +107,10 @@ every OpenCode tool is denied.
 `Options.Model` maps a config to OpenCode's `providerID` and `modelID`. The default splits a
 `provider/model` name (`bedrock/` becomes `amazon-bedrock`); otherwise `Bedrock` (any case)
 maps to `amazon-bedrock`, `Gemini` to `google`, and any other provider name is lowercased. An
-`amazon-bedrock` model id gets `model.region` as its inference-profile prefix (`us.<id>`), and
-telemetry reports the id that was sent.
+`amazon-bedrock` model id gets `model.region` as its inference-profile prefix (`us.<id>`), once:
+the region is trimmed (`" us "` and `"us."` mean `us`), and an id that already starts with a
+cross-region prefix (`global.`, `us.`, `eu.`, ...) or is an ARN is sent unchanged. Telemetry
+reports the id that was sent.
 
 No `model.parameters` key is forwarded: OpenCode's message request has no field for sampling,
 length or tool choice, and takes them from its own configuration.
