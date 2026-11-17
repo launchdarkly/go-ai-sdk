@@ -5,7 +5,6 @@
 package chatwire
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"maps"
@@ -205,41 +204,17 @@ func StreamTurn(ctx context.Context, client *openai.Client, params openai.ChatCo
 	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{IncludeUsage: param.NewOpt(true)}
 	s := client.Chat.Completions.NewStreaming(ctx, params)
 	defer s.Close()
-	var (
-		text      []byte
-		calls     = map[int64]*ToolCall{}
-		sawChoice bool
-	)
-	turn.Usage.Unreported = true
+	var acc openai.ChatCompletionAccumulator
+	// The accumulator keeps usage counts but not whether usage was sent.
+	var usage openai.CompletionUsage
 	for s.Next() {
 		ch := s.Current()
-		if ch.Model != "" {
-			turn.Model = ch.Model
+		acc.AddChunk(ch)
+		if ch.JSON.Usage.Valid() {
+			usage = ch.Usage
 		}
-		if ch.JSON.Usage.Valid() && ch.Usage.JSON.PromptTokens.Valid() {
-			turn.Usage = Usage(ch.Usage)
-		}
-		if len(ch.Choices) == 0 {
-			continue
-		}
-		sawChoice = true
-		c := ch.Choices[0]
-		if c.FinishReason != "" {
-			turn.Finish = c.FinishReason
-		}
-		for _, d := range c.Delta.ToolCalls {
-			tc := calls[d.Index]
-			if tc == nil {
-				tc = &ToolCall{}
-				calls[d.Index] = tc
-			}
-			tc.ID = cmp.Or(tc.ID, d.ID)
-			tc.Name = cmp.Or(tc.Name, d.Function.Name)
-			tc.Arguments += d.Function.Arguments
-		}
-		if c.Delta.Content != "" {
-			text = append(text, c.Delta.Content...)
-			if !onText(c.Delta.Content) {
+		for _, c := range ch.Choices {
+			if c.Index == 0 && c.Delta.Content != "" && !onText(c.Delta.Content) {
 				return Turn{}, true, nil
 			}
 		}
@@ -247,12 +222,9 @@ func StreamTurn(ctx context.Context, client *openai.Client, params openai.ChatCo
 	if err := s.Err(); err != nil {
 		return Turn{}, false, err
 	}
-	if !sawChoice {
-		return Turn{}, false, ErrNoChoices
+	if turn, err = TurnOf(&acc.ChatCompletion); err != nil {
+		return Turn{}, false, err
 	}
-	turn.Text = string(text)
-	for _, i := range slices.Sorted(maps.Keys(calls)) {
-		turn.ToolCalls = append(turn.ToolCalls, *calls[i])
-	}
+	turn.Usage = Usage(usage)
 	return turn, false, nil
 }
