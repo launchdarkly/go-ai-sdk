@@ -159,7 +159,15 @@ func TestJudgeEvaluationSpan(t *testing.T) {
 		}
 		found := false
 		for _, e := range s.Events() {
-			found = found || e.Name == "gen_ai.evaluation.result"
+			if e.Name != "gen_ai.evaluation.result" {
+				continue
+			}
+			found = true
+			for _, a := range e.Attributes {
+				if k := string(a.Key); k == "launchdarkly.evaluation.score.min" || k == "launchdarkly.evaluation.score.max" {
+					t.Errorf("online judge event carries %s", k)
+				}
+			}
 		}
 		if !found {
 			t.Error("missing gen_ai.evaluation.result event")

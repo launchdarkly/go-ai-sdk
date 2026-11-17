@@ -571,7 +571,7 @@ func (r *runState) resolveJudges(ctx context.Context) error {
 		delete(cfg.Raw, "tools")
 		// The harness owns the {score, reasoning} verdict, so a judge's own
 		// outputFormat is dropped, with one warning per judge per run.
-		if _, has := cfg.Raw["outputFormat"]; has || cfg.OutputFormat != nil {
+		if judging.HasOutputFormat(cfg.OutputFormat, cfg.Raw) {
 			r.m.logger.Warn("judge outputFormat is ignored: a judge always returns {score, reasoning}", "judge", j.key)
 			cfg.OutputFormat = nil
 			delete(cfg.Raw, "outputFormat")

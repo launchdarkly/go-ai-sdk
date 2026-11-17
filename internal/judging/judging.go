@@ -104,3 +104,10 @@ func reasonText(v any) string {
 		return ""
 	}
 }
+
+// HasOutputFormat reports whether a judge config carries its own
+// outputFormat, either parsed or only in the raw variation.
+func HasOutputFormat(outputFormat, raw map[string]any) bool {
+	_, inRaw := raw["outputFormat"]
+	return outputFormat != nil || inRaw
+}
