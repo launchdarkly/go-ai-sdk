@@ -88,5 +88,9 @@ keys and hashes are shape-checked and redacted before reaching any signal or rec
 - `Listener` is a pointer so `RemoveListener` can find it; wrapping the same func twice makes two
   listeners.
 - Tests that touch `fsOps`, the umask or module state must not run in parallel.
+- `NewLaunchDarklySkillStore` reads `LD_BASE_URI` / `LD_STREAM_URI` when no URI option is set. A
+  test that asserts a default host clears both first (`clearEndpointEnv`).
+- `StoreDiagnostics.ObjectsRevoked` moves only at `payload-transferred`; `deleteObject` never
+  counts, so an abandoned or declined transfer counts nothing.
 
 Check: `gofmt -l skills && go vet ./skills/ && go test -race ./skills/ ./aiserver/`.
