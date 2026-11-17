@@ -72,6 +72,10 @@ type Options struct {
 	// CaptureContent gates prompt, completion, tool and judge-explanation
 	// content on spans. CaptureDefault follows aiserver.Configure, else on.
 	CaptureContent aiserver.ContentCapture
+	// Providers scopes the "*" handler to these config.provider.name values
+	// (see aiserver.ProviderHandler.WithProviders). nil matches any provider.
+	// NewHandler refuses an empty list, a blank name or a padded name.
+	Providers []string
 }
 
 // NewHandler returns the LangChain messages handler (createLangChainMessagesHandler).

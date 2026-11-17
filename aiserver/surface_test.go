@@ -16,7 +16,7 @@ var rootSurface = []string{
 	"AIConfig", "AgentGraph", "AiConfig", "CallOption", "CallOptions", "CaptureDefault", "CaptureOff",
 	"CaptureOn", "Compose", "Config", "ConfigArgs", "Configure", "ContentBlock", "ContentCapture",
 	"ConversationIDSpanProcessor", "CreateHandler", "ErrConfigDisabled", "ErrConfigNotFound",
-	"ErrConfigureLocked", "ErrGraphDisabled", "ErrNoHandler", "ErrNotInitialized", "EventChunk", "EventDone",
+	"ErrConfigureLocked", "ErrGraphDisabled", "ErrInvalidProviders", "ErrNoHandler", "ErrNotInitialized", "EventChunk", "EventDone",
 	"EventHandoff", "EventNodeDone", "EventNodeStart", "EventType", "GetClient", "Graph", "GraphDefinition",
 	"GraphEdge", "GraphNode", "GraphOptions", "GraphResponse", "GraphStreamEvent", "HandlerRequest",
 	"HandlerResult", "HandlerStreamEvent", "ImageSource", "InitClient", "InitOptions", "InitWithClient",
