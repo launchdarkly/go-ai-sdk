@@ -6,8 +6,8 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
 
-// The constructors return an error so an invalid option can be refused at
-// construction without a later breaking change. No option is refused yet.
+// The constructors return an error so an invalid option (an invalid
+// Options.Providers) is refused at construction.
 var _ func(Options) (*aiserver.ProviderHandler, error) = NewHandler
 var _ func(string, aiserver.GraphOptions, Options) (*aiserver.AgentGraph, error) = LangChainGraph
 

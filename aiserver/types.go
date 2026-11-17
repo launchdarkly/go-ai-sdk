@@ -233,6 +233,11 @@ type ProviderHandler struct {
 	CaptureContent ContentCapture
 	Invoke         InvokeFunc
 	Stream         StreamFunc // optional; nil falls back to Invoke
+	// Providers scopes a "*" handler to these config.provider.name values,
+	// compared exactly. nil leaves the wildcard unscoped, so it matches any
+	// provider. It is consulted only when ProvidesFor.Provider is "*". Set it
+	// with WithProviders, which validates the list.
+	Providers []string
 }
 
 // CreateHandler attaches providesFor and captureContent to a handler. Calling

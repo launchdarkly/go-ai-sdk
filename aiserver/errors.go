@@ -18,6 +18,9 @@ var (
 	// ErrNoHandler means no registered handler serves the variation's
 	// provider and mode.
 	ErrNoHandler = errors.New("launchdarkly ai: no handler for provider")
+	// ErrInvalidProviders means a handler's providers list is empty or holds
+	// a blank name or a name with surrounding whitespace.
+	ErrInvalidProviders = errors.New("launchdarkly ai: providers must be a non-empty list of provider names without surrounding whitespace")
 	// ErrGraphDisabled means a graph flag, or a node it references, does not
 	// resolve to an enabled configuration.
 	ErrGraphDisabled = errors.New("launchdarkly ai: agent graph is disabled")

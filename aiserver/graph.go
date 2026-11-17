@@ -297,27 +297,24 @@ func (d *GraphDefinition) tools(override map[string]ToolHandler) map[string]Tool
 	return resolveTools(d.opts.Registry, d.opts.ToolHandlers)
 }
 
-// selectNodeHandler matches provider+mode, then wildcard+mode, then provider
-// alone, then a sole handler.
+// selectNodeHandler matches provider+mode, then the best wildcard of the
+// mode, then provider alone, then a sole handler that does not exclude the
+// provider by its list.
 func selectNodeHandler(n *GraphNode, handlers []*ProviderHandler) (*ProviderHandler, error) {
 	provider := n.Config.Provider.Name
 	if provider == "" {
 		return nil, errorf("provider not found for graph node %s", n.Key)
 	}
 	mode := kitNormalizeMode(n.Meta.Mode)
-	for _, want := range []ProvidesFor{{provider, mode}, {kitbase.WildcardProvider, mode}} {
-		for _, h := range handlers {
-			if h.ProvidesFor.Provider == want.Provider && handlerMode(h) == want.Mode {
-				return h, nil
-			}
-		}
+	if h := selectFor(handlers, provider, modeIs(mode)); h != nil {
+		return h, nil
 	}
 	for _, h := range handlers {
 		if h.ProvidesFor.Provider == provider {
 			return h, nil
 		}
 	}
-	if len(handlers) == 1 {
+	if len(handlers) == 1 && (!isWildcard(handlers[0]) || wildcardCovers(handlers[0], provider)) {
 		return handlers[0], nil
 	}
 	return nil, fmt.Errorf("%w %s", ErrNoHandler, provider)

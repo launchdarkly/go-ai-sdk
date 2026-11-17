@@ -9,7 +9,6 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/judging"
-	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 // sampled is a seam so tests can make sampling deterministic.
@@ -40,37 +39,38 @@ func collapseMessages(cfg AiConfig) AiConfig {
 	return cfg
 }
 
-func providerMatches(p ProvidesFor, provider string) bool {
-	return p.Provider == provider || p.Provider == kitbase.WildcardProvider
-}
-
-// pickJudgeHandler applies the judge handler priority: exact provider+mode
-// (or wildcard), then an agent handler for a messages judge (collapsing its
-// messages), then the parent handler when it covers the provider. ok=false
-// skips the judge rather than send a model to the wrong provider's API.
-func pickJudgeHandler(parent *ProviderHandler, handlers []*ProviderHandler, provider string, mode Mode) (h *ProviderHandler, collapse, ok bool) {
-	if handlers == nil {
-		if parent == nil || !providerMatches(parent.ProvidesFor, provider) {
-			return nil, false, false
-		}
-		return parent, mode == ModeMessages && handlerMode(parent) == ModeAgent, true
-	}
-	for _, c := range handlers {
-		if providerMatches(c.ProvidesFor, provider) && handlerMode(c) == mode {
-			return c, false, true
-		}
+// selectJudge picks from handlers in the config() order (exact provider,
+// then the best wildcard that accepts it) for the judge's mode, then, for a
+// messages judge, an agent handler the same way (collapse=true).
+func selectJudge(handlers []*ProviderHandler, provider string, mode Mode) (h *ProviderHandler, collapse bool) {
+	if h := selectFor(handlers, provider, modeIs(mode)); h != nil {
+		return h, false
 	}
 	if mode == ModeMessages {
-		for _, c := range handlers {
-			if providerMatches(c.ProvidesFor, provider) && handlerMode(c) == ModeAgent {
-				return c, true, true
-			}
+		if h := selectFor(handlers, provider, modeIs(ModeAgent)); h != nil {
+			return h, true
 		}
 	}
-	if parent != nil && providerMatches(parent.ProvidesFor, provider) {
+	return nil, false
+}
+
+// pickJudgeHandler applies the judge handler priority: selectJudge over
+// handlers, then the parent handler when it covers the provider (a scoped
+// wildcard only for a listed provider). ok=false skips the judge rather than
+// send a model to the wrong provider's API.
+func pickJudgeHandler(parent *ProviderHandler, handlers []*ProviderHandler, provider string, mode Mode) (h *ProviderHandler, collapse, ok bool) {
+	if h, collapse := selectJudge(handlers, provider, mode); h != nil {
+		return h, collapse, true
+	}
+	if parent != nil && covers(parent, provider) {
 		return parent, mode == ModeMessages && handlerMode(parent) == ModeAgent, true
 	}
 	return nil, false, false
+}
+
+// warnJudgeSkipped logs a judge no handler covers.
+func warnJudgeSkipped(key, provider string) {
+	sdkLogger().Warn("judge skipped: no handler covers its provider", "judge", key, "provider", provider)
 }
 
 func activeJudges(cfg AiConfig) []JudgeRef {
@@ -111,6 +111,7 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 		}
 		h, collapse, ok := pickJudgeHandler(a.handler, a.handlers, jcfg.Provider.Name, kitNormalizeMode(jmeta.Mode))
 		if !ok {
+			warnJudgeSkipped(j.Key, jcfg.Provider.Name)
 			continue
 		}
 		effective := jcfg
@@ -188,6 +189,7 @@ func buildJudgeTasks(ctx context.Context, a judgeArgs) ([]JudgeTask, error) {
 		mode := kitNormalizeMode(jmeta.Mode)
 		_, collapse, ok := pickJudgeHandler(a.handler, a.handlers, jcfg.Provider.Name, mode)
 		if !ok {
+			warnJudgeSkipped(j.Key, jcfg.Provider.Name)
 			continue
 		}
 		tasks = append(tasks, JudgeTask{
@@ -214,21 +216,7 @@ type JudgeRunResult struct {
 // verdict is not a finite numeric score, and an error for provider failures.
 func RunJudge(ctx context.Context, task JudgeTask, handlers []*ProviderHandler) (*JudgeRunResult, error) {
 	reportUsage("client.runJudge", "", "")
-	var h *ProviderHandler
-	for _, c := range handlers {
-		if providerMatches(c.ProvidesFor, task.JudgeProvider) && handlerMode(c) == task.JudgeMode {
-			h = c
-			break
-		}
-	}
-	if h == nil && task.JudgeMode == ModeMessages {
-		for _, c := range handlers {
-			if providerMatches(c.ProvidesFor, task.JudgeProvider) && handlerMode(c) == ModeAgent {
-				h = c
-				break
-			}
-		}
-	}
+	h, _ := selectJudge(handlers, task.JudgeProvider, task.JudgeMode)
 	if h == nil {
 		return nil, nil
 	}
