@@ -3,6 +3,7 @@ package aiserver
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -104,6 +105,7 @@ func TestTypesafeJudgeExpandsInline(t *testing.T) {
 			t.Errorf("track %s = %+v, want %v with judgeConfigKey %s", ev, got, want.score, want.key)
 		}
 	}
+	checkTokensTrackedOnce(t, f)
 
 	// One judge span: attributes from the first label, one event per label.
 	judgeSpan := typesafeJudgeSpan(t, exp)
@@ -112,6 +114,33 @@ func TestTypesafeJudgeExpandsInline(t *testing.T) {
 	}
 	if got := judgeSpan.eventNames(); strings.Join(got, ",") != "judge.migration_intent,judge.migration" {
 		t.Errorf("evaluation events named %v", got)
+	}
+	checkNoScoreLabel(t, judgeSpan)
+}
+
+// The labels share one judge call, so its token usage is tracked once, not
+// once per label. The parent handler reports no usage of its own.
+func checkTokensTrackedOnce(t *testing.T, f *fakeLD) {
+	t.Helper()
+	for ev, want := range map[string]float64{"$ld:ai:tokens:total": 14, "$ld:ai:tokens:input": 10, "$ld:ai:tokens:output": 4} {
+		if got := f.events(ev); len(got) != 1 || got[0].Metric != want {
+			t.Errorf("%s = %+v, want one event of %v", ev, got, want)
+		}
+	}
+}
+
+// A TypeSafe judge writes no score label on the span or on any label's event.
+func checkNoScoreLabel(t *testing.T, s *spanView) {
+	t.Helper()
+	if v, has := s.attrs["gen_ai.evaluation.score.label"]; has {
+		t.Errorf("judge span carries gen_ai.evaluation.score.label %q", v)
+	}
+	for _, e := range s.events {
+		for _, a := range e.Attributes {
+			if a.Key == "gen_ai.evaluation.score.label" {
+				t.Errorf("evaluation event carries gen_ai.evaluation.score.label %q", a.Value.Emit())
+			}
+		}
 	}
 }
 
@@ -205,6 +234,12 @@ func TestTypesafeJudgeTaskRoundTrip(t *testing.T) {
 	// The top-level fields are the first label's.
 	if out.Score != 0.9 || out.Response != "yes" || out.TrackData.JudgeConfigKey != "judge.migration_intent" {
 		t.Errorf("RunJudge = %+v, want the first label", out)
+	}
+	// The rest of the track data is the parent's, as for a classic judge.
+	wantTD := resp.TrackData
+	wantTD.JudgeConfigKey = "judge.migration_intent"
+	if !reflect.DeepEqual(out.TrackData, wantTD) {
+		t.Errorf("deferred trackData = %+v, want parent's %+v", out.TrackData, wantTD)
 	}
 	if len(f.events("quality")) != 0 || len(f.events("ev-intent")) != 0 {
 		t.Error("RunJudge must not track; the caller tracks each metric")
