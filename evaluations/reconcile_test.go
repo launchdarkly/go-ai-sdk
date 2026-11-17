@@ -1,7 +1,9 @@
 package evaluations
 
 import (
+	"context"
 	"errors"
+	"net/url"
 	"reflect"
 	"testing"
 
@@ -95,15 +97,30 @@ func TestRunRethrowsNon404OnByKeyGet(t *testing.T) {
 	}
 }
 
-func TestRunDoesNotRetryReconcilePatchAfter5xx(t *testing.T) {
+func TestRunRetriesReconcilePatchAfter5xx(t *testing.T) {
 	e := newEnv(t, 1)
 	e.route("GET", "projects/proj/offline-evaluations/eval-key", resp{body: existingEval(3, nil)})
 	e.route("PATCH", "projects/proj/offline-evaluations/eval-key",
 		resp{status: 503, body: "unavailable"},
 		resp{body: existingEval(4, nil)})
-	runErr(t, e.module(), baseArgs(handler("OpenAI", aiserver.ModeMessages, nil)), ErrAPI, "503")
-	if e.count("PATCH ") != 1 {
-		t.Fatalf("PATCH calls: %v", e.sequence())
+	mustRun(t, e.module(), baseArgs(handler("OpenAI", aiserver.ModeMessages, nil)))
+	if e.count("PATCH ") != 2 || e.count(offlineGet) != 1 {
+		t.Fatalf("calls: %v", e.sequence())
+	}
+	if ev := e.ld.events(generationEventName)[0].Data; ev["evaluationVersion"] != 4.0 {
+		t.Fatalf("event identity %v", ev)
+	}
+}
+
+func TestRunRetriesReconcilePatchAfterTransportFailure(t *testing.T) {
+	e := newEnv(t, 1)
+	e.route("GET", "projects/proj/offline-evaluations/eval-key", resp{body: existingEval(3, nil)})
+	e.route("PATCH", "projects/proj/offline-evaluations/eval-key",
+		resp{err: &url.Error{Op: "Patch", URL: "x", Err: context.DeadlineExceeded}},
+		resp{body: existingEval(4, nil)})
+	mustRun(t, e.module(), baseArgs(handler("OpenAI", aiserver.ModeMessages, nil)))
+	if e.count("PATCH ") != 2 || e.count(offlineGet) != 1 {
+		t.Fatalf("calls: %v", e.sequence())
 	}
 }
 

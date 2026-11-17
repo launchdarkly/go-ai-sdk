@@ -7,7 +7,7 @@ by provider and mode. Its exported names are pinned in `surface_test.go`.
 | File | Responsibility |
 | --- | --- |
 | `module.go` | `InitEvaluationsOptions`, `EvaluationsModule`, `InitEvaluations` (project key, token, SDK key, in that order; reports `client.initEvaluations` before any check), client resolution, `Run`. |
-| `api.go` | Management API client: host resolved at init (never `LD_BASE_URI`), headers, retry policy (429 always; 5xx/transport only for GET/HEAD and idempotent POSTs; reconcile PATCH is not idempotent), `Retry-After`, injectable sleep/jitter. `APIError`. |
+| `api.go` | Management API client: host resolved at init (never `LD_BASE_URI`), headers, retry policy (429 always; 5xx/transport only for GET/HEAD and idempotent writes: the row-upload and cancel POSTs and the reconcile PATCH), `Retry-After`, injectable sleep/jitter. `APIError`. |
 | `types.go` | Public types, sentinel errors, criterion constructors (`NewJudge`, `NewScorer`) and wire shapes. |
 | `tools.go` | `ToolsClient` (`EvaluationsModule.Tools`): `Get` validates the key and implementation, reads `ai-tools/<key>` and returns a library `EvalTool` with its pinned version and project. The only tool request. |
 | `validate.go` | Every pre-I/O check: pool, generation mode/coverage/prompt, tools (key, implementation, inline schema or library project, case-folded collisions, in list order), inline rows (strict JSON), criteria. Shared `selectHandler`. |
