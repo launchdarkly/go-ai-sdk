@@ -65,8 +65,8 @@ func init() { handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion) }
 // AI Config, so the model can see config.model.parameters and name.
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
 
-// Options configure NewHandler (the model to call plus
-// captureContent).
+// Options configure NewHandler: the model to call, content capture, and
+// an optional provider scope.
 type Options struct {
 	// Model is used for every call when set.
 	Model llms.Model

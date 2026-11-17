@@ -20,7 +20,7 @@ To scope the wildcard to some providers, set `Options.Providers`, for example `[
 handler then serves only variations whose `provider.name` is in the list (compared exactly), so two
 scoped handlers of this package, one per provider, can be registered together. An exact-provider
 handler still wins, and among wildcards the shortest list that names the provider wins. `NewHandler`
-returns an error wrapping `aiserver.ErrInvalidProviders` for an empty list, a blank name or a name
+and `LangChainMessages` (through `InvokeOptions.Handler`) return an error wrapping `aiserver.ErrInvalidProviders` for an empty list, a blank name or a name
 with surrounding whitespace.
 
 ## Examples

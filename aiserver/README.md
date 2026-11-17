@@ -215,6 +215,7 @@ concerns, and keeps the LaunchDarkly SDK's own reason when there is one.
 | `ErrConfigNotFound` | the flag returned no AI Config (missing, wrong type, or not evaluable) |
 | `ErrConfigDisabled` | the AI Config variation is turned off |
 | `ErrNoHandler` | no handler serves the variation's provider and mode |
+| `ErrInvalidProviders` | `WithProviders` (or a LangChain `Options.Providers`) got an empty list, a blank name or a name with surrounding whitespace |
 | `ErrGraphDisabled` | the graph flag, or a node it references, is not enabled |
 
 ```go

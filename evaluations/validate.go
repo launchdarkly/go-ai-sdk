@@ -13,6 +13,7 @@ import (
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
+	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
 
 // --- handler pool -------------------------------------------------
@@ -52,7 +53,7 @@ func validatePool(single *aiserver.ProviderHandler, many []*aiserver.ProviderHan
 
 // scopeOf names a scoped wildcard's provider list for an error, else "".
 func scopeOf(h *aiserver.ProviderHandler) string {
-	if h.ProvidesFor.Provider != "*" || h.Providers == nil {
+	if h.ProvidesFor.Provider != kitbase.WildcardProvider || h.Providers == nil {
 		return ""
 	}
 	return fmt.Sprintf(" for providers %v", h.Providers)
@@ -85,7 +86,7 @@ func describePool(pool []*aiserver.ProviderHandler) string {
 
 func describe(h *aiserver.ProviderHandler) string {
 	pf := providesFor(h)
-	return fmt.Sprintf("[%s, %s]", pf.Provider, pf.Mode)
+	return fmt.Sprintf("[%s, %s]%s", pf.Provider, pf.Mode, scopeOf(h))
 }
 
 func uncovered(provider string, mode aiserver.Mode, pool []*aiserver.ProviderHandler) error {

@@ -12,7 +12,7 @@ func TestEveryKitFunctionIsRegistered(t *testing.T) {
 		"CallableTools": CallableTools, "ReportUsage": ReportUsage, "RegisterAiSdkPackage": RegisterAiSdkPackage,
 		"SetLDSpanAttributesFor": SetLDSpanAttributesFor, "WrapToolHandlers": WrapToolHandlers,
 		"ParseUsage": ParseUsage, "NormalizeMode": NormalizeMode, "ParseAiConfig": ParseAiConfig,
-		"TrackGraphEvent": TrackGraphEvent, "SelectHandler": SelectHandler, "ImageURL": ImageURL,
+		"TrackGraphEvent": TrackGraphEvent, "SelectHandler": SelectHandler, "SameHandlerIdentity": SameHandlerIdentity, "ImageURL": ImageURL,
 		"ContentText": ContentText, "NodeTrackData": NodeTrackData, "GraphTrackData": GraphTrackData,
 		"GraphUserContext": GraphUserContext, "TrackNativeTool": TrackNativeTool,
 	} {

@@ -55,7 +55,7 @@ TraverseVisitor
 Configure, SDKOptions, ContentCapture, CaptureDefault, CaptureOn, CaptureOff
 // errors
 ErrNotInitialized, ErrConfigNotFound, ErrConfigDisabled, ErrNoHandler, ErrGraphDisabled,
-ErrConfigureLocked
+ErrConfigureLocked, ErrInvalidProviders
 // call options and events
 CallOption, CallOptions, NewCallOptions, WithVariables, WithHistory, EventType,
 EventChunk, EventDone, EventNodeStart, EventNodeDone, EventHandoff
