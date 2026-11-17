@@ -5,6 +5,7 @@ package skills
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -330,7 +331,11 @@ func TestSkillSourceConstruction(t *testing.T) {
 		}
 	}
 	root := t.TempDir()
-	for name, src := range map[string]SkillSource{"zero SkillSource": {}, `ConfigSkills("")`: ConfigSkills("", ldcontext.New("u"))} {
+	for name, src := range map[string]SkillSource{
+		"zero SkillSource":   {},
+		`ConfigSkills("")`:   ConfigSkills("", ldcontext.New("u")),
+		`ConfigSkills("  ")`: ConfigSkills("  ", ldcontext.New("u")),
+	} {
 		if _, err := WriteSkillsFrom(context.Background(), src, root, nil); !errors.Is(err, ErrInvalidSkillSource) {
 			t.Errorf("WriteSkillsFrom(%s): %v", name, err)
 		}
@@ -498,6 +503,8 @@ func TestConfigSkillsClassification(t *testing.T) {
 		{"skills not a list", value(configValue(true, "nope"), nil)},
 		{"a skills entry without a string key", value(configValue(true, []any{map[string]any{"key": 7, "version": 1}}), nil)},
 	}
+	// The message names the cause as well as the key.
+	causes := map[string]string{"variation returns an error": "evaluation failed"}
 	for _, row := range failed {
 		_, _ = setup(t)
 		if row.value == nil {
@@ -508,6 +515,8 @@ func TestConfigSkillsClassification(t *testing.T) {
 		refs, err := readSource(t, ConfigSkills(key, ldcontext.New("u")))
 		if err == nil || !strings.Contains(err.Error(), key) {
 			t.Errorf("%s: want a failed read naming %q, got %v %v", row.name, key, refPairs(refs), err)
+		} else if cause := causes[row.name]; !strings.Contains(err.Error(), cause) {
+			t.Errorf("%s: the failed read does not name its cause %q: %v", row.name, cause, err)
 		}
 	}
 	answers := []struct {
@@ -722,7 +731,8 @@ func TestWatchSkillsFromNeedsAChangeSignal(t *testing.T) {
 		tr := arrange(t)
 		store := watchStore(nil)
 		_, w, err := WatchSkillsFrom(context.Background(), newSource(t, fixed(), "agent"), t.TempDir(), nil)
-		if err == nil || w != nil || !strings.Contains(err.Error(), "Notify") || !strings.Contains(err.Error(), "LaunchDarkly client") {
+		if err == nil || w != nil || !strings.Contains(err.Error(), "Notify") || !strings.Contains(err.Error(), "LaunchDarkly client") ||
+			!strings.Contains(err.Error(), "configKeys") {
 			t.Errorf("%s: %v", name, err)
 		}
 		if store.removed != 1 {
@@ -742,20 +752,29 @@ func TestWatchSkillsFromNeedsAChangeSignal(t *testing.T) {
 }
 
 func TestFixedListAndStarNeverSubscribeToConfigChanges(t *testing.T) {
+	watchBoth := func(t *testing.T, client string) {
+		t.Helper()
+		_, w1, err1 := WatchSkills(context.Background(), []SkillKey{"a"}, t.TempDir(), nil)
+		_, w2, err2 := WatchAllSkills(context.Background(), t.TempDir(), nil)
+		if err1 != nil || err2 != nil {
+			t.Fatal(client, err1, err2)
+		}
+		w1.Close()
+		w2.Close()
+	}
 	_, _ = setup(t)
 	tr := &fakeTracker{}
 	installClient(t, &trackedLD{tracker: tr})
 	watchStore(map[string]any{"a": rawSkill("a", 1, "a")})
-	_, w1, err1 := WatchSkills(context.Background(), []SkillKey{"a"}, t.TempDir(), nil)
-	_, w2, err2 := WatchAllSkills(context.Background(), t.TempDir(), nil)
-	if err1 != nil || err2 != nil {
-		t.Fatal(err1, err2)
-	}
-	w1.Close()
-	w2.Close()
+	watchBoth(t, "a client with a change API")
 	if added, _ := tr.counts(); added != 0 {
 		t.Fatalf("%d config listeners registered", added)
 	}
+	// Neither form needs a change signal, so a client without one is fine.
+	_, _ = setup(t)
+	installClient(t, &plainLD{})
+	watchStore(map[string]any{"a": rawSkill("a", 1, "a")})
+	watchBoth(t, "a client with no change API")
 }
 
 // Notify goes through the same trailing debounce: three calls spread over
@@ -809,7 +828,7 @@ func TestWatchSkillsFromCloseDetachesTheConfigListener(t *testing.T) {
 	_, _ = setup(t)
 	tr := &fakeTracker{}
 	installClient(t, &trackedLD{tracker: tr})
-	watchStore(map[string]any{"a": rawSkill("a", 1, "a")})
+	store := watchStore(map[string]any{"a": rawSkill("a", 1, "a")})
 	cs := &countingSource{answer: answering(NewSkillReference("a", 1))}
 	_, w := watchFrom(t, newSource(t, cs.refs, "agent"), t.TempDir(), &WatchSkillsOptions{Debounce: 10 * time.Millisecond})
 	w.Close()
@@ -817,8 +836,12 @@ func TestWatchSkillsFromCloseDetachesTheConfigListener(t *testing.T) {
 	if added, removed := tr.counts(); added != 1 || removed != 1 {
 		t.Fatalf("config listeners added %d, removed %d", added, removed)
 	}
-	tr.fire(t, "agent")
-	time.Sleep(50 * time.Millisecond)
+	if store.removed != 1 {
+		t.Fatalf("store RemoveListener called %d times", store.removed)
+	}
+	if n := tr.fire(t, "agent"); n != 0 {
+		t.Fatalf("%d config listeners still take changes", n)
+	}
 	if cs.reads() != 1 || w.Reconciles() != 0 {
 		t.Fatalf("after Close: reads %d, reconciles %d", cs.reads(), w.Reconciles())
 	}
@@ -846,6 +869,9 @@ func TestWatchSkillsFromVersionBumpConverges(t *testing.T) {
 		initial, w := watchFrom(t, newSource(t, cs.refs, "agent"), root, &WatchSkillsOptions{Debounce: 20 * time.Millisecond, OnReconcile: log.add})
 		if !slices.Equal(actionKinds(initial), []string{"pdf-extraction=written"}) {
 			t.Fatalf("initial %v", actionKinds(initial))
+		}
+		if n := len(log.all()); n != 0 {
+			t.Fatalf("the initial report went to OnReconcile (%d reports)", n)
 		}
 		file := filepath.Join(root, "pdf-extraction", "SKILL.md")
 		settle := func(want int) {
@@ -904,10 +930,13 @@ func TestWatchSkillsFromVersionBumpConverges(t *testing.T) {
 // Dropping a reference prunes on the next run whose retrieval is available.
 func TestDroppedReferencePrunesWhenRetrievalIsAvailable(t *testing.T) {
 	_, _ = setup(t)
-	probe := &probeStore{SkillStore: NewInMemorySkillStore(map[string]any{"a": rawSkill("a", 1, "a"), "b": rawSkill("b", 1, "b")}), ready: true}
+	mem := NewInMemorySkillStore(map[string]any{"a": rawSkill("a", 1, "a"), "b": rawSkill("b", 1, "b"), "c": rawSkill("c", 1, "c")})
+	probe := &probeStore{SkillStore: mem, ready: true}
 	SetSkillStore(probe)
 	var mu sync.Mutex
-	answer := []SkillReference{NewSkillReference("a", 1), NewSkillReference("b", 1)}
+	// c is written first, then leaves the store: it is on disk and in the
+	// manifest, but absent when it is requested again.
+	answer := []SkillReference{NewSkillReference("a", 1), NewSkillReference("b", 1), NewSkillReference("c", 1)}
 	src := newSource(t, func(context.Context) ([]SkillReference, error) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -925,6 +954,7 @@ func TestDroppedReferencePrunesWhenRetrievalIsAvailable(t *testing.T) {
 	write(clean)
 	write(withAbsent)
 	write(unavailable)
+	revoke(mem, "c", 1)
 	set(NewSkillReference("a", 1))
 	if r := write(clean); !slices.Contains(actionKinds(r), "b=removed") {
 		t.Fatalf("clean: %v", actionKinds(r))
@@ -932,6 +962,12 @@ func TestDroppedReferencePrunesWhenRetrievalIsAvailable(t *testing.T) {
 	set(NewSkillReference("a", 1), NewSkillReference("c", 1))
 	if r := write(withAbsent); !slices.Contains(actionKinds(r), "b=removed") || !slices.Contains(actionKinds(r), "c=error") {
 		t.Fatalf("with an absent reference: %v", actionKinds(r))
+	}
+	if readFile(t, filepath.Join(withAbsent, "c", "SKILL.md")) != "c" {
+		t.Fatal("the absent skill's file was not kept")
+	}
+	if _, ok := manifestEntries(t, withAbsent)["c/SKILL.md"]; !ok {
+		t.Fatal("the absent skill's manifest entry was dropped")
 	}
 	set(NewSkillReference("a", 1))
 	probe.ready = false
@@ -974,6 +1010,53 @@ func TestWatchSkillsFromSurvivesAFailedRead(t *testing.T) {
 	}
 	w.Notify()
 	waitReconciles(t, w, 2)
+	if r := log.last(t); !slices.Contains(actionKinds(r), "b=removed") {
+		t.Fatalf("after recovery: %v", actionKinds(r))
+	}
+}
+
+// Under OnUnavailableRaise a later failed read is logged, not returned to
+// anyone, and the next trigger reads the source again.
+func TestWatchSkillsFromLogsALaterRaise(t *testing.T) {
+	_, logs := setup(t)
+	noClient(t)
+	watchStore(map[string]any{"a": rawSkill("a", 1, "a"), "b": rawSkill("b", 1, "b")})
+	cs := &countingSource{answer: func(_ context.Context, n int) ([]SkillReference, error) {
+		switch n {
+		case 1:
+			return []SkillReference{NewSkillReference("a", 1), NewSkillReference("b", 1)}, nil
+		case 2:
+			return nil, errStoreDown
+		}
+		return []SkillReference{NewSkillReference("a", 1)}, nil
+	}}
+	log := &reportLog{}
+	root := t.TempDir()
+	_, w := watchFrom(t, newSource(t, cs.refs), root, &WatchSkillsOptions{Debounce: 10 * time.Millisecond, OnReconcile: log.add,
+		WriteSkillsOptions: WriteSkillsOptions{OnUnavailable: OnUnavailableRaise}})
+	errorLogged := func() bool {
+		for _, e := range logs.all() {
+			if e.level == slog.LevelError {
+				return true
+			}
+		}
+		return false
+	}
+	w.Notify()
+	eventually(t, "the raised failure to be logged", errorLogged)
+	if cs.reads() != 2 {
+		t.Fatalf("reads %d", cs.reads())
+	}
+	for _, k := range []string{"a", "b"} {
+		if readFile(t, filepath.Join(root, k, "SKILL.md")) != k {
+			t.Fatalf("%s changed during the failure", k)
+		}
+	}
+	w.Notify()
+	waitReconciles(t, w, 1)
+	if cs.reads() != 3 {
+		t.Fatalf("the next trigger: reads %d", cs.reads())
+	}
 	if r := log.last(t); !slices.Contains(actionKinds(r), "b=removed") {
 		t.Fatalf("after recovery: %v", actionKinds(r))
 	}

@@ -5,10 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
+	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
+	"github.com/launchdarkly/go-server-sdk/v7/interfaces"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/skills"
@@ -251,15 +254,104 @@ func TestSkillsInternalCallsDoNotReport(t *testing.T) {
 	})
 }
 
-// A ConfigSkills source is read without the public SkillRefs: writing from it
-// reports client.writeSkills and nothing for its reads.
+// pinsSkillA is an enabled AI Config that pins skill a@1, so a read of a
+// ConfigSkills source gets as far as the config's skills list.
+var pinsSkillA = ldvalue.CopyArbitraryValue(map[string]any{
+	"_ldMeta": map[string]any{"enabled": true, "variationKey": "v1"},
+	"skills":  []any{map[string]any{"key": "a", "version": 1}},
+})
+
+// trackedUsageLD adds a change signal to usageFakeLD, so WatchSkillsFrom can
+// follow a ConfigSkills source.
+type trackedUsageLD struct {
+	*usageFakeLD
+	tracker *closingTracker
+}
+
+func (f trackedUsageLD) GetFlagTracker() interfaces.FlagTracker { return f.tracker }
+func (trackedUsageLD) IsOffline() bool                          { return false }
+
+// closingTracker never fires; it closes a listener's channel on removal, as
+// the base SDK does.
+type closingTracker struct {
+	mu  sync.Mutex
+	chs []chan interfaces.FlagChangeEvent
+}
+
+func (c *closingTracker) AddFlagChangeListener() <-chan interfaces.FlagChangeEvent {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ch := make(chan interfaces.FlagChangeEvent)
+	c.chs = append(c.chs, ch)
+	return ch
+}
+
+func (c *closingTracker) RemoveFlagChangeListener(l <-chan interfaces.FlagChangeEvent) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i, ch := range c.chs {
+		if (<-chan interfaces.FlagChangeEvent)(ch) == l {
+			close(ch)
+			c.chs = slices.Delete(c.chs, i, i+1)
+			return
+		}
+	}
+}
+
+func (*closingTracker) AddFlagValueChangeListener(string, ldcontext.Context, ldvalue.Value) <-chan interfaces.FlagValueChangeEvent {
+	return make(chan interfaces.FlagValueChangeEvent)
+}
+func (*closingTracker) RemoveFlagValueChangeListener(<-chan interfaces.FlagValueChangeEvent) {}
+
+// A ConfigSkills source is read without the public SkillRefs: writing or
+// watching from it reports client.writeSkills or client.watchSkills, and its
+// reads, a re-reconcile's included, report nothing.
 func TestConfigSkillsSourceReadsReportNothing(t *testing.T) {
-	fake, _ := freshClient(t)
-	src := skills.ConfigSkills("agent", ldcontext.New("u"))
-	for range 2 {
-		_, _ = skills.WriteSkillsFrom(context.Background(), src, t.TempDir(), nil)
-	}
-	if got := fake.usage(); !slices.Equal(got, []string{"client.configSkills", "client.writeSkills"}) {
-		t.Fatalf("usage events %v", got)
-	}
+	ctx := context.Background()
+	t.Run("writeSkills", func(t *testing.T) {
+		fake, _ := freshClient(t)
+		fake.value = pinsSkillA
+		src := skills.ConfigSkills("agent", ldcontext.New("u"))
+		for range 2 {
+			r, err := skills.WriteSkillsFrom(ctx, src, t.TempDir(), nil)
+			if err != nil || !r.OK() {
+				t.Fatalf("the read did not reach the skills list: %v %v", r.Errors(), err)
+			}
+		}
+		if got := fake.usage(); !slices.Equal(got, []string{"client.configSkills", "client.writeSkills"}) {
+			t.Fatalf("usage events %v", got)
+		}
+	})
+	t.Run("watchSkills and a re-reconcile", func(t *testing.T) {
+		_ = aiserver.Shutdown(ctx)
+		fake := &usageFakeLD{value: pinsSkillA}
+		if _, err := aiserver.InitWithClient(ctx, trackedUsageLD{fake, &closingTracker{}}, aiserver.InitOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = aiserver.Shutdown(ctx) })
+		skills.SetSkillStore(skills.NewInMemorySkillStore(map[string]any{"a": validRaw("a", 1, "a1")}))
+		src := skills.ConfigSkills("agent", ldcontext.New("u"))
+		reports := make(chan skills.ReconcileReport, 1)
+		initial, w, err := skills.WatchSkillsFrom(ctx, src, t.TempDir(), &skills.WatchSkillsOptions{
+			Debounce: 10 * time.Millisecond, OnReconcile: func(r skills.ReconcileReport) { reports <- r }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer w.Close()
+		if !initial.OK() {
+			t.Fatalf("the initial read did not reach the skills list: %v", initial.Errors())
+		}
+		w.Notify()
+		select {
+		case r := <-reports:
+			if !r.OK() {
+				t.Fatalf("the re-reconcile's read did not reach the skills list: %v", r.Errors())
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("no re-reconcile")
+		}
+		if got := fake.usage(); !slices.Equal(got, []string{"client.configSkills", "client.watchSkills"}) {
+			t.Fatalf("usage events %v", got)
+		}
+	})
 }
