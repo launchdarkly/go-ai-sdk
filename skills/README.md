@@ -93,9 +93,9 @@ wire objects (`key`, `version`, `content`, `contentHash`, optional `name`, `desc
 `NewLaunchDarklySkillStore` reads `LD_BASE_URI` and `LD_STREAM_URI`, the same variables `aiserver.InitClient`
 uses, when neither `BaseURI` nor `StreamURI` is set, so a process pointed at a non-production
 instance sends skill delivery there too. They are read once, at construction, and follow the
-option rules: `LD_BASE_URI` alone moves both endpoints, a blank value is unset, and a
-non-`https` value (other than loopback) is an error naming the variable. Either option set
-means neither variable is read. Nothing else in the skills API reads the environment. The
+option rules: `LD_BASE_URI` alone moves both endpoints, a blank or whitespace-only value is
+unset, and a non-`https` value (other than loopback) is an error naming the variable. Either
+option set means neither variable is read. Nothing else in the skills API reads the environment. The
 examples read `LD_SDK_KEY` (required there) for the store.
 
 ## Integrity log record

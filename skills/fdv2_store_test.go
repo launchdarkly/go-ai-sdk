@@ -11,12 +11,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -236,6 +238,10 @@ func TestFDv2Endpoints(t *testing.T) {
 	if s.baseURI != "https://a.example" || s.streamURI != "https://b.example" {
 		t.Fatal("separate overrides")
 	}
+	s, _ = NewLaunchDarklySkillStore("sdk-x", &LaunchDarklySkillStoreOptions{BaseURI: " https://relay.example/ ", StreamURI: "\thttps://b.example\n"})
+	if s.baseURI != "https://relay.example" || s.streamURI != "https://b.example" {
+		t.Fatalf("option URIs must be trimmed: %q %q", s.baseURI, s.streamURI)
+	}
 	bad := []LaunchDarklySkillStoreOptions{
 		{BaseURI: "http://sdk.example"}, {StreamURI: "http://sdk.example"}, {BaseURI: "http://10.0.0.1"},
 		{BaseURI: "http://192.168.1.5:8080"}, {BaseURI: "http://localhost.example"}, {BaseURI: "http://"},
@@ -247,7 +253,7 @@ func TestFDv2Endpoints(t *testing.T) {
 		}
 	}
 	// Plain http is accepted only to a loopback host, for a local test double.
-	for _, uri := range []string{"http://localhost", "http://localhost:8030", "http://127.0.0.1:8030", "http://[::1]:8030"} {
+	for _, uri := range []string{"http://localhost", "http://localhost:8030", "http://LOCALHOST:8030", "http://LocalHost", "http://127.0.0.1:8030", "http://[::1]:8030"} {
 		for _, o := range []LaunchDarklySkillStoreOptions{{BaseURI: uri}, {StreamURI: uri}} {
 			if _, err := NewLaunchDarklySkillStore("sdk-x", &o); err != nil {
 				t.Fatalf("%+v refused: %v", o, err)
@@ -281,6 +287,7 @@ func TestFDv2EndpointEnvironment(t *testing.T) {
 		{"base option wins as a set", map[string]string{"LD_STREAM_URI": "https://env.example"}, &LaunchDarklySkillStoreOptions{BaseURI: "https://opt.example"}, "https://opt.example", "https://opt.example"},
 		{"stream option wins as a set", map[string]string{"LD_BASE_URI": "https://env.example"}, &LaunchDarklySkillStoreOptions{StreamURI: "https://opt.example"}, "https://sdk.launchdarkly.com", "https://opt.example"},
 		{"loopback http", map[string]string{"LD_BASE_URI": "http://localhost:8030"}, nil, "http://localhost:8030", "http://localhost:8030"},
+		{"whitespace options are unset", map[string]string{"LD_BASE_URI": "https://env.example"}, &LaunchDarklySkillStoreOptions{BaseURI: "  ", StreamURI: "\t"}, "https://env.example", "https://env.example"},
 	}
 	for _, c := range cases {
 		s, err := build(c.env, c.opts)
@@ -500,6 +507,39 @@ func TestFDv2FatalStatuses(t *testing.T) {
 	eventually(t, "retries", func() bool { return len(ft.requests()) >= 3 })
 	if s.Failed() != "" {
 		t.Fatal("503 must be retried, not fatal")
+	}
+}
+
+func TestFDv2RedirectIsNeverFollowed(t *testing.T) {
+	// The SDK key goes only to the configured origin: a 3xx with a Location is
+	// fatal and the target is never contacted.
+	var targetHits atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(target.Close)
+	for _, status := range []int{301, 302, 303, 307, 308} {
+		_, _ = setup(t)
+		clearEndpointEnv(t)
+		var originHits atomic.Int32
+		origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			originHits.Add(1)
+			http.Redirect(w, r, target.URL+r.URL.RequestURI(), status)
+		}))
+		t.Cleanup(origin.Close)
+		s, err := NewLaunchDarklySkillStore("sdk-test-key", &LaunchDarklySkillStoreOptions{BaseURI: origin.URL,
+			InitialBackoff: time.Millisecond, MaxBackoff: 5 * time.Millisecond, ReadTimeout: time.Minute})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(s.Close)
+		start(t, s)
+		eventually(t, fmt.Sprintf("give up on %d", status), func() bool { return s.Failed() != "" })
+		time.Sleep(20 * time.Millisecond)
+		if o, tg := originHits.Load(), targetHits.Load(); o != 1 || tg != 0 {
+			t.Fatalf("%d: origin got %d requests (want 1), redirect target got %d (want 0)", status, o, tg)
+		}
 	}
 }
 
