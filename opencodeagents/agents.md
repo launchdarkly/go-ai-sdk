@@ -17,6 +17,7 @@ Tier 1 agent handler, `{*, agent}`. It drives an `opencode serve` child over HTT
 | `bridge.go` | Per-call loopback MCP server for `ToolFunc` tools (JSON-RPC over streamable HTTP, live `GET` stream). |
 | `builtins.go` | The 12 `NativeTool` sentinels. |
 | `fake_test.go` | The fake `opencode` (the test binary re-execs itself via `TestMain` when `LD_OPENCODE_FAKE=serve`), its state file, bus-event builders, LD and span fakes. |
+| `live_test.go` | Build tag `opencode_live`: one bridged-tool turn against a real `opencode` of the pinned version (`pinnedOpenCode`) and a local stub OpenAI-compatible provider; no credentials. CI job `opencode-live` runs it. |
 | `handler_test.go`, `contract_test.go`, `spans_test.go`, `bridge_test.go`, `process_unix_test.go`, `usage_test.go` | Tests. |
 
 ## Public exports
@@ -62,8 +63,12 @@ OTel trace API.
 - **A nil `Options.Env` is refused** (it would leak the parent environment); pass `[]string{}`
   for an empty one.
 - **`OpenCodeWrite` alone also allows `edit` and `apply_patch`.** All three are one grant.
-- **The bridge's `GET` must stream.** OpenCode's MCP client marks the server failed on a 405 or a
-  closed stream; `POST /mcp` then reports a status other than `connected` and the call fails.
+- **The bridge's `GET` streams.** OpenCode 1.18.4's MCP client marked the server failed on a 405
+  (found by the Python package); 1.19.5 accepts a 405 (checked with the live test). The bridge
+  streams for both. A server that does not connect makes `POST /mcp` report a status other than
+  `connected`, and the call fails.
+- **Bumping OpenCode:** change `pinnedOpenCode` in `live_test.go` and `OPENCODE_VERSION` in the
+  `opencode-live` CI job together; the test fails when the installed version differs.
 - **`langchainagents` is also `{*, agent}`**: pass one of the two to a handler list.
 - **The fake is the test binary.** A test that needs a new OpenCode behaviour extends
   `fakeSpec`, not a mock client.

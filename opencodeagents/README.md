@@ -6,6 +6,8 @@ child when the call ends. OpenCode runs the model and its own built-in tools; th
 which tools the session may use, serves your `ToolFunc` tools to it, and reports the run like
 every other handler (returns, tracking, spans).
 
+Verified against OpenCode **1.19.5** (a live bridged-tool turn runs in CI against that release).
+
 No OpenCode client library is used: the HTTP, event-stream and tool-bridge code is plain
 `net/http`, so the package adds no dependency.
 
