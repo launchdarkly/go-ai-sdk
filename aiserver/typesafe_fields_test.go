@@ -19,7 +19,7 @@ func TestClassifiersField(t *testing.T) {
 
 func TestTypesafeJudgeResultEventKeys(t *testing.T) {
 	var judgeReqs []HandlerRequest
-	_, handlers := typesafeEnv(t, typesafePayload, &judgeReqs)
+	_, handlers := typesafeEnv(t, typesafePayload, CaptureOn, &judgeReqs)
 	resp, err := Config(ConfigArgs{Key: "cfg", Handlers: handlers}).Invoke(bg, "q", userCtx)
 	if err != nil {
 		t.Fatal(err)
@@ -38,7 +38,7 @@ func TestTypesafeJudgeResultEventKeys(t *testing.T) {
 
 func TestRunJudgeTypesafeMetrics(t *testing.T) {
 	var judgeReqs []HandlerRequest
-	_, handlers := typesafeEnv(t, typesafePayload, &judgeReqs)
+	_, handlers := typesafeEnv(t, typesafePayload, CaptureOn, &judgeReqs)
 	resp, err := Config(ConfigArgs{Key: "cfg", Handlers: handlers, SkipJudges: true}).Invoke(bg, "q", userCtx)
 	if err != nil || len(resp.JudgeTasks) != 1 {
 		t.Fatalf("tasks=%v err=%v", resp.JudgeTasks, err)

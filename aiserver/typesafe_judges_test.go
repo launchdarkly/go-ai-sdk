@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
@@ -31,8 +32,9 @@ func typesafeJudgeVariation() map[string]any {
 }
 
 // typesafeEnv serves a parent config "cfg" judged by "judge", a TypeSafe
-// judge whose handler returns output. judgeReqs records the judge calls.
-func typesafeEnv(t *testing.T, output string, judgeReqs *[]HandlerRequest) (*fakeLD, []*ProviderHandler) {
+// judge whose handler returns output with the given content capture.
+// judgeReqs records the judge calls.
+func typesafeEnv(t *testing.T, output string, capture ContentCapture, judgeReqs *[]HandlerRequest) (*fakeLD, []*ProviderHandler) {
 	f := withFake(t, map[string]any{"cfg": enabledConfig("P", "", judgedConfig(nil)), "judge": typesafeJudgeVariation()})
 	parent := stubHandler("P", ModeMessages, "answer", nil, nil)
 	jev := createHandler(ProvidesFor{"TypeSafe", ModeMessages}, func(ctx context.Context, req HandlerRequest) (HandlerResult, error) {
@@ -40,7 +42,7 @@ func typesafeEnv(t *testing.T, output string, judgeReqs *[]HandlerRequest) (*fak
 		run := kitStartHandlerRun(ctx, typesafeSpanOptions, req, prompt{})
 		run.Finish("jev", output)
 		return HandlerResult{Output: output, Usage: map[string]any{"input_tokens": 10, "output_tokens": 4}}, nil
-	}, nil, CaptureOn)
+	}, nil, capture)
 	return f, []*ProviderHandler{parent, jev}
 }
 
@@ -64,7 +66,7 @@ func TestClassifiersOnlyConfigIsValid(t *testing.T) {
 
 func TestTypesafeJudgeExpandsInline(t *testing.T) {
 	var judgeReqs []HandlerRequest
-	f, handlers := typesafeEnv(t, typesafePayload, &judgeReqs)
+	f, handlers := typesafeEnv(t, typesafePayload, CaptureOn, &judgeReqs)
 	exp := withSpans(t)
 	resp, err := Config(ConfigArgs{Key: "cfg", Handlers: handlers}).Invoke(bg, "q", userCtx)
 	if err != nil {
@@ -103,31 +105,81 @@ func TestTypesafeJudgeExpandsInline(t *testing.T) {
 		}
 	}
 
-	// One judge span: attributes from the first label, one event per label,
-	// and no explanation (a label has no prose verdict).
-	var judgeSpan *spanView
-	for _, s := range exp.GetSpans().Snapshots() {
-		if s.Name() == typesafeSpanOptions.Name {
-			judgeSpan = viewSpan(s)
-		}
-	}
-	if judgeSpan == nil {
-		t.Fatal("no judge span")
-	}
+	// One judge span: attributes from the first label, one event per label.
+	judgeSpan := typesafeJudgeSpan(t, exp)
 	if judgeSpan.attrs["gen_ai.evaluation.name"] != "judge.migration_intent" || judgeSpan.attrs["gen_ai.evaluation.score.value"] != "0.9" {
 		t.Errorf("span attributes %v, want the first label", judgeSpan.attrs)
 	}
 	if got := judgeSpan.eventNames(); strings.Join(got, ",") != "judge.migration_intent,judge.migration" {
 		t.Errorf("evaluation events named %v", got)
 	}
-	if _, has := judgeSpan.attrs["gen_ai.evaluation.explanation"]; has {
-		t.Error("a TypeSafe label wrote an explanation")
+}
+
+// The explanation is the label's reason, written only when the judge
+// handler captures content.
+func TestTypesafeJudgeExplanationFollowsCapture(t *testing.T) {
+	for _, capture := range []ContentCapture{CaptureOn, CaptureOff} {
+		on := capture == CaptureOn
+		var judgeReqs []HandlerRequest
+		_, handlers := typesafeEnv(t, typesafePayload, capture, &judgeReqs)
+		exp := withSpans(t)
+		resp, err := Config(ConfigArgs{Key: "cfg", Handlers: handlers}).Invoke(bg, "q", userCtx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.JudgeResults["judge.migration_intent"].Response != "yes" {
+			t.Errorf("capture on=%v: the reason must still reach the caller, got %+v", on, resp.JudgeResults)
+		}
+		judgeSpan := typesafeJudgeSpan(t, exp)
+		got, has := judgeSpan.attrs["gen_ai.evaluation.explanation"]
+		if on && got != "yes" {
+			t.Errorf("capture on: span explanation = %q (present=%v), want the first label's reason", got, has)
+		}
+		if !on && has {
+			t.Errorf("capture off: span carries explanation %q", got)
+		}
+		want := map[string]string{"judge.migration_intent": "yes", "judge.migration": "no"}
+		if n := len(judgeSpan.eventNames()); n != len(want) {
+			t.Fatalf("evaluation events = %d, want one per label", n)
+		}
+		for _, e := range judgeSpan.events {
+			if e.Name != "gen_ai.evaluation.result" {
+				continue
+			}
+			var name, expl string
+			hasExpl := false
+			for _, a := range e.Attributes {
+				switch a.Key {
+				case "gen_ai.evaluation.name":
+					name = a.Value.AsString()
+				case "gen_ai.evaluation.explanation":
+					expl, hasExpl = a.Value.AsString(), true
+				}
+			}
+			if on && expl != want[name] {
+				t.Errorf("capture on: event %s explanation = %q (present=%v), want %q", name, expl, hasExpl, want[name])
+			}
+			if !on && hasExpl {
+				t.Errorf("capture off: event %s carries explanation %q", name, expl)
+			}
+		}
 	}
+}
+
+func typesafeJudgeSpan(t *testing.T, exp *tracetest.InMemoryExporter) *spanView {
+	t.Helper()
+	for _, s := range exp.GetSpans().Snapshots() {
+		if s.Name() == typesafeSpanOptions.Name {
+			return viewSpan(s)
+		}
+	}
+	t.Fatal("no judge span")
+	return nil
 }
 
 func TestTypesafeJudgeTaskRoundTrip(t *testing.T) {
 	var judgeReqs []HandlerRequest
-	f, handlers := typesafeEnv(t, typesafePayload, &judgeReqs)
+	f, handlers := typesafeEnv(t, typesafePayload, CaptureOn, &judgeReqs)
 	resp, err := Config(ConfigArgs{Key: "cfg", Handlers: handlers, SkipJudges: true}).Invoke(bg, "q", userCtx)
 	if err != nil || len(resp.JudgeTasks) != 1 {
 		t.Fatalf("tasks=%v err=%v", resp.JudgeTasks, err)
@@ -172,7 +224,7 @@ func TestMalformedTypesafePayload(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			var judgeReqs []HandlerRequest
-			f, handlers := typesafeEnv(t, output, &judgeReqs)
+			f, handlers := typesafeEnv(t, output, CaptureOn, &judgeReqs)
 			log := captureSDKLog(t)
 			resp, err := Config(ConfigArgs{Key: "cfg", Handlers: handlers}).Invoke(bg, "q", userCtx)
 			if err != nil {
