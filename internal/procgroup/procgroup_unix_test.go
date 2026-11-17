@@ -20,6 +20,9 @@ func TestKillOnCancelKillsTheGroup(t *testing.T) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "sleep 30 & echo $!; wait")
 	KillOnCancel(cmd)
+	// Without a process group, Wait would block until sleep exits on its own
+	// and the check below would pass; cap it so a missing group fails fast.
+	cmd.WaitDelay = time.Second
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
