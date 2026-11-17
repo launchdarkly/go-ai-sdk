@@ -3,19 +3,24 @@
 package claudeagents
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/anthropics/anthropic-sdk-go"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/skills"
@@ -322,6 +327,13 @@ func TestSkillsDirRemoved(t *testing.T) {
 			}
 			return nil
 		}},
+		// A run that ends without success: the step limit is reached.
+		{"max turns", toolResp("safe", `{}`), func(h *aiserver.ProviderHandler, req aiserver.HandlerRequest) error {
+			return maxTurns(run(h, "invoke", oneTurn(req)))
+		}},
+		{"stream max turns", sse(nil, "safe", 1, 1), func(h *aiserver.ProviderHandler, req aiserver.HandlerRequest) error {
+			return maxTurns(run(h, "stream", oneTurn(req)))
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -330,12 +342,96 @@ func TestSkillsDirRemoved(t *testing.T) {
 			parent := t.TempDir()
 			created := false
 			e.api.during = func(map[string]any) { created = len(invokeDirs(t, parent)) == 1 }
-			_ = tc.run(e.skillsHandler(t, parent), aiserver.HandlerRequest{Config: skillsCfg([]ref{{"a", 1}}), UserInput: "q"})
+			err := tc.run(e.skillsHandler(t, parent), aiserver.HandlerRequest{Config: skillsCfg([]ref{{"a", 1}}), UserInput: "q"})
 			if !created {
 				t.Fatal("no invoke dir during the run")
 			}
+			if err != nil {
+				t.Error(err)
+			}
 			if d := invokeDirs(t, parent); len(d) != 0 {
 				t.Errorf("not removed: %v", d)
+			}
+		})
+	}
+}
+
+// oneTurn allows one model turn and offers a tool the model calls.
+func oneTurn(req aiserver.HandlerRequest) aiserver.HandlerRequest {
+	req.Config.Model.Parameters = map[string]any{"max_turns": 1.0}
+	req.Config.Tools = map[string]aiserver.Tool{"safe": {Name: "safe", Type: "function", Parameters: map[string]any{}}}
+	req.ToolHandlers = map[string]aiserver.ToolHandler{
+		"safe": aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) { return "ok", nil }),
+	}
+	return req
+}
+
+// maxTurns is nil when err is the step-limit error, so a case can report
+// any other outcome.
+func maxTurns(err error) error {
+	if errors.Is(err, ErrMaxSteps) {
+		return nil
+	}
+	return fmt.Errorf("err = %v, want ErrMaxSteps", err)
+}
+
+// syncBuffer is a bytes.Buffer safe for a logger shared across goroutines.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+// A directory that cannot be removed is logged, and the run's own outcome
+// (its result, or its error) is still what the caller gets.
+func TestSkillsRemovalFailureIsLogged(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	for _, tc := range []struct{ name, resp string }{{"success", textResp("done", 1, 1)}, {"api error", "STATUS400"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := setup(t, nil, tc.resp)
+			skillStore(t)
+			var logs syncBuffer
+			aiserver.SetLogger(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+			t.Cleanup(func() { aiserver.SetLogger(nil) })
+			parent := t.TempDir()
+			t.Cleanup(func() { _ = os.Chmod(parent, 0o700) }) // runs before t.TempDir's removal
+			created := false
+			e.api.during = func(map[string]any) {
+				created = len(invokeDirs(t, parent)) == 1
+				// The invoke dir's entry cannot be unlinked from a read-only parent.
+				if err := os.Chmod(parent, 0o500); err != nil {
+					t.Error(err)
+				}
+			}
+			res, err := e.skillsHandler(t, parent).Invoke(bg, aiserver.HandlerRequest{Config: skillsCfg([]ref{{"a", 1}}), UserInput: "q"})
+			if !created {
+				t.Fatal("no invoke dir during the run")
+			}
+			if d := invokeDirs(t, parent); len(d) != 1 {
+				t.Fatalf("dirs after the run = %v, want the one that could not be removed", d)
+			}
+			if tc.name == "success" {
+				if err != nil || res.Output != "done" {
+					t.Errorf("result = %q, %v; want the run's own result", res.Output, err)
+				}
+			} else if apiErr := (*anthropic.Error)(nil); !errors.As(err, &apiErr) {
+				t.Errorf("err = %v, want the run's own API error", err)
+			}
+			if logs.String() == "" {
+				t.Error("the failed removal was not logged")
 			}
 		})
 	}
@@ -446,10 +542,19 @@ func TestSkillsFailClosed(t *testing.T) {
 			t.Run(path+"/"+tc.name, func(t *testing.T) {
 				e := setup(t, nil, reply(path, "must not run"))
 				tc.store(t)
+				actionErrs := failedActions(t, tc.refs)
 				parent := t.TempDir()
 				err := run(e.skillsHandler(t, parent), path, aiserver.HandlerRequest{Config: skillsCfg(tc.refs), UserInput: "q"})
 				if err == nil {
 					t.Fatal("want an error")
+				}
+				for _, msg := range actionErrs {
+					if !strings.Contains(err.Error(), msg) {
+						t.Errorf("err %q lacks the action's error text %q", err, msg)
+					}
+				}
+				if p := pathOutsideInvokeDir(t, err.Error(), parent); p != "" {
+					t.Errorf("err %q contains %q, a path outside the invoke dir", err, p)
 				}
 				for _, k := range tc.wantKey {
 					if !strings.Contains(err.Error(), k) {
@@ -470,6 +575,50 @@ func TestSkillsFailClosed(t *testing.T) {
 			})
 		}
 	}
+}
+
+// failedActions writes refs with the public WriteSkills into a scratch root
+// and returns each error action's text: what the handler's error must carry.
+func failedActions(t *testing.T, refs []ref) []string {
+	t.Helper()
+	var in []skills.SkillReference
+	for _, r := range refs {
+		in = append(in, skills.NewSkillReference(r.key, r.version))
+	}
+	rep, err := skills.WriteSkills(in, t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, a := range rep.Actions() {
+		if a.Action() == skills.ActionError {
+			out = append(out, a.ErrorMessage())
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("WriteSkills reported no error action")
+	}
+	return out
+}
+
+// pathOutsideInvokeDir returns a path under parent, or parent itself, that
+// msg names outside an ld-skills-* invoke dir ("" if none). Both the given
+// and the resolved spelling of parent are checked.
+func pathOutsideInvokeDir(t *testing.T, msg, parent string) string {
+	t.Helper()
+	real, err := filepath.EvalSymlinks(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{real, parent} {
+		msg = regexp.MustCompile(regexp.QuoteMeta(p)+`/ld-skills-[^/\s'"]+`).ReplaceAllString(msg, "")
+	}
+	for _, p := range []string{real, parent, os.TempDir()} {
+		if strings.Contains(msg, p) {
+			return p
+		}
+	}
+	return ""
 }
 
 // Through config().invoke a fail-closed throw is an ordinary generation error.
@@ -545,6 +694,113 @@ func TestSkillToolCall(t *testing.T) {
 	}
 }
 
+// The parent is resolved to its real path before use: a symlinked parent
+// retargeted mid-run still serves the skill and removes the right directory,
+// and a dangling one fails before any model request.
+func TestSkillsTempDirSymlink(t *testing.T) {
+	t.Run("retargeted", func(t *testing.T) {
+		e := setup(t, nil, toolResp("Skill", `{"skill":"launchdarkly:a"}`), textResp("done", 1, 1))
+		skillStore(t)
+		base := t.TempDir()
+		real1, real2, link := filepath.Join(base, "real1"), filepath.Join(base, "real2"), filepath.Join(base, "link")
+		for _, d := range []string{real1, real2} {
+			if err := os.Mkdir(d, 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.Symlink(real1, link); err != nil {
+			t.Fatal(err)
+		}
+		created := false
+		e.api.during = func(map[string]any) {
+			if created {
+				return
+			}
+			created = len(invokeDirs(t, real1)) == 1
+			if err := os.Remove(link); err != nil {
+				t.Error(err)
+			}
+			if err := os.Symlink(real2, link); err != nil {
+				t.Error(err)
+			}
+		}
+		if err := run(e.skillsHandler(t, link), "invoke", aiserver.HandlerRequest{Config: skillsCfg([]ref{{"a", 1}}), UserInput: "q"}); err != nil {
+			t.Fatal(err)
+		}
+		if !created {
+			t.Fatal("no invoke dir in the symlink's target during the run")
+		}
+		if r := e.api.reqs(); len(r) == 2 {
+			if text, isErr := lastToolResult(t, r[1]); text != "a v1" || isErr {
+				t.Errorf("Skill result after the retarget = %q (error %v), want a v1", text, isErr)
+			}
+		}
+		if d := append(invokeDirs(t, real1), invokeDirs(t, real2)...); len(d) != 0 {
+			t.Errorf("not removed: %v", d)
+		}
+	})
+	t.Run("dangling", func(t *testing.T) {
+		e := setup(t, nil, textResp("must not run", 1, 1))
+		skillStore(t)
+		base := t.TempDir()
+		link := filepath.Join(base, "link")
+		if err := os.Symlink(filepath.Join(base, "missing"), link); err != nil {
+			t.Fatal(err)
+		}
+		if err := run(e.skillsHandler(t, link), "invoke", aiserver.HandlerRequest{Config: skillsCfg([]ref{{"a", 1}}), UserInput: "q"}); err == nil {
+			t.Error("want an error")
+		}
+		if n := len(e.api.reqs()); n != 0 {
+			t.Errorf("%d model requests, want 0", n)
+		}
+		if _, err := os.Lstat(filepath.Join(base, "missing")); !os.IsNotExist(err) {
+			t.Error("the dangling target was created")
+		}
+	})
+}
+
+// With skills and no other tool the model is offered exactly Skill, and a
+// Skill call still gets its execute_tool span under invoke_agent.
+func TestSkillToolIsTheOnlyTool(t *testing.T) {
+	e := setup(t, nil, toolResp("Skill", `{"skill":"launchdarkly:a"}`), textResp("done", 1, 1))
+	skillStore(t)
+	if err := run(e.skillsHandler(t, t.TempDir()), "invoke", aiserver.HandlerRequest{Config: skillsCfg([]ref{{"a", 1}}), UserInput: "q"}); err != nil {
+		t.Fatal(err)
+	}
+	r := e.api.reqs()
+	if got := toolNames(r[0]); !reflect.DeepEqual(got, []string{"Skill"}) {
+		t.Errorf("tools = %v, want [Skill]", got)
+	}
+	if len(r) != 2 {
+		t.Fatalf("%d model requests, want 2", len(r))
+	}
+	if text, isErr := lastToolResult(t, r[1]); text != "a v1" || isErr {
+		t.Errorf("Skill result = %q (error %v)", text, isErr)
+	}
+	spans, root := e.spans("execute_tool Skill"), e.spans(SpanName)
+	if len(spans) != 1 || len(root) != 1 {
+		t.Fatalf("execute_tool Skill spans = %d, invoke_agent spans = %d", len(spans), len(root))
+	}
+	if spans[0].Parent().SpanID() != root[0].SpanContext().SpanID() {
+		t.Error("execute_tool Skill is not a child of invoke_agent")
+	}
+}
+
+// The handler owns the tool list: model.parameters.tools does not replace
+// or extend it, and Skill is still offered last.
+func TestSkillsParameterToolsIgnored(t *testing.T) {
+	e := setup(t, nil, textResp("done", 1, 1))
+	skillStore(t)
+	c := skillsCfg([]ref{{"a", 1}})
+	c.Model.Parameters = map[string]any{"tools": []any{map[string]any{"name": "injected", "input_schema": map[string]any{"type": "object"}}}}
+	if err := run(e.skillsHandler(t, t.TempDir()), "invoke", aiserver.HandlerRequest{Config: c, UserInput: "q"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := toolNames(e.api.reqs()[0]); !reflect.DeepEqual(got, []string{"Skill"}) {
+		t.Errorf("tools = %v, want [Skill]", got)
+	}
+}
+
 // Only a listed qualified name is served. Anything else is a tool error and
 // returns no file content.
 func TestSkillToolRejectsUnlistedNames(t *testing.T) {
@@ -570,13 +826,56 @@ func TestSkillToolRejectsUnlistedNames(t *testing.T) {
 // The wrappers and the native graph adapter build the core handler, so a
 // variation with skills runs through them without its skills.
 func TestSkillsWrappersDoNotMaterialize(t *testing.T) {
-	e := setup(t, map[string]any{"cfg": agentVariation("inst", map[string]any{"skills": refsValue([]ref{{"a", 1}})})}, textResp("done", 1, 1))
-	skillStore(t)
-	if _, err := ClaudeAgents(bg, "cfg", "q", user, &InvokeOptions{Handler: e.opts}); err != nil {
-		t.Fatal(err)
+	withSkills := agentVariation("inst", map[string]any{"skills": refsValue([]ref{{"a", 1}})})
+	flags := map[string]any{"cfg": withSkills, "root": withSkills, "g": map[string]any{"root": "root", "_ldMeta": map[string]any{"enabled": true}}}
+	cases := []struct {
+		name string
+		resp string
+		run  func(e *env) error
+	}{
+		{"ClaudeAgents", textResp("done", 1, 1), func(e *env) error {
+			_, err := ClaudeAgents(bg, "cfg", "q", user, &InvokeOptions{Handler: e.opts})
+			return err
+		}},
+		{"ClaudeGraph", sse([]string{"done"}, "", 1, 1), func(e *env) error { // graph() streams each node
+			g, err := ClaudeGraph("g", GraphOptions{}, e.opts)
+			if err != nil {
+				return err
+			}
+			_, err = g.Invoke(bg, "q", user)
+			return err
+		}},
+		{"ToClaudeAgents", textResp("done", 1, 1), func(e *env) error {
+			r, err := ToClaudeAgents(resolve(t), &AdapterOptions{Handler: e.opts})
+			if err != nil {
+				return err
+			}
+			_, err = r.Invoke(bg, "q")
+			return err
+		}},
 	}
-	if toolByName(e.api.reqs()[0], "Skill") != nil {
-		t.Error("the wrapper offered the Skill tool")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			t.Setenv("TMPDIR", tmp)
+			e := setup(t, flags, tc.resp)
+			skillStore(t)
+			var dirs []string
+			e.api.during = func(map[string]any) { dirs = append(dirs, invokeDirs(t, tmp)...) }
+			if err := tc.run(e); err != nil {
+				t.Fatal(err)
+			}
+			r := e.api.reqs()
+			if len(r) != 1 {
+				t.Fatalf("%d model requests, want 1", len(r))
+			}
+			if toolByName(r[0], "Skill") != nil {
+				t.Error("the wrapper offered the Skill tool")
+			}
+			if len(dirs) != 0 {
+				t.Errorf("the wrapper wrote skills: %v", dirs)
+			}
+		})
 	}
 }
 
