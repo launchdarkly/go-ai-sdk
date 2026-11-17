@@ -81,14 +81,22 @@ wire objects (`key`, `version`, `content`, `contentHash`, optional `name`, `desc
 - `LaunchDarklySkillStoreOptions`: `BaseURI` (default `https://sdk.launchdarkly.com`; given alone it serves
   both endpoints), `StreamURI` (default `https://stream.launchdarkly.com`), `Mode` (`stream`
   default, or `poll`), `PollInterval` (30s), `ReadTimeout` (10s poll, 300s stream),
-  `InitialBackoff` (1s), `MaxBackoff` (30s). URIs must be `https`; zero means default, negative is
-  an error.
+  `InitialBackoff` (1s), `MaxBackoff` (30s). URIs must be `https`, except plain `http` to
+  `localhost`, `127.0.0.1` or `::1` for a local test double; zero means default, negative is
+  an error. A redirect (any 3xx except 304) is never followed, since that would send the SDK key
+  to another host: it stops delivery, like a 401, and `Failed()` says why.
 - Constants: `SkillFilename` (`SKILL.md`), `ManifestFilename` (`.launchdarkly-skills.json` — add it
   to `.gitignore`), `ManifestVersion` (1). Errors are sentinels for `errors.Is`.
 
 ## Environment variables
 
-The skills API reads none. The examples read `LD_SDK_KEY` (required there) for the store.
+`NewLaunchDarklySkillStore` reads `LD_BASE_URI` and `LD_STREAM_URI`, the same variables `aiserver.InitClient`
+uses, when neither `BaseURI` nor `StreamURI` is set, so a process pointed at a non-production
+instance sends skill delivery there too. They are read once, at construction, and follow the
+option rules: `LD_BASE_URI` alone moves both endpoints, a blank value is unset, and a
+non-`https` value (other than loopback) is an error naming the variable. Either option set
+means neither variable is read. Nothing else in the skills API reads the environment. The
+examples read `LD_SDK_KEY` (required there) for the store.
 
 ## Integrity log record
 
