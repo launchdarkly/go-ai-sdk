@@ -362,7 +362,7 @@ func gen() *GenerationConfig {
 // baseArgs is a valid hosted, generation-source run over one OpenAI
 // messages handler.
 func baseArgs(h *aiserver.ProviderHandler) RunOptions {
-	return RunOptions{Key: "eval-key", Dataset: DatasetKey("ds"), Handler: h, Generation: gen(), PollTimeout: new(time.Second)}
+	return RunOptions{Key: "eval-key", Dataset: DatasetKey("ds"), Handler: h, Generation: gen(), PollTimeout: time.Second}
 }
 
 // judgeVariation is what flag delivery serves for a judge.
