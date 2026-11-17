@@ -427,8 +427,9 @@ func (r *runState) ensureEvaluation(ctx context.Context) error {
 
 // patchOfflineEvaluation sends the snapshot. A 409 optimistic-lock collision
 // re-GETs and retries once; a second 409 is an error. The call is marked
-// idempotent, so a 5xx or transport failure is retried: the server applies the
-// same full snapshot at most once, and a replay is a no-op.
+// idempotent, so a 5xx or transport failure is retried: the server applies only
+// what changed, so replaying the same snapshot is a no-op; a changed snapshot
+// overwrites by design.
 func (r *runState) patchOfflineEvaluation(ctx context.Context) (any, error) {
 	path := r.offlineCollection() + "/" + segment(r.args.Key)
 	body := r.evaluationConfigBody(false)

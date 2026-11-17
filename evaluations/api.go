@@ -126,7 +126,8 @@ func (c *apiClient) post(ctx context.Context, path string, body any, idempotent 
 }
 
 // patch sends a PATCH. The offline-evaluation reconcile marks it idempotent:
-// the server applies the same full snapshot at most once, so a replay is a no-op.
+// the server applies only what changed, so replaying the same snapshot is a
+// no-op; a changed snapshot overwrites by design.
 func (c *apiClient) patch(ctx context.Context, path string, body any, idempotent bool) (any, error) {
 	return c.request(ctx, http.MethodPatch, path, nil, body, idempotent)
 }
