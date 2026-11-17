@@ -153,6 +153,9 @@ func TestFactoryMetadata(t *testing.T) {
 	if h.CaptureContent != aiserver.CaptureOff || h.Stream == nil {
 		t.Errorf("CaptureContent = %v, Stream set = %v", h.CaptureContent, h.Stream != nil)
 	}
+	if d := handler(t, Options{Client: c}); d.CaptureContent != aiserver.CaptureDefault {
+		t.Errorf("omitted CaptureContent = %v, want CaptureDefault", d.CaptureContent)
+	}
 	if SpanName != "invoke_agent" || PackageName != "github.com/launchdarkly/go-ai-sdk/litellmagents" {
 		t.Error("package constants changed")
 	}
@@ -283,25 +286,40 @@ func TestModelNameUnchanged(t *testing.T) {
 }
 
 // A Bedrock target gets the model.region inference-profile prefix after the
-// bedrock/ route; spans report the sent id.
+// bedrock/ route; spans report the sent id, in the chat span name too.
 func TestBedrockRegionPrefix(t *testing.T) {
-	cases := []struct{ provider, name, want string }{
-		{"Bedrock", "bedrock/anthropic.claude-x", "bedrock/us.anthropic.claude-x"},
-		{"Bedrock", "bedrock/converse/anthropic.claude-x", "bedrock/converse/us.anthropic.claude-x"},
-		{"Bedrock", "bedrock/invoke/anthropic.claude-x", "bedrock/invoke/us.anthropic.claude-x"},
-		{"Bedrock", "bedrock/llama/meta.llama-x", "bedrock/llama/us.meta.llama-x"},
-		{"Bedrock", "bedrock/us.anthropic.claude-x", "bedrock/us.anthropic.claude-x"},
-		{"Bedrock", "bedrock/arn:aws:bedrock:us-east-1:1:inference-profile/x", "bedrock/arn:aws:bedrock:us-east-1:1:inference-profile/x"},
-		{"OpenAI", "bedrock/anthropic.claude-x", "bedrock/us.anthropic.claude-x"},
-		{"Bedrock", "anthropic/claude-x", "anthropic/claude-x"},
-		{"bedrock", "my-alias", "us.my-alias"},
-		{"OpenAI", "my-alias", "my-alias"},
+	cases := []struct{ provider, name, region, want string }{
+		{"Bedrock", "bedrock/anthropic.claude-x", "us", "bedrock/us.anthropic.claude-x"},
+		{"Bedrock", "bedrock/anthropic.claude-x", "global", "bedrock/global.anthropic.claude-x"},
+		{"Bedrock", "bedrock/converse/anthropic.claude-x", "us", "bedrock/converse/us.anthropic.claude-x"},
+		{"Bedrock", "bedrock/invoke/anthropic.claude-x", "us", "bedrock/invoke/us.anthropic.claude-x"},
+		{"Bedrock", "bedrock/llama/meta.llama-x", "us", "bedrock/llama/us.meta.llama-x"},
+		{"Bedrock", "bedrock/us.anthropic.claude-x", "us", "bedrock/us.anthropic.claude-x"},
+		{"Bedrock", "bedrock/global.anthropic.claude-x", "us", "bedrock/global.anthropic.claude-x"},
+		{"Bedrock", "bedrock/us-gov.anthropic.claude-x", "us", "bedrock/us-gov.anthropic.claude-x"},
+		{"Bedrock", "bedrock/eu.anthropic.claude-x", "us", "bedrock/eu.anthropic.claude-x"},
+		{"Bedrock", "bedrock/apac.anthropic.claude-x", "us", "bedrock/apac.anthropic.claude-x"},
+		{"Bedrock", "bedrock/au.anthropic.claude-x", "us", "bedrock/au.anthropic.claude-x"},
+		{"Bedrock", "bedrock/jp.anthropic.claude-x", "us", "bedrock/jp.anthropic.claude-x"},
+		{"Bedrock", "bedrock/ca.anthropic.claude-x", "us", "bedrock/ca.anthropic.claude-x"},
+		{"Bedrock", "bedrock/in.anthropic.claude-x", "us", "bedrock/in.anthropic.claude-x"},
+		{"Bedrock", "bedrock/us.anthropic.claude-x", "eu", "bedrock/us.anthropic.claude-x"},
+		{"Bedrock", "bedrock/arn:aws:bedrock:us-east-1:1:inference-profile/x", "us", "bedrock/arn:aws:bedrock:us-east-1:1:inference-profile/x"},
+		{"Bedrock", "bedrock/anthropic.claude-x", "", "bedrock/anthropic.claude-x"},
+		{"Bedrock", "bedrock/anthropic.claude-x", "   ", "bedrock/anthropic.claude-x"},
+		{"Bedrock", "bedrock/anthropic.claude-x", " us ", "bedrock/us.anthropic.claude-x"},
+		{"Bedrock", "bedrock/anthropic.claude-x", "us.", "bedrock/us.anthropic.claude-x"},
+		{"OpenAI", "bedrock/anthropic.claude-x", "us", "bedrock/us.anthropic.claude-x"},
+		{"Bedrock", "anthropic/claude-x", "us", "anthropic/claude-x"},
+		{"bedrock", "my-alias", "us", "us.my-alias"},
+		{"OpenAI", "my-alias", "us", "my-alias"},
+		{"OpenAI", "gpt-4o", "us", "gpt-4o"},
 	}
 	for _, tc := range cases {
-		t.Run(tc.provider+"/"+tc.name, func(t *testing.T) {
+		t.Run(tc.provider+"/"+tc.name+"/region="+strconv.Quote(tc.region), func(t *testing.T) {
 			h, f, exp := setup(t, textResp("ok", 1, 1))
 			invoke(t, h, aiserver.HandlerRequest{Config: cfg(func(c *aiserver.AiConfig) {
-				c.Provider.Name, c.Model.Name, c.Model.Region = tc.provider, tc.name, "us"
+				c.Provider.Name, c.Model.Name, c.Model.Region = tc.provider, tc.name, tc.region
 			})})
 			if f.request(0)["model"] != tc.want {
 				t.Errorf("model = %v, want %q", f.request(0)["model"], tc.want)
@@ -309,15 +327,11 @@ func TestBedrockRegionPrefix(t *testing.T) {
 			if a := attrs(spansByName(exp)[SpanName][0]); a["gen_ai.request.model"] != tc.want {
 				t.Errorf("gen_ai.request.model = %q, want %q", a["gen_ai.request.model"], tc.want)
 			}
+			if n := len(spansByName(exp)["chat "+tc.want]); n != 1 {
+				t.Errorf("want one %q span, spans = %v", "chat "+tc.want, spansByName(exp))
+			}
 		})
 	}
-	t.Run("no region", func(t *testing.T) {
-		h, f, _ := setup(t, textResp("ok", 1, 1))
-		invoke(t, h, aiserver.HandlerRequest{Config: cfg(func(c *aiserver.AiConfig) { c.Provider.Name, c.Model.Name = "Bedrock", "bedrock/x" })})
-		if f.request(0)["model"] != "bedrock/x" {
-			t.Errorf("model = %v", f.request(0)["model"])
-		}
-	})
 }
 
 // Instructions are the system message; history then user input follow, with
@@ -369,6 +383,18 @@ func TestToolConversion(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("tool = %v, want %v", got, want)
 	}
+
+	t.Run("handlers without config tools offer nothing", func(t *testing.T) {
+		h, f, _ := setup(t, textResp("ok", 1, 1))
+		invoke(t, h, aiserver.HandlerRequest{Config: cfg(nil), UserInput: "q",
+			ToolHandlers: map[string]aiserver.ToolHandler{"lookup": tool(func(map[string]any) (any, error) { return "", nil })}})
+		if f.count() != 1 {
+			t.Fatalf("proxy requests = %d, want 1", f.count())
+		}
+		if tools, ok := f.request(0)["tools"]; ok {
+			t.Errorf("tools = %v, want none sent", tools)
+		}
+	})
 }
 
 // The loop runs every tool call, appends the assistant tool-call message and
@@ -521,6 +547,7 @@ func TestMaxTurns(t *testing.T) {
 		{"parameter", Options{}, map[string]any{"max_turns": 2.0}, 2},
 		{"option", Options{MaxTurns: 3}, nil, 3},
 		{"parameter wins", Options{MaxTurns: 5}, map[string]any{"max_turns": 1.0}, 1},
+		{"camelCase parameter", Options{}, map[string]any{"maxTurns": 2.0}, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, c := fakeClient(t, loop, loop, loop, loop, loop, loop)
@@ -633,11 +660,18 @@ func TestStream(t *testing.T) {
 
 	t.Run("fragmented tool call arguments are joined by index", func(t *testing.T) {
 		var got map[string]any
-		h, f, _ := setup(t, sseToolCall("a", `{"q"`, `:"x"`, `}`), sse([]string{"ok"}, 1, 1))
-		if _, err := collect(t, h, aiserver.HandlerRequest{Config: cfg(func(c *aiserver.AiConfig) {
+		h, f, exp := setup(t, sseToolCall("a", `{"q"`, `:"x"`, `}`), sse([]string{"ok"}, 2, 3))
+		evs, err := collect(t, h, aiserver.HandlerRequest{Config: cfg(func(c *aiserver.AiConfig) {
 			c.Tools = map[string]aiserver.Tool{"a": funcTool("")}
-		}), ToolHandlers: map[string]aiserver.ToolHandler{"a": tool(func(args map[string]any) (any, error) { got = args; return "r", nil })}}); err != nil {
+		}), ToolHandlers: map[string]aiserver.ToolHandler{"a": tool(func(args map[string]any) (any, error) { got = args; return "r", nil })}})
+		if err != nil {
 			t.Fatal(err)
+		}
+		if len(evs) == 0 || evs[len(evs)-1].Type != aiserver.EventDone || evs[len(evs)-1].Usage["input_tokens"] != 3.0 || evs[len(evs)-1].Usage["output_tokens"] != 4.0 {
+			t.Errorf("events = %+v, want done with usage summed over both turns", evs)
+		}
+		if byName := spansByName(exp); len(byName["chat anthropic/claude-sonnet-4"]) != 2 || len(byName["execute_tool a"]) != 1 {
+			t.Errorf("stream span tree = %v", byName)
 		}
 		if got["q"] != "x" || f.count() != 2 {
 			t.Errorf("args = %v requests = %d", got, f.count())
@@ -654,6 +688,31 @@ func TestStream(t *testing.T) {
 		}
 		if s := spansByName(exp)[SpanName]; len(s) != 1 || s[0].Status().Code != codes.Error || s[0].EndTime().IsZero() {
 			t.Errorf("root = %v", s)
+		}
+	})
+
+	t.Run("cancellation closes the response body and ends every span", func(t *testing.T) {
+		h, f, exp := setup(t, "HANG:"+chunk(`{"content":"a"}`, ""))
+		ctx, cancel := context.WithCancel(bg)
+		defer cancel()
+		var gotErr error
+		for _, err := range h.Stream(ctx, aiserver.HandlerRequest{Config: cfg(nil)}) {
+			if err != nil {
+				gotErr = err
+				break
+			}
+			cancel()
+		}
+		if !errors.Is(gotErr, context.Canceled) {
+			t.Errorf("err = %v, want context.Canceled", gotErr)
+		}
+		select {
+		case <-f.closed:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the response body was not closed after cancellation")
+		}
+		if s := spansByName(exp)[SpanName]; len(s) != 1 || s[0].EndTime().IsZero() {
+			t.Errorf("root = %v, want one ended root span", s)
 		}
 	})
 
@@ -725,6 +784,24 @@ func TestThroughConfig(t *testing.T) {
 	}
 	if s := spansByName(exp); len(s[SpanName]) != 1 || len(s["execute_tool a"]) != 1 {
 		t.Errorf("span tree = %v", s)
+	}
+}
+
+// LiteLLMAgents and ToLiteLLMAgents, called first, report only themselves.
+func TestSdkUsageOnlyItself(t *testing.T) {
+	tripwire(t)
+	c := openai.NewClient(option.WithBaseURL("http://127.0.0.1:1"), option.WithMaxRetries(0))
+	ld := &fakeLD{fallback: variation}
+	installClient(t, ld)
+	_, _ = LiteLLMAgents(bg, "cfg", "q", ldcontext.New("u"), &InvokeOptions{Handler: Options{Client: &c}})
+	if got := ld.usageHelpers(); !reflect.DeepEqual(got, []string{"litellm-agents.litellmAgents"}) {
+		t.Errorf("LiteLLMAgents usage helpers = %v", got)
+	}
+	ld = &fakeLD{fallback: variation}
+	installClient(t, ld)
+	_, _ = ToLiteLLMAgents(nil, &NativeGraphOptions{Handler: Options{Client: &c}})
+	if got := ld.usageHelpers(); !reflect.DeepEqual(got, []string{"litellm-agents.toLiteLLMAgents"}) {
+		t.Errorf("ToLiteLLMAgents usage helpers = %v", got)
 	}
 }
 

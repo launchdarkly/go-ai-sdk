@@ -136,6 +136,9 @@ func TestToLiteLLMAgentsRun(t *testing.T) {
 	if byName := spansByName(exp); len(byName["chat gemini/billing"]) != 2 || len(byName["execute_tool refund"]) != 1 {
 		t.Errorf("child spans = %v", byName)
 	}
+	if n := len(spansByName(exp)[SpanName]); n != 0 {
+		t.Errorf("%d %s spans, want none in a graph run", n, SpanName)
+	}
 }
 
 // Each node forwards exactly the allowlist from its own parameters; only the
@@ -264,6 +267,23 @@ func TestToLiteLLMAgentsErrors(t *testing.T) {
 			if strings.HasPrefix(tr.event, "$ld:ai:graph:") {
 				t.Errorf("tracked without a context: %s", tr.event)
 			}
+		}
+	})
+
+	t.Run("building agents fails: span ERROR and invocation_failure", func(t *testing.T) {
+		ld := &fakeLD{variations: map[string]map[string]any{}}
+		installClient(t, ld)
+		exp := tracer(t)
+		_, c := fakeClient(t)
+		_, err := adapter(t, &aiserver.GraphDefinition{Key: "rootless", Enabled: true}, &NativeGraphOptions{Context: user, Handler: Options{Client: c}}).Invoke(bg, "q")
+		if !errors.Is(err, ErrNoRoot) {
+			t.Fatalf("err = %v, want ErrNoRoot", err)
+		}
+		if f := ld.events("$ld:ai:graph:invocation_failure"); len(f) != 1 || f[0].data["configKey"] != "rootless" {
+			t.Errorf("invocation_failure = %+v", f)
+		}
+		if s := spansByName(exp)[kitbase.GraphSpanName]; len(s) != 1 || s[0].Status().Code != codes.Error || s[0].EndTime().IsZero() {
+			t.Errorf("graph span = %v", s)
 		}
 	})
 
