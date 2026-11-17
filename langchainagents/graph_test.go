@@ -1,13 +1,17 @@
 package langchainagents
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"reflect"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"go.opentelemetry.io/otel/codes"
@@ -260,7 +264,7 @@ func TestToLangGraphToolNode(t *testing.T) {
 	}
 }
 
-// NativeTool → "" result, tracked under its LD key; the handoff
+// A NativeTool is not offered to the model and never runs; the handoff
 // executor returns a Command to the target node.
 func TestToLangGraphExecutors(t *testing.T) {
 	ld := twoNode()
@@ -271,18 +275,17 @@ func TestToLangGraphExecutors(t *testing.T) {
 	r := newRun(def, NativeGraphOptions{Context: user})
 	handlers := handlerkit.WrapToolHandlers(map[string]aiserver.ToolHandler{"lookup": native}, user, handlerkit.NodeTrackData(def.GetNode("triage"), "g", "run"))
 	defs, exec := r.tools(def.GetNode("triage"), handlers, nil)
-	if len(defs) != 2 || defs[0].Function.Name != "lookup" {
+	if len(defs) != 1 || defs[0].Function.Name != "transfer_to_billing" {
 		t.Fatalf("defs = %+v", defs)
 	}
-	m, cmd, err := exec(bg, toolCall("lookup", nil))
-	if err != nil || cmd != nil || m.Parts[0].(llms.ToolCallResponse).Content != "" {
-		t.Errorf("native: %+v %v %v", m, cmd, err)
+	if _, _, err := exec(bg, toolCall("lookup", nil)); !errors.Is(err, ErrNoToolHandler) {
+		t.Errorf("native call = %v", err)
 	}
-	if tc := ld.events("$ld:ai:tool_call"); len(tc) != 1 || tc[0].data["toolKey"] != "lookup" {
+	if tc := ld.events("$ld:ai:tool_call"); len(tc) != 0 {
 		t.Errorf("tool_call events = %+v", tc)
 	}
 
-	m, cmd, err = exec(bg, toolCall("transfer_to_billing", nil))
+	m, cmd, err := exec(bg, toolCall("transfer_to_billing", nil))
 	if err != nil || cmd == nil || cmd.Goto != "billing" || !strings.Contains(m.Parts[0].(llms.ToolCallResponse).Content, "billing") {
 		t.Errorf("handoff: %+v %+v %v", m, cmd, err)
 	}
@@ -294,6 +297,25 @@ func TestToLangGraphExecutors(t *testing.T) {
 	}
 	if _, _, err := exec(bg, toolCall("nope", nil)); !errors.Is(err, ErrNoToolHandler) {
 		t.Errorf("unknown tool = %v", err)
+	}
+}
+
+// A NativeTool logs one warning naming its key, once per key per process.
+func TestToLangGraphNativeToolWarnsOnce(t *testing.T) {
+	var buf bytes.Buffer
+	aiserver.SetLogger(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { aiserver.SetLogger(nil) })
+	key := fmt.Sprintf("probe_%d", time.Now().UnixNano()) // fresh key: the once-set is per process
+	ld := twoNode()
+	ld.variations["billing"] = node("Bill", "billing-model", key)
+	installClient(t, ld)
+	def := resolve("g")
+	r := newRun(def, NativeGraphOptions{Context: user})
+	handlers := map[string]aiserver.ToolHandler{key: &aiserver.NativeTool{ToolName: "web_search"}}
+	r.tools(def.GetNode("billing"), handlers, nil)
+	r.tools(def.GetNode("billing"), handlers, nil)
+	if got := strings.Count(buf.String(), key); got != 1 || !strings.Contains(buf.String(), "level=WARN") {
+		t.Errorf("want one WARN naming %s, log = %q", key, buf.String())
 	}
 }
 
