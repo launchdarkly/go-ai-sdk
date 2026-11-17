@@ -89,7 +89,7 @@ func invokeDirs(t *testing.T, parent string) []string {
 func skillFiles(t *testing.T, dir string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
-	m, _ := filepath.Glob(filepath.Join(dir, "launchdarkly", "skills", "*", skills.SkillFilename))
+	m, _ := filepath.Glob(filepath.Join(dir, "launchdarkly", "skills", "*", "SKILL.md"))
 	for _, p := range m {
 		b, err := os.ReadFile(p)
 		if err != nil {
@@ -268,11 +268,11 @@ func TestSkillsMaterialized(t *testing.T) {
 				t.Errorf("SKILL.md files = %v, want %v (pinned versions)", during, want)
 			}
 			names := toolNames(e.api.reqs()[0])
-			if len(names) == 0 || names[len(names)-1] != SkillToolName || slices.Index(names, SkillToolName) != len(names)-1 ||
+			if len(names) == 0 || names[len(names)-1] != "Skill" || slices.Index(names, "Skill") != len(names)-1 ||
 				!slices.Contains(names, "safe") || !slices.Contains(names, "Read") {
 				t.Errorf("tools = %v, want the config's tools then Skill once, last", names)
 			}
-			tool := toolByName(e.api.reqs()[0], SkillToolName)
+			tool := toolByName(e.api.reqs()[0], "Skill")
 			desc, _ := tool["description"].(string)
 			for _, s := range []string{"launchdarkly:a", "about a", "launchdarkly:b", "about b"} {
 				if !strings.Contains(desc, s) {
@@ -494,7 +494,7 @@ func TestSkillsFailClosedIsAGenerationError(t *testing.T) {
 func TestSkillToolCall(t *testing.T) {
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
-			skillTurn := toolResp(SkillToolName, `{"skill":"launchdarkly:a"}`)
+			skillTurn := toolResp("Skill", `{"skill":"launchdarkly:a"}`)
 			lookupTurn := toolResp("lookup", `{}`)
 			e := setup(t, map[string]any{"cfg": agentVariation("inst", map[string]any{
 				"skills": refsValue([]ref{{"a", 2}}),
@@ -523,12 +523,12 @@ func TestSkillToolCall(t *testing.T) {
 			if text, isErr := lastToolResult(t, r[1]); text != "a v2" || isErr {
 				t.Errorf("Skill result = %q (error %v), want the pinned SKILL.md", text, isErr)
 			}
-			spans := e.spans("execute_tool " + SkillToolName)
+			spans := e.spans("execute_tool Skill")
 			root := e.spans(SpanName)
 			if len(spans) != 1 || len(root) != 1 {
 				t.Fatalf("execute_tool Skill spans = %d, invoke_agent spans = %d", len(spans), len(root))
 			}
-			if attrs(spans[0])["gen_ai.tool.name"] != SkillToolName {
+			if attrs(spans[0])["gen_ai.tool.name"] != "Skill" {
 				t.Errorf("span attrs = %v", attrs(spans[0]))
 			}
 			if spans[0].Parent().SpanID() != root[0].SpanContext().SpanID() {
@@ -550,7 +550,7 @@ func TestSkillToolCall(t *testing.T) {
 func TestSkillToolRejectsUnlistedNames(t *testing.T) {
 	for _, name := range []string{"launchdarkly:b", "a", "launchdarkly:../a", "launchdarkly:a/../a", "other:a", ""} {
 		t.Run(fmt.Sprintf("%q", name), func(t *testing.T) {
-			e := setup(t, nil, toolResp(SkillToolName, fmt.Sprintf(`{"skill":%q}`, name)), textResp("done", 1, 1))
+			e := setup(t, nil, toolResp("Skill", fmt.Sprintf(`{"skill":%q}`, name)), textResp("done", 1, 1))
 			skillStore(t) // b exists in the store but the variation does not reference it
 			if err := run(e.skillsHandler(t, t.TempDir()), "invoke", aiserver.HandlerRequest{Config: skillsCfg([]ref{{"a", 1}}), UserInput: "q"}); err != nil {
 				t.Fatal(err)
@@ -575,7 +575,7 @@ func TestSkillsWrappersDoNotMaterialize(t *testing.T) {
 	if _, err := ClaudeAgents(bg, "cfg", "q", user, &InvokeOptions{Handler: e.opts}); err != nil {
 		t.Fatal(err)
 	}
-	if toolByName(e.api.reqs()[0], SkillToolName) != nil {
+	if toolByName(e.api.reqs()[0], "Skill") != nil {
 		t.Error("the wrapper offered the Skill tool")
 	}
 }
