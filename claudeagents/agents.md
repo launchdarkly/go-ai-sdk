@@ -17,8 +17,7 @@ built-in `NativeTool` sentinels.
 | `native.go` | `ToClaudeAgents`: sub-agent tools built in `ReverseTraverse`, graph span and graph events. |
 | `params.go` | `model.parameters` → Messages API (`thinking`, `output_config.effort` / `.format`, `anthropic-beta`, `fallbackModel`); the JS `FORWARDED_QUERY_OPTION_KEYS` allowlist. |
 | `builtins.go` | The ten Claude Code built-in `NativeTool` sentinels. |
-| `hosttools.go` | The eight host-executed built-ins: schemas, `workspace` (WorkDir confinement via `os.Root`, todo list), executors. |
-| `proc_unix.go`, `proc_other.go` | Bash process group (killed as a group on timeout) on Unix; no-op elsewhere. |
+| `hosttools.go` | The eight host-executed built-ins: schemas, `workspace` (WorkDir confinement via `os.Root`, todo list), executors. Bash runs in its own process group (`internal/procgroup`), killed as a group on timeout on Unix. |
 | `hosttools_test.go` | Per-tool tests, confinement abuse matrix, Bash timeout/cap, handler and `ToClaudeAgents` wiring. |
 | `fake_test.go` | `httptest` Anthropic server, fake LaunchDarkly client, span exporter setup. |
 | `handler_test.go` | Handler tests (prompt, tools, loop, telemetry, streaming, history). |
