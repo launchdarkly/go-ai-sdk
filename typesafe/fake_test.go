@@ -288,3 +288,18 @@ func jsonText(v any) (string, error) {
 	b, err := json.Marshal(v)
 	return string(b), err
 }
+
+// eventAttr is the string value of key on the first event named name.
+func eventAttr(s sdktrace.ReadOnlySpan, name, key string) (string, bool) {
+	for _, e := range s.Events() {
+		if e.Name != name {
+			continue
+		}
+		for _, a := range e.Attributes {
+			if string(a.Key) == key {
+				return a.Value.AsString(), true
+			}
+		}
+	}
+	return "", false
+}

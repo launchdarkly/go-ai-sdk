@@ -36,7 +36,8 @@ func TestTelemetry(t *testing.T) {
 	if chat.Parent().SpanID() != root.SpanContext().SpanID() || root.Parent().IsValid() {
 		t.Error("chat must be a direct child of the root invoke_agent span")
 	}
-	usage := map[string]string{"gen_ai.usage.input_tokens": "100", "gen_ai.usage.output_tokens": "20", "gen_ai.usage.total_tokens": "120"}
+	usage := map[string]string{"gen_ai.usage.input_tokens": "100", "gen_ai.usage.output_tokens": "20", "gen_ai.usage.total_tokens": "120",
+		"gen_ai.usage.prompt_tokens": "100", "gen_ai.usage.completion_tokens": "20"}
 	want := map[string]string{
 		"gen_ai.system": "typesafe", "gen_ai.operation.name": "invoke_agent", "gen_ai.request.model": "jev-latest",
 		"gen_ai.response.model":       "jev-2026-01-01",
@@ -62,6 +63,15 @@ func TestTelemetry(t *testing.T) {
 		if c[k] != v {
 			t.Errorf("chat %s = %q, want %q", k, c[k], v)
 		}
+	}
+	if _, has := a["launchdarkly.graph.key"]; has {
+		t.Error("graph key set without graphKey")
+	}
+	if v, ok := eventAttr(root, "feature_flag", "feature_flag.result.variant"); !ok || v != "variation-a" {
+		t.Errorf("root feature_flag variant = %q, %v; want variation-a", v, ok)
+	}
+	if slices.Contains(eventNames(chat), "feature_flag") {
+		t.Error("chat span carries the feature_flag event")
 	}
 	if _, has := c["launchdarkly.config.key"]; has {
 		t.Error("chat span carries LaunchDarkly config attributes")
