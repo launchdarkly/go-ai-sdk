@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/langchainwire"
@@ -364,13 +366,12 @@ func (r *graphRun) agent(ctx context.Context, n *aiserver.GraphNode, cfg aiserve
 	}, nil
 }
 
-// tools lists n's tool definitions — config tools that have a handler
-// (a ToolFunc, or a NativeTool answered with ""), then one
-// transfer_to_<target> tool per outgoing edge — and the executor for them.
+// tools lists n's tool definitions — config tools that have a ToolFunc, then
+// one transfer_to_<target> tool per outgoing edge — and the executor for them.
+// A NativeTool is skipped: this runner has no provider built-ins to wire.
 func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.ToolHandler, span kitbase.Run) ([]llms.Tool, toolExec) {
 	var defs []llms.Tool
 	fns := map[string]aiserver.ToolFunc{}
-	natives := map[string]*aiserver.NativeTool{}
 	keys := make([]string, 0, len(n.Config.Tools))
 	for k := range n.Config.Tools {
 		keys = append(keys, k)
@@ -381,7 +382,8 @@ func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.Too
 		case aiserver.ToolFunc:
 			fns[k] = h
 		case *aiserver.NativeTool:
-			natives[k] = h
+			warnNativeSkipped(k) // no provider built-ins here, so it is never offered
+			continue
 		default:
 			continue // a tool without a handler is not offered
 		}
@@ -414,15 +416,20 @@ func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.Too
 			chosen = target // the handoff is tracked once the target has run
 			return langchainwire.ToolResponse(tc, "Handed off to "+target+"."), handoffCommand(target), nil
 		}
-		if nt := natives[name]; nt != nil {
-			markTool(span, name, tc.ID)
-			handlerkit.TrackNativeTool(nt) // a provider built-in has no local implementation
-			return langchainwire.ToolResponse(tc, ""), nil, nil
-		}
 		m, err := langchainwire.RunTool(ctx, span, fns, tc)
 		return m, nil, err
 	}
 	return defs, exec
+}
+
+// nativeWarned holds the tool keys already warned about, once per process.
+var nativeWarned sync.Map
+
+// warnNativeSkipped logs one warning per tool key that a NativeTool was dropped.
+func warnNativeSkipped(key string) {
+	if _, seen := nativeWarned.LoadOrStore(key, struct{}{}); !seen {
+		bridge.Logger().Warn("langchainagents: skipping NativeTool: the native graph has no provider built-ins", "tool", key)
+	}
 }
 
 // markTool records a tool call that runs no local code as an execute_tool span.
