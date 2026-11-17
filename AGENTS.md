@@ -77,7 +77,7 @@ Built-ins per provider (only the agent handlers wire `NativeTool`; every
 | Anthropic | `claudeagents` (`builtins.go`, `handler.go` `serverTool`, `hosttools.go`) | `ClaudeWebSearch` (`WebSearch`) → `web_search_20250305`; `ClaudeWebFetch` (`WebFetch`) → `web_fetch_20250910` server tools. `ClaudeBash`, `ClaudeRead`, `ClaudeEdit`, `ClaudeWrite`, `ClaudeGlob`, `ClaudeGrep`, `ClaudeTodoWrite`, `ClaudeNotebookEdit` → function tools under the Claude Code name and schema, executed on the host; file tools confined to `Options.WorkDir` (`os.Root`), Bash not sandboxed. `handlerkit.TrackNativeTool` fires per call. | Any other `ToolName`: the config fails with `ErrUnsupportedNativeTool` |
 | OpenAI | `openaiagents` (`runner.go` `newAgent`, `openaiwire.HostedTool`) | No exported sentinels: `&aiserver.NativeTool{ToolName: "web_search"}` (or any hosted Responses tool type, e.g. `file_search`, `code_interpreter`) becomes a hosted tool `{"type": ToolName, ...customParameters}`. `handlerkit.TrackNativeTool` fires on the matching `<type>_call` output item. | — (the type is passed through; the API rejects unknown types) |
 | Bedrock | `bedrockagents` | none | `NativeTool` is not wired |
-| LangChain | `langchainmessages`, `langchainagents` (`ToLangGraph`) | none | `NativeTool` is not wired: the messages handler drops it silently; a `ToLangGraph` node skips it with one `WARN` per tool key per process |
+| LangChain | `langchainmessages`, `langchainagents` (`ToLangGraph`) | none | `NativeTool` is not wired: the messages handler and the `langchainagents` agent handler drop it silently; a `ToLangGraph` node skips it with one `WARN` per tool key per process |
 
 ## Lifecycle
 
@@ -219,7 +219,7 @@ provider's Tier 1 packages, their `internal/*wire` helper and `llms`.
 
 ## Common pitfalls
 
-- **A `NativeTool` on a messages handler or Bedrock is dropped silently; on a
+- **A `NativeTool` on a messages handler, the `langchainagents` agent handler or Bedrock is dropped silently; on a
   LangChain `ToLangGraph` node it is skipped with one `WARN` per tool key per
   process.** Only `claudeagents` and `openaiagents` wire built-ins; elsewhere
   the tool is just not offered.
