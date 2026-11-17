@@ -36,6 +36,9 @@ func TestFactoryMetadata(t *testing.T) {
 	if a == b {
 		t.Error("NewHandler must return independent handlers")
 	}
+	if b.CaptureContent != aiserver.CaptureDefault {
+		t.Errorf("unset CaptureContent = %v, want CaptureDefault (resolved at call time)", b.CaptureContent)
+	}
 }
 
 func TestNoBaseURLIsRefused(t *testing.T) {
@@ -214,6 +217,20 @@ func TestBedrockInferenceProfilePrefix(t *testing.T) {
 	}
 }
 
+// With no model in the answer, gen_ai.response.model is the id sent.
+func TestResponseModelFallsBackToTheSentID(t *testing.T) {
+	const id = "anthropic.claude-opus-5-5"
+	noModel := strings.Replace(text("ok", 1, 1), `"model":"`+servedModel+`",`, "", 1)
+	h, _, exp := setup(t, noModel)
+	if _, err := h.Invoke(bg, req(cfg(id, "Bedrock", func(c *aiserver.AiConfig) { c.Model.Region = "us" }), "q")); err != nil {
+		t.Fatal(err)
+	}
+	chats := spansByName(exp)["chat us."+id]
+	if len(chats) != 1 || attrs(chats[0])["gen_ai.response.model"] != "us."+id {
+		t.Errorf("chat spans %v; want one with gen_ai.response.model = us.%s", chats, id)
+	}
+}
+
 // --- parameters -------------------------------------------------------------
 
 var allowed = []string{"frequency_penalty", "max_completion_tokens", "max_tokens", "parallel_tool_calls", "presence_penalty", "reasoning_effort", "seed", "stop", "temperature", "tool_choice", "top_p"}
@@ -309,13 +326,13 @@ func TestPromptAndHistory(t *testing.T) {
 
 	r = req(cfg("m", "X", func(c *aiserver.AiConfig) { c.Instructions = "sys" }), "now")
 	r.History = []aiserver.Message{
-		{Role: "user", Blocks: []aiserver.ContentBlock{{Type: "text", Text: "look"}, {Type: "image", Source: &aiserver.ImageSource{Type: "base64", MediaType: "image/png", Data: "QUJD"}}}},
+		{Role: "user", Blocks: []aiserver.ContentBlock{{Type: "text", Text: "look"}, {Type: "image", Source: &aiserver.ImageSource{Type: "base64", MediaType: "image/png", Data: "QUJD"}}, {Type: "image", Source: &aiserver.ImageSource{Type: "url", URL: "https://x/cat.png"}}}},
 		{Role: "assistant", Text: "a cat"},
 	}
 	if _, err := h.Invoke(bg, r); err != nil {
 		t.Fatal(err)
 	}
-	want := `[{"content":"sys","role":"system"},{"content":[{"text":"look","type":"text"},{"image_url":{"url":"data:image/png;base64,QUJD"},"type":"image_url"}],"role":"user"},{"content":"a cat","role":"assistant"},{"content":"now","role":"user"}]`
+	want := `[{"content":"sys","role":"system"},{"content":[{"text":"look","type":"text"},{"image_url":{"url":"data:image/png;base64,QUJD"},"type":"image_url"},{"image_url":{"url":"https://x/cat.png"},"type":"image_url"}],"role":"user"},{"content":"a cat","role":"assistant"},{"content":"now","role":"user"}]`
 	if got := messages(p.request(2).body); got != want {
 		t.Errorf("history:\n got %s\nwant %s", got, want)
 	}
@@ -526,11 +543,26 @@ func TestStreamToolCallFragments(t *testing.T) {
 	var log []string
 	r := req(toolConfig(nil), "q")
 	r.ToolHandlers = toolHandlers(&log)
-	if _, err := drain(h, r); err != nil {
+	evs, err := drain(h, r)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(log, []string{`lookup:{"q":"a"}`, "weather"}) || p.count() != 2 {
-		t.Errorf("tool calls %v, requests %d", log, p.count())
+		t.Fatalf("tool calls %v, requests %d", log, p.count())
+	}
+	// Ids are joined by index too: each result answers its own call.
+	var ids []any
+	for _, m := range p.request(1).body["messages"].([]any) {
+		if m := m.(map[string]any); m["role"] == "tool" {
+			ids = append(ids, m["tool_call_id"])
+		}
+	}
+	if !reflect.DeepEqual(ids, []any{"c1", "c2"}) {
+		t.Errorf("tool_call_ids = %v, want [c1 c2]", ids)
+	}
+	// Usage is summed over both streamed turns (1 / 1 each).
+	if last := evs[len(evs)-1]; last.Type != aiserver.EventDone || last.Usage["input_tokens"] != 2.0 || last.Usage["output_tokens"] != 2.0 {
+		t.Errorf("done = %+v, want usage summed over both turns (2 / 2)", last)
 	}
 }
 
