@@ -306,6 +306,11 @@ func TestEvaluationSpansForPlainFunctions(t *testing.T) {
 			m["gen_ai.evaluation.explanation"].AsString() != "correct" {
 			t.Errorf("result %v", m)
 		}
+		// Every criterion scores from 0 to 1; the range lets a viewer show "1 / 1".
+		if mn, mx := m["launchdarkly.evaluation.score.min"], m["launchdarkly.evaluation.score.max"]; mn.Type() != attribute.FLOAT64 || mn.AsFloat64() != 0 ||
+			mx.Type() != attribute.FLOAT64 || mx.AsFloat64() != 1 {
+			t.Errorf("score range min=%v max=%v", mn.Emit(), mx.Emit())
+		}
 		for _, k := range []string{"gen_ai.evaluation.score.label", "verdict", "passed", "successDirection"} {
 			if _, has := m[k]; has {
 				t.Errorf("result carries %s", k)

@@ -149,8 +149,10 @@ func TestJudgeEvaluationSpan(t *testing.T) {
 		if attrs["gen_ai.evaluation.name"] != "judge" || attrs["gen_ai.evaluation.score.value"] != "0.75" {
 			t.Errorf("evaluation attrs = %v", attrs)
 		}
-		if _, has := attrs["gen_ai.evaluation.score.label"]; has {
-			t.Error("score.label invented")
+		for _, k := range []string{"gen_ai.evaluation.score.label", "launchdarkly.evaluation.score.min", "launchdarkly.evaluation.score.max"} {
+			if _, has := attrs[k]; has {
+				t.Errorf("online judge span carries %s", k)
+			}
 		}
 		if _, has := attrs["gen_ai.evaluation.explanation"]; has != capture {
 			t.Errorf("explanation present=%v with capture=%v", has, capture)
