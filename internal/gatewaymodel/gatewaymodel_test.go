@@ -77,6 +77,44 @@ func TestModelFamilyWinsOverProvider(t *testing.T) {
 	wantID(t, config("OpenAI", "Claude-Sonnet-4"), "anthropic/Claude-Sonnet-4") // family match ignores case
 }
 
+// A multi-creator host gives no creator, so these resolve only by the model
+// family.
+func TestModelFamilyNamesCreatorOnMultiCreatorHost(t *testing.T) {
+	cases := []struct{ model, want string }{
+		{"gpt-5", "openai/gpt-5"},
+		{"o3", "openai/o3"},
+		{"o1-mini", "openai/o1-mini"},
+		{"gemini-2.5-pro", "google/gemini-2.5-pro"},
+		{"sonar-pro", "perplexity/sonar-pro"},
+	}
+	for _, c := range cases {
+		t.Run(c.model, func(t *testing.T) {
+			wantID(t, config("Databricks", c.model), c.want)
+		})
+	}
+}
+
+func TestFailsForBedrockWithoutKnownCreator(t *testing.T) {
+	wantError(t, config("Bedrock", "custom-model"), ErrMultipleCreators, `"custom-model"`)
+}
+
+// The multi-creator error tells the caller how to fix the config.
+func TestMultipleCreatorsErrorSaysHowToFix(t *testing.T) {
+	for _, provider := range []string{"Bedrock", "Databricks"} {
+		t.Run(provider, func(t *testing.T) {
+			_, err := ID(config(provider, "custom-model"))
+			if !errors.Is(err, ErrMultipleCreators) {
+				t.Fatalf("ID(%q, %q) error = %v; want %v", provider, "custom-model", err, ErrMultipleCreators)
+			}
+			for _, hint := range []string{"explicit creator/model id", "inject a model"} {
+				if !strings.Contains(err.Error(), hint) {
+					t.Errorf("ID(%q, %q) error %q does not say %q", provider, "custom-model", err, hint)
+				}
+			}
+		})
+	}
+}
+
 func TestProviderAliases(t *testing.T) {
 	wantID(t, config("xAI", "model"), "spacexai/model")
 	wantID(t, config("TypeSafe", "jev"), "typesafe-ai/jev")
