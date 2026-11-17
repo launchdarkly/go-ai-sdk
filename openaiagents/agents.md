@@ -4,8 +4,8 @@
 
 Tier 1 handler package. `providesFor` is `{Provider: "OpenAI", Mode: "agent"}`. It wraps the
 OpenAI Responses API (`client.Responses.New` / `NewStreaming`) from `github.com/openai/openai-go/v3`
-with a package-local agent loop that stands in for the OpenAI Agents SDK, which has no official
-Go version.
+with the shared agent loop in `internal/agentloop`, which stands in for the OpenAI Agents SDK (it
+has no official Go version); this package supplies the agent type and the Responses API model.
 
 ## File map
 

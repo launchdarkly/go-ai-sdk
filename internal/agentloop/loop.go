@@ -22,7 +22,6 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
-	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
 )
 
 // DefaultMaxTurns matches the Agents SDK's DEFAULT_MAX_TURNS.
@@ -86,7 +85,8 @@ type Turn struct {
 // Model performs one model call for the active agent. A Model serves one run
 // and may keep state between turns.
 type Model interface {
-	// Turn calls the model for a with in. onText is nil for a blocking call;
+	// Turn calls the model once for agent a, sending what the run added
+	// since the previous turn (in). onText is nil for a blocking call;
 	// otherwise it receives each text delta, and stopped reports that it
 	// returned false.
 	Turn(ctx context.Context, a Agent, in Input, onText func(string) bool) (t Turn, stopped bool, err error)
@@ -246,7 +246,7 @@ func (r *Runner) callTool(ctx context.Context, a Agent, call ToolCall) (any, err
 	if !offered || fn == nil {
 		return nil, fmt.Errorf("%w: %q", r.ErrToolNotOffered, call.Name)
 	}
-	args, err := openaiwire.ParseArguments(call.Arguments)
+	args, err := parseArguments(call.Arguments)
 	if err != nil {
 		return nil, fmt.Errorf("%s: tool %q arguments: %w", r.Prefix, call.Name, err)
 	}
@@ -255,6 +255,19 @@ func (r *Runner) callTool(ctx context.Context, a Agent, call ToolCall) (any, err
 		return nil, fmt.Errorf("%s: tool %q: %w", r.Prefix, call.Name, err) // propagate
 	}
 	return res, nil
+}
+
+// parseArguments decodes a function call's JSON argument object; blank
+// arguments decode to nil.
+func parseArguments(raw string) (map[string]any, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	var args map[string]any
+	if err := json.Unmarshal([]byte(raw), &args); err != nil {
+		return nil, err
+	}
+	return args, nil
 }
 
 // SnakeParameters adds each camelCase key (`topP`, `maxTokens`) under its
