@@ -111,8 +111,38 @@ packages cannot register into shared state on import, so you build a
 `*Registry` and pass it explicitly. If you want one per process, keep it in a
 variable in your own package.
 
+Registering a handler with the identity of one already registered replaces it
+in its slot and logs a warning. Identity is `ProvidesFor` (mode normalized), plus
+the provider set on a `"*"` handler.
+
 Tool keys must match the keys in the variation's `tools` map exactly. A tool
 with no registered function is never shown to the model.
+
+### Scoped wildcard handlers
+
+A `"*"` handler serves any provider. `WithProviders` returns a copy that serves
+only the listed `provider.name` values, compared exactly:
+
+```go
+wildcard := aiserver.ProvidesFor{Provider: "*", Mode: aiserver.ModeMessages}
+bedrock, err := aiserver.CreateHandler(wildcard, invokeBedrock, nil, aiserver.CaptureDefault).WithProviders("Bedrock")
+if err != nil {
+	return err
+}
+anthropic, err := aiserver.CreateHandler(wildcard, invokeAnthropic, nil, aiserver.CaptureDefault).WithProviders("Anthropic")
+if err != nil {
+	return err
+}
+aiserver.Config(aiserver.ConfigArgs{Key: "my-ai-config", Handlers: []*aiserver.ProviderHandler{bedrock, anthropic}})
+```
+
+Selection is the same for configs, graph nodes, judges and offline evaluations:
+an exact provider handler first, then the wildcard with the shortest list that
+names the provider (equal lengths keep the earlier handler), then an unscoped
+wildcard. An unlisted provider gets the same `ErrNoHandler` as no handler at all.
+An empty list, a blank name or a name with surrounding whitespace returns an error
+wrapping `ErrInvalidProviders`. The LangChain packages take the list as
+`Options.Providers`.
 
 ## Configuration
 

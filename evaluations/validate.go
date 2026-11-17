@@ -30,7 +30,6 @@ func validatePool(single *aiserver.ProviderHandler, many []*aiserver.ProviderHan
 	if single != nil {
 		pool, name = []*aiserver.ProviderHandler{single}, "Handler"
 	}
-	seen := map[aiserver.ProvidesFor]bool{}
 	for i, h := range pool {
 		label := name
 		if name == "Handlers" {
@@ -42,13 +41,21 @@ func validatePool(single *aiserver.ProviderHandler, many []*aiserver.ProviderHan
 		if h.ProvidesFor.Provider == "" {
 			return nil, invalid("%s does not declare ProvidesFor; build it with aiserver.CreateHandler or a provider package's NewHandler so it can be selected by provider and mode", label)
 		}
-		pf := providesFor(h)
-		if seen[pf] {
-			return nil, invalid("two handlers provide for provider %q in %q mode; the run cannot tell which one to use", pf.Provider, pf.Mode)
+		// Identity is the Registry's: on a "*" handler it includes the provider set.
+		if slices.ContainsFunc(pool[:i], func(e *aiserver.ProviderHandler) bool { return handlerkit.SameHandlerIdentity(e, h) }) {
+			pf := providesFor(h)
+			return nil, invalid("two handlers provide for provider %q in %q mode%s; the run cannot tell which one to use", pf.Provider, pf.Mode, scopeOf(h))
 		}
-		seen[pf] = true
 	}
 	return pool, nil
+}
+
+// scopeOf names a scoped wildcard's provider list for an error, else "".
+func scopeOf(h *aiserver.ProviderHandler) string {
+	if h.ProvidesFor.Provider != "*" || h.Providers == nil {
+		return ""
+	}
+	return fmt.Sprintf(" for providers %v", h.Providers)
 }
 
 func providesFor(h *aiserver.ProviderHandler) aiserver.ProvidesFor {

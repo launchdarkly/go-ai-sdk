@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"math"
+	"slices"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
@@ -119,22 +120,18 @@ func selectHandler(cfg AiConfig, meta VariationMeta, handlers []*ProviderHandler
 }
 
 // kitSelectHandler is the config() routing rule: the handler whose
-// ProvidesFor is exactly {provider, mode}, else {"*", mode}, with the
-// handler's mode normalized like the config's ("completion" is messages).
-// Every path that routes a config by provider uses it, so the rule lives in
-// one place.
+// ProvidesFor is exactly {provider, mode}, else the "*" handler of mode that
+// accepts provider (the shortest scoped list naming it, else an unscoped
+// wildcard), with the handler's mode normalized like the config's
+// ("completion" is messages). Every path that routes a config by provider
+// uses it, so the rule lives in one place. The error names the mode only
+// when some handler covers the provider in another mode.
 func kitSelectHandler(handlers []*ProviderHandler, provider string, mode Mode) (*ProviderHandler, error) {
-	for _, want := range []ProvidesFor{{provider, mode}, {kitbase.WildcardProvider, mode}} {
-		for _, h := range handlers {
-			if h.ProvidesFor.Provider == want.Provider && handlerMode(h) == want.Mode {
-				return h, nil
-			}
-		}
+	if h := selectFor(handlers, provider, modeIs(mode)); h != nil {
+		return h, nil
 	}
-	for _, h := range handlers {
-		if h.ProvidesFor.Provider == provider || h.ProvidesFor.Provider == kitbase.WildcardProvider {
-			return nil, fmt.Errorf("%w %s with mode %s", ErrNoHandler, provider, mode)
-		}
+	if slices.ContainsFunc(handlers, func(h *ProviderHandler) bool { return covers(h, provider) }) {
+		return nil, fmt.Errorf("%w %s with mode %s", ErrNoHandler, provider, mode)
 	}
 	return nil, fmt.Errorf("%w %s", ErrNoHandler, provider)
 }

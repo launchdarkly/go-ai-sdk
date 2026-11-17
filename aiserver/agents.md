@@ -15,6 +15,7 @@ handler packages they use.
 | `errors.go` | Exported sentinel errors for `errors.Is` |
 | `utils.go` | `ParseTemplate`, `kitParseUsage`, `kitNormalizeMode` |
 | `registry.go` | `Registry`, `Compose`, handler/tool resolution |
+| `providers.go` | `WithProviders`, handler identity (`ProvidesFor` plus a wildcard's provider set), wildcard ranking |
 | `lifecycle.go` | `InitClient` / `InitWithClient` / `GetClient` / `Shutdown`, OTel setup, sdk-info and helper-usage events |
 | `config.go` | `Config().Invoke/Stream`, handler selection, `InspectConfig`, variation reading |
 | `tracking.go` | Tracked execution, `$ld:ai:*` events, tool-call tracking wrapper, trajectory capture |
@@ -91,7 +92,10 @@ ConversationIDSpanProcessor, Track, PackageName, PackageVersion
    `bridge.ConfigWithOptions` calls its `RunOptions.Variation` instead of
    `JSONVariation`, and its tracked runs use the options' run id, extra track
    data and span attributes.
-3. Select the handler: exact `[provider, mode]`, then `["*", mode]`, else error.
+3. Select the handler (`kitSelectHandler`, `providers.go`): exact `[provider, mode]`, then the `["*", mode]`
+   handler that accepts the provider (the shortest `Providers` list naming it, ties to the earlier
+   handler, then an unscoped wildcard), else `ErrNoHandler`. Graph nodes, judges and the evaluations
+   pool use the same order; a judge no handler covers is skipped with a warning.
 4. Tracked execution: mint `TrackData`, wrap tools (trajectory recorder inside
    the `$ld:ai:tool_call` wrapper), inject `variables.ldContext` and `__ld`,
    call the handler, track duration, success/error and tokens. A handler

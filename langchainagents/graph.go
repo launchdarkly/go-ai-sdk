@@ -31,10 +31,14 @@ import (
 // LangChainGraph returns aiserver's model-driven graph runner with this
 // package's agent handler as the only handler. Any options.Handlers value is replaced, so the graph
 // cannot be bound to a different handler. handler supplies the model: its Model or ModelFactory runs every node.
-// The error is NewHandler's, and nil for now.
+// The error is NewHandler's (an invalid Options.Providers).
 func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error) {
 	handlerkit.ReportUsage("langchain-agents.langchainGraph", PackageName, PackageVersion)
-	options.Handlers = []*aiserver.ProviderHandler{newHandler(handler)}
+	h, err := buildHandler(handler)
+	if err != nil {
+		return nil, err
+	}
+	options.Handlers = []*aiserver.ProviderHandler{h}
 	return sdkapi.Graph(key, options), nil
 }
 

@@ -130,6 +130,9 @@ var TrackGraphEvent any
 // SelectHandler is func([]*aiserver.ProviderHandler, string, aiserver.Mode) (*aiserver.ProviderHandler, error).
 var SelectHandler any
 
+// SameHandlerIdentity is func(a, b *aiserver.ProviderHandler) bool.
+var SameHandlerIdentity any
+
 // ImageURL is func(aiserver.ImageSource) string.
 var ImageURL any
 

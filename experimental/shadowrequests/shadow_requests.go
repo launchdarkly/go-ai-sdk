@@ -496,7 +496,7 @@ func withDeadline(h *aiserver.ProviderHandler, timeout time.Duration) *aiserver.
 			return aiserver.HandlerResult{}, context.Cause(ctx)
 		}
 	}
-	return &aiserver.ProviderHandler{ProvidesFor: h.ProvidesFor, CaptureContent: h.CaptureContent, Invoke: invoke}
+	return &aiserver.ProviderHandler{ProvidesFor: h.ProvidesFor, Providers: h.Providers, CaptureContent: h.CaptureContent, Invoke: invoke}
 }
 
 func trackDataMap(td aiserver.TrackData) map[string]any {

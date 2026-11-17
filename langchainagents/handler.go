@@ -84,14 +84,24 @@ type Options struct {
 }
 
 // NewHandler returns the LangChain agent handler
-// (createLangChainAgentsHandler).
-// It returns an error for an invalid option. No current option can be
-// invalid, so the error is nil for now.
+// (createLangChainAgentsHandler). It returns an error for an invalid option
+// (see Options.Providers).
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error) {
 	handlerkit.ReportUsage("langchain-agents.createLangChainAgentsHandler", PackageName, PackageVersion)
-	return newHandler(opts), nil
+	return buildHandler(opts)
 }
 
+// buildHandler builds the handler without reporting usage, scoped to
+// opts.Providers when set.
+func buildHandler(opts Options) (*aiserver.ProviderHandler, error) {
+	ph := newHandler(opts)
+	if opts.Providers == nil {
+		return ph, nil
+	}
+	return ph.WithProviders(opts.Providers...)
+}
+
+// newHandler is the unscoped handler for opts.
 func newHandler(opts Options) *aiserver.ProviderHandler {
 	h := &handler{opts: opts}
 	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent)
@@ -115,8 +125,12 @@ func LangChainAgents(ctx context.Context, configKey, userInput string, userCtx l
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}
+	h, err := buildHandler(opts.Handler)
+	if err != nil {
+		return aiserver.ProviderResponse{}, err
+	}
 	return sdkapi.Config(aiserver.ConfigArgs{
-		Key: configKey, Handlers: []*aiserver.ProviderHandler{newHandler(opts.Handler)},
+		Key: configKey, Handlers: []*aiserver.ProviderHandler{h},
 		ToolHandlers: opts.ToolHandlers, Registry: opts.Registry, SkipJudges: opts.SkipJudges,
 	}).Invoke(ctx, userInput, userCtx, aiserver.WithVariables(opts.Variables))
 }
