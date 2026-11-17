@@ -599,8 +599,17 @@ func TestWatchSkillsFromReadsOnEveryTrigger(t *testing.T) {
 	tr := &fakeTracker{}
 	installClient(t, &trackedLD{tracker: tr})
 	store := watchStore(map[string]any{"a": rawSkill("a", 1, "a")})
-	cs := &countingSource{answer: answering(NewSkillReference("a", 1))}
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	cs := &countingSource{answer: func(_ context.Context, n int) ([]SkillReference, error) {
+		if n == 4 {
+			close(entered)
+			<-release
+		}
+		return []SkillReference{NewSkillReference("a", 1)}, nil
+	}}
 	_, w := watchFrom(t, newSource(t, cs.refs, "agent"), t.TempDir(), &WatchSkillsOptions{Debounce: 10 * time.Millisecond})
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) }) // runs before w.Close
 	if cs.reads() != 1 {
 		t.Fatalf("initial reads %d", cs.reads())
 	}
@@ -618,11 +627,31 @@ func TestWatchSkillsFromReadsOnEveryTrigger(t *testing.T) {
 	if cs.reads() != 3 {
 		t.Fatalf("a config change: reads %d", cs.reads())
 	}
-	// An unrelated key does not wake the watcher.
+	// An unrelated key does not wake the watcher. This is checked on the wake
+	// signal itself, while a read holds the watcher's goroutine: nothing can
+	// take the signal, and the debounce cannot merge it into a later one.
+	tr.fire(t, "agent")
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the config change never reached the source")
+	}
+	// The listener takes the second send only after it has handled the first.
 	tr.fire(t, "unrelated")
-	time.Sleep(150 * time.Millisecond)
-	if w.Reconciles() != 2 || cs.reads() != 3 {
-		t.Fatalf("an unrelated key: reconciles %d, reads %d", w.Reconciles(), cs.reads())
+	tr.fire(t, "unrelated")
+	if len(w.wake) != 0 {
+		t.Fatal("an unrelated key woke the watcher")
+	}
+	// The probe sees a real wake: a followed key raises the same signal.
+	tr.fire(t, "agent")
+	tr.fire(t, "agent")
+	if len(w.wake) != 1 {
+		t.Fatal("a followed key changed during a read did not wake the watcher")
+	}
+	releaseOnce.Do(func() { close(release) })
+	waitReconciles(t, w, 4)
+	if cs.reads() != 5 {
+		t.Fatalf("one wake after the held read: reads %d", cs.reads())
 	}
 }
 
