@@ -2,6 +2,7 @@ package skills
 
 import (
 	"fmt"
+	"regexp"
 	"sync"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
@@ -23,8 +24,13 @@ func skillTools(key string, version int) []aiserver.Tool {
 	}
 	res := resolveFromStore(s, key, version)
 	if res.skill == nil {
-		warnOnce(toolWarning{key, version, "", warnUnreadable}, fmt.Sprintf("skill '%s' version %d adds no tools (%s): %s", safeKey(key), version, res.reason, res.err),
-			"reason", string(res.reason))
+		msg := fmt.Sprintf("skill '%s' version %d adds no tools (%s): %s", safeKey(key), version, res.reason, res.err)
+		if !storeIsInitialized(s) {
+			// A miss before the store's first payload does not use up the warning.
+			currentLogger().Warn(msg, "skill_key", safeKey(key), "skill_version", version, "reason", string(res.reason))
+			return nil
+		}
+		warnOnce(toolWarning{key, version, "", warnUnreadable}, msg, "reason", string(res.reason))
 		return nil
 	}
 	return res.skill.tools
@@ -48,10 +54,7 @@ func decodeSkillTools(key string, version int, v any, present bool) []aiserver.T
 	for i, e := range entries {
 		obj, _ := e.(map[string]any)
 		name, nameOK := obj["name"].(string)
-		tool := name
-		if !nameOK {
-			tool = fmt.Sprintf("tools[%d]", i)
-		}
+		tool := toolLabel(i, name)
 		params, paramsOK := obj["parameters"].(map[string]any)
 		var problem string
 		switch {
@@ -65,7 +68,7 @@ func decodeSkillTools(key string, version int, v any, present bool) []aiserver.T
 			problem = "repeats an earlier tool's name"
 		}
 		if problem != "" {
-			warnOnce(toolWarning{key, version, tool, warnDropped}, fmt.Sprintf("skill '%s' version %d: tool '%s' %s and is dropped", safeKey(key), version, tool, problem))
+			warnOnce(toolWarning{key, version, tool, warnDropped}, fmt.Sprintf("skill '%s' version %d: tool %s %s and is dropped", safeKey(key), version, tool, problem))
 			continue
 		}
 		seen[name] = true
@@ -73,13 +76,13 @@ func decodeSkillTools(key string, version int, v any, present bool) []aiserver.T
 		// A wrongly typed optional field is dropped, keeping the tool.
 		if d, present := obj["description"]; present && d != nil {
 			if t.Description, ok = d.(string); !ok {
-				warnOnce(toolWarning{key, version, name, warnBadDescription}, fmt.Sprintf("skill '%s' version %d: tool '%s' has a description that is not a string; it is offered without one", safeKey(key), version, name))
+				warnOnce(toolWarning{key, version, tool, warnBadDescription}, fmt.Sprintf("skill '%s' version %d: tool %s has a description that is not a string; it is offered without one", safeKey(key), version, tool))
 			}
 		}
 		if cp, present := obj["customParameters"]; present && cp != nil {
 			m, isMap := cp.(map[string]any)
 			if !isMap {
-				warnOnce(toolWarning{key, version, name, warnBadCustomParameters}, fmt.Sprintf("skill '%s' version %d: tool '%s' has customParameters that is not an object; it is offered without them", safeKey(key), version, name))
+				warnOnce(toolWarning{key, version, tool, warnBadCustomParameters}, fmt.Sprintf("skill '%s' version %d: tool %s has customParameters that is not an object; it is offered without them", safeKey(key), version, tool))
 			}
 			t.CustomParameters = deepCloneMap(m)
 		}
@@ -129,6 +132,19 @@ func clearToolWarnings() {
 	toolWarnMu.Lock()
 	defer toolWarnMu.Unlock()
 	clear(toolWarned)
+}
+
+// logSafeToolName is the shape a tool name must have to be quoted in a log
+// line, so a name from the wire cannot inject into it.
+var logSafeToolName = regexp.MustCompile(`^[A-Za-z0-9._-]{1,256}$`)
+
+// toolLabel names a skill's tool by position, with its name only when the
+// name is log-safe: tools[1] ('get-weather').
+func toolLabel(i int, name string) string {
+	if logSafeToolName.MatchString(name) {
+		return fmt.Sprintf("tools[%d] ('%s')", i, name)
+	}
+	return fmt.Sprintf("tools[%d]", i)
 }
 
 // cloneTools deep-copies tools so no caller shares a schema map with a Skill.

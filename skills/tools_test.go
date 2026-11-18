@@ -200,15 +200,18 @@ func TestBadToolEntryIsDroppedAndTheOthersKeptInOrder(t *testing.T) {
 		entry any
 		tool  string
 	}{
-		"parameters not an object": {with("bad", func(e map[string]any) { e["parameters"] = "x" }), "'bad'"},
-		"no parameters":            {with("bad", func(e map[string]any) { delete(e, "parameters") }), "'bad'"},
-		"name not a string":        {with("", func(e map[string]any) { e["name"] = 7.0 }), "'tools[1]'"},
-		"no name":                  {with("", func(e map[string]any) { delete(e, "name") }), "'tools[1]'"},
-		"entry not an object":      {"get-weather", "'tools[1]'"},
-		"entry null":               {nil, "'tools[1]'"},
-		"type not function":        {with("bad", func(e map[string]any) { e["type"] = "web_search" }), "'bad'"},
-		"no type":                  {with("bad", func(e map[string]any) { delete(e, "type") }), "'bad'"},
-		"repeated name":            {with("first", func(e map[string]any) { e["description"] = "second" }), "'first'"},
+		"parameters not an object": {with("bad", func(e map[string]any) { e["parameters"] = "x" }), "tools[1] ('bad')"},
+		"no parameters":            {with("bad", func(e map[string]any) { delete(e, "parameters") }), "tools[1] ('bad')"},
+		"name not a string":        {with("", func(e map[string]any) { e["name"] = 7.0 }), "tools[1]"},
+		"no name":                  {with("", func(e map[string]any) { delete(e, "name") }), "tools[1]"},
+		"entry not an object":      {"get-weather", "tools[1]"},
+		"entry null":               {nil, "tools[1]"},
+		"type not function":        {with("bad", func(e map[string]any) { e["type"] = "web_search" }), "tools[1] ('bad')"},
+		"no type":                  {with("bad", func(e map[string]any) { delete(e, "type") }), "tools[1] ('bad')"},
+		"repeated name":            {with("first", func(e map[string]any) { e["description"] = "second" }), "tools[1] ('first')"},
+		// A name that fails the log-safety shape check is never quoted.
+		"newline in name": {with("evil\nINFO forged", func(e map[string]any) { e["type"] = "x" }), "tools[1]"},
+		"257-char name":   {with(strings.Repeat("a", 257), func(e map[string]any) { delete(e, "parameters") }), "tools[1]"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -219,10 +222,10 @@ func TestBadToolEntryIsDroppedAndTheOthersKeptInOrder(t *testing.T) {
 				t.Fatalf("tools = %+v", tools)
 			}
 			w := warnings(logs)
-			if len(w) != 1 || !strings.Contains(w[0].msg, "'pdf' version 2") || !strings.Contains(w[0].msg, "tool "+c.tool) {
+			if len(w) != 1 || !strings.Contains(w[0].msg, "'pdf' version 2") || !strings.Contains(w[0].msg, "tool "+c.tool+" ") {
 				t.Fatalf("want one warning naming the skill and tool %s, got %v", c.tool, logs.all())
 			}
-			for _, leak := range []string{"secret body", "d bad", "properties", "city"} {
+			for _, leak := range []string{"secret body", "d bad", "properties", "city", "evil", strings.Repeat("a", 257)} {
 				if strings.Contains(w[0].msg, leak) || strings.Contains(slogAttrs(w[0]), leak) {
 					t.Errorf("warning carries %q: %v", leak, w[0])
 				}
@@ -375,8 +378,23 @@ func TestWronglyTypedOptionalToolFieldsAreDroppedWithAWarning(t *testing.T) {
 		}
 	}
 	w := warnings(logs)
-	if len(w) != 2 || !strings.Contains(w[0].msg, "tool 'bad-desc'") || !strings.Contains(w[1].msg, "tool 'bad-custom'") {
+	if len(w) != 2 || !strings.Contains(w[0].msg, "tool tools[0] ('bad-desc')") || !strings.Contains(w[1].msg, "tool tools[1] ('bad-custom')") {
 		t.Fatalf("want one warning per bad field, once per process, got %v", logs.all())
 	}
 	noIntegritySignal(t, rec, logs)
+}
+
+// A miss before the store's first payload does not use up the once-per-process
+// warning (§3.21 readiness probe).
+func TestUnreadableSkillBeforeInitDoesNotUseUpTheWarning(t *testing.T) {
+	_, logs := setup(t)
+	p := &probeStore{SkillStore: NewInMemorySkillStore(nil)}
+	SetSkillStore(p)
+	_ = skillTools("pdf", 1) // before init
+	p.ready = true
+	_ = skillTools("pdf", 1) // after init
+	_ = skillTools("pdf", 1) // after init again: already warned
+	if w := warnings(logs); len(w) != 2 || w[0].attrs["reason"] != string(ReasonAbsent) || w[1].attrs["reason"] != string(ReasonAbsent) {
+		t.Fatalf("want a warning before init and one after, got %v", logs.all())
+	}
 }

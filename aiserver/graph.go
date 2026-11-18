@@ -590,6 +590,7 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 		if err != nil {
 			return off(), fmt.Errorf("graph %q node %q: %w", key, k, err)
 		}
+		cfg = withSkillTools(k, cfg)
 		def.nodes[k] = &GraphNode{Key: k, Config: cfg, Meta: nmeta, value: nvalue}
 	}
 	for _, n := range def.nodes {

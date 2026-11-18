@@ -17,10 +17,11 @@ func TestToLangGraphOffersANodesSkillTools(t *testing.T) {
 	ld.variations["triage"]["skills"] = []any{map[string]any{"key": "weather", "version": 1}}
 	installClient(t, ld)
 	sum := sha256.Sum256([]byte("# w"))
-	skills.SetSkillStore(skills.NewInMemorySkillStore(map[string]any{"w": map[string]any{
+	store := &countingStore{SkillStore: skills.NewInMemorySkillStore(map[string]any{"w": map[string]any{
 		"key": "weather", "version": 1, "content": "# w", "contentHash": hex.EncodeToString(sum[:]),
 		"tools": []any{map[string]any{"type": "function", "name": "get-weather", "parameters": map[string]any{"type": "object"}}},
-	}}))
+	}})}
+	skills.SetSkillStore(store)
 	var calls []string
 	handlers := handlersFor(&calls)
 	handlers["get-weather"] = fn(func(map[string]any) (any, error) { return "sunny", nil })
@@ -37,4 +38,18 @@ func TestToLangGraphOffersANodesSkillTools(t *testing.T) {
 	if got := toolNames(fm["billing"].call(0).opts); !reflect.DeepEqual(got, []string{"refund"}) {
 		t.Errorf("billing tools = %v", got)
 	}
+	// "Skill tools are merged once": ResolveGraph merged; the adapter does not again.
+	if store.reads != 1 {
+		t.Errorf("the skill was read %d times, want once", store.reads)
+	}
+}
+
+type countingStore struct {
+	skills.SkillStore
+	reads int
+}
+
+func (c *countingStore) GetObject(kind, key string, version int) (any, error) {
+	c.reads++
+	return c.SkillStore.GetObject(kind, key, version)
 }

@@ -37,6 +37,7 @@ type RunOptions struct {
 	ExistingClient bool                 // true: use the initialized client and never start one
 	NoFlagEvent    bool                 // true: no feature_flag event on the handler's root span
 	NoUsage        bool                 // true: no $ld:ai:sdk:usage for the call (SDK packages report their own)
+	NoSkillTools   bool                 // true: the variation's skills are not read for their tools (shadow runs)
 }
 
 // ConversationID returns the conversation id bound on ctx, or "". Set by the

@@ -4,13 +4,16 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"regexp"
 	"sync"
 
 	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
 )
 
 // withSkillTools adds the tools of the skills cfg attaches to cfg.Tools, the
-// tools a handler receives. Skills are read in the variation's skills order
+// tools a handler receives. It runs once per resolution, for Config runs and
+// graph nodes only: judges, InspectConfig, shadow runs and evaluations never
+// merge. Skills are read in the variation's skills order
 // and an exact duplicate is skipped. A key the variation already has keeps
 // the variation's definition, and a key two skills define differently keeps
 // the first skill's, each with a warning. A skill that cannot be read, or no
@@ -33,15 +36,15 @@ func withSkillTools(configKey string, cfg AiConfig) AiConfig {
 		for _, t := range resolve(skillKey, version) {
 			if _, own := cfg.Tools[t.Name]; own {
 				warnSkillToolOnce(configKey, skill, t.Name, fmt.Sprintf(
-					"skill '%s' version %d pins tool '%s', which AI Config '%s' also defines; the variation's definition is offered",
-					skillKey, version, t.Name, configKey))
+					"skill '%s' version %d pins tool %s, which AI Config '%s' also defines; the variation's definition is offered",
+					skillKey, version, logToolKey(t.Name), configKey))
 				continue
 			}
 			if held, dup := tools[t.Name]; dup {
 				if !reflect.DeepEqual(held, t) {
 					warnSkillToolOnce(configKey, skill, t.Name, fmt.Sprintf(
-						"skills '%s' and '%s' on AI Config '%s' define tool '%s' differently; the first skill's definition is offered",
-						from[t.Name], skill, configKey, t.Name))
+						"skills '%s' and '%s' on AI Config '%s' define tool %s differently; the first skill's definition is offered",
+						from[t.Name], skill, configKey, logToolKey(t.Name)))
 				}
 				continue
 			}
@@ -70,8 +73,19 @@ func warnSkillToolOnce(configKey, skill, tool, msg string) {
 	skillToolWarned[id] = true
 	skillToolWarnMu.Unlock()
 	if !seen {
-		sdkLogger().Warn(msg, "config_key", configKey, "skill", skill, "tool", tool)
+		sdkLogger().Warn(msg, "config_key", configKey, "skill", skill)
 	}
+}
+
+// logSafeToolKey is the shape a skill tool key must have to be quoted in a
+// log line; keys come from the wire, so anything else could inject into it.
+var logSafeToolKey = regexp.MustCompile(`^[A-Za-z0-9._-]{1,256}$`)
+
+func logToolKey(key string) string {
+	if logSafeToolKey.MatchString(key) {
+		return "'" + key + "'"
+	}
+	return "(a key that is not log-safe)"
 }
 
 func resetSkillToolWarnings() {

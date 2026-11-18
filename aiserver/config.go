@@ -108,7 +108,7 @@ func extractVariation(ctx context.Context, key string, userCtx ldcontext.Context
 	if err != nil {
 		return AiConfig{}, VariationMeta{}, ldvalue.Null(), errorf("invalid AI config for %q: %w", key, err)
 	}
-	return withSkillTools(key, cfg), *meta, value, nil
+	return cfg, *meta, value, nil
 }
 
 func selectHandler(cfg AiConfig, meta VariationMeta, handlers []*ProviderHandler) (*ProviderHandler, error) {
@@ -154,6 +154,9 @@ func (c *AIConfig) resolve(ctx context.Context, userCtx ldcontext.Context) (reso
 	cfg, meta, value, err := extractVariation(ctx, c.args.Key, userCtx, c.opts.Variation, c.opts.ExistingClient)
 	if err != nil {
 		return resolved{}, err
+	}
+	if !c.opts.NoSkillTools {
+		cfg = withSkillTools(c.args.Key, cfg)
 	}
 	h, err := selectHandler(cfg, meta, handlers)
 	if err != nil {

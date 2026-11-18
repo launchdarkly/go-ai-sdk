@@ -244,3 +244,40 @@ func TestGraphNodesGetTheirSkillTools(t *testing.T) {
 		t.Errorf("root tools = %v", got)
 	}
 }
+
+// A tool key from the wire is quoted in a warning only when it is log-safe.
+func TestConflictWarningDoesNotQuoteAnUnsafeToolKey(t *testing.T) {
+	logs := captureLogs(t)
+	evil := "x\nlevel=ERROR forged"
+	withSkillToolsFake(t, map[skillPin][]Tool{s1: {skillTool(evil, "a")}, s2: {skillTool(evil, "b")}})
+	_ = withSkillTools("cfg", parsedWithSkills(t, nil, s1, s2))
+	if out := logs.String(); strings.Count(out, "level=WARN") != 1 || strings.Contains(out, "forged") {
+		t.Fatalf("want one warning without the key, got %q", out)
+	}
+}
+
+// Judges are never offered tools, so a judge's skills are not read.
+func TestJudgesDoNotMergeSkillTools(t *testing.T) {
+	asked := withSkillToolsFake(t, map[skillPin][]Tool{s1: {skillTool("t", "")}})
+	judge := enabledConfig("P", "judge", nil)
+	judge["skills"] = skillRefs(s1)
+	withFake(t, map[string]any{"j": judge})
+	cfg, _, _, ok := resolveJudge(context.Background(), "j", userCtx)
+	if !ok || len(cfg.Tools) != 0 || len(*asked) != 0 {
+		t.Fatalf("judge tools = %v, skills read = %v", cfg.Tools, *asked)
+	}
+}
+
+// The merge runs once per resolution: a graph node's skills are read once.
+func TestGraphNodeSkillsAreReadOnce(t *testing.T) {
+	asked := withSkillToolsFake(t, map[skillPin][]Tool{s1: {skillTool("t", "")}})
+	root := nodeCfg("r")
+	root["skills"] = skillRefs(s1)
+	withFake(t, map[string]any{"g": map[string]any{"root": "root", "edges": map[string]any{}}, "root": root})
+	if _, err := ResolveGraph(bg, "g", userCtx, GraphOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(*asked) != 1 {
+		t.Fatalf("skills read %d times", len(*asked))
+	}
+}

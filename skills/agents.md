@@ -85,7 +85,10 @@ copies `tools` verbatim (`envelopeFields`); dropping bad entries is the decoder'
 typed `description` or `customParameters` is dropped from the tool with a warning; a missing
 `description` and `""` are indistinguishable in `aiserver.Tool`. A variation tool with the same key
 as a skill tool always warns, identical or not (the server forbids the overlap). `now` in
-`writeskills.go` is the manifest clock seam for tests.
+`writeskills.go` is the manifest clock seam for tests. Warnings name a tool by position and quote
+its name only when it matches `[A-Za-z0-9._-]{1,256}` (`toolLabel`). An unreadable-skill warning
+before the store initializes (`storeIsInitialized`) does not use up its once-per-process slot.
+`GraphNode.Config` includes skill tools (Go's choice; TypeScript does the same, Python does not).
 
 **Common pitfalls.**
 

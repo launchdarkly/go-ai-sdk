@@ -72,11 +72,19 @@ key, like any tool. An exact duplicate across skills is offered once. If a skill
 tool on the variation, the variation's definition is offered, with a warning even when the two are
 identical, because the server rejects any key a variation shares with an attached skill; if two
 skills define one key differently, the first skill's is. Each of those logs a warning once per process. A skill that cannot
-be read adds no tools and the run goes on. With no store, nothing is added and nothing is logged.
-These reads report no usage event. `aiserver.InspectConfig` still returns only the variation's own tools.
+be read adds no tools and the run goes on, with one warning per process per skill version; a miss
+while the store reports it has not initialized yet warns without using that up. With no store, nothing
+is added and nothing is logged. These reads report no usage event.
+
+The merge runs once per resolution. The node configs of `aiserver.ResolveGraph` (`GraphNode.Config`)
+include their skills' tools, so native graph adapters use them as they are and do not read the
+skills again. `aiserver.InspectConfig` returns only the variation's own tools, and judges, shadow
+runs and evaluations never get skill tools.
 
 A malformed entry (not an object, no string `name`, `type` not `"function"`, no object `parameters`,
-or a repeated `name`) is dropped with one warning per process naming the skill and the tool. A
+or a repeated `name`) is dropped with one warning per process naming the skill and the tool. A tool
+is named by its position (`tools[1]`), and its `name` is quoted too only when it matches
+`[A-Za-z0-9._-]{1,256}`, so a name from the wire cannot inject into a log line. A
 `tools` that is not an array drops every tool. The skill is still returned and no integrity signal
 is recorded.
 

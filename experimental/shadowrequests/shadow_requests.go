@@ -439,6 +439,7 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 		ExistingClient: true,
 		NoUsage:        true,
 		NoFlagEvent:    true,
+		NoSkillTools:   true, // a shadow gets no tools, including its skills' tools
 	}).(*aiserver.AIConfig)
 	vars, _ := deepCopy(map[string]any(task.Variables)).(map[string]any)
 	resp, err := run.Invoke(ctx, task.UserInput, task.UserContext,
