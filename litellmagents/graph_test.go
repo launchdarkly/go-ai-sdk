@@ -148,6 +148,7 @@ func TestToLiteLLMAgentsParameters(t *testing.T) {
 		"triage":  node("Route", "Anthropic", "anthropic/claude-triage", map[string]any{"temperature": 0.1, "store": true, "max_turns": 2.0, "metadata": map[string]any{"a": 1.0}}),
 		"billing": node("Bill", "Gemini", "gemini/billing", map[string]any{"top_p": 0.7, "api_base": "http://evil", "max_turns": 50.0}),
 	})
+	ld.variations["g"] = graphFlag("triage", map[string][]any{"triage": {map[string]any{"key": "billing"}}, "billing": {map[string]any{"key": "billing"}}})
 	installClient(t, ld)
 	f, c := fakeClient(t, toolResp(call{"transfer_to_billing", "{}"}), toolResp(call{"transfer_to_billing", "{}"}), textResp("x", 1, 1))
 	_, err := adapter(t, resolve(t, "g"), &NativeGraphOptions{Handler: Options{Client: c}}).Invoke(bg, "q")
@@ -330,7 +331,7 @@ func TestLiteLLMGraph(t *testing.T) {
 		"solo": node("Solo", "Mistral", "mistral/solo", nil, "lookup"),
 	}}
 	installClient(t, ld)
-	f, url := proxy(t, toolResp(call{"lookup", "{}"}), textResp("fine", 1, 1))
+	f, url := proxy(t, sseToolCall("lookup", "{}"), sse([]string{"fine"}, 1, 1))
 	bogusCalled := false
 	bogus := &aiserver.ProviderHandler{ProvidesFor: aiserver.ProvidesFor{Provider: "Mistral", Mode: aiserver.ModeAgent},
 		Invoke: func(context.Context, aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
