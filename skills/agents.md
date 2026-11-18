@@ -81,7 +81,11 @@ keys and hashes are shape-checked and redacted before reaching any signal or rec
 **Skill tools.** `verifyRawSkill` decodes `tools` after verification; `contentHash` does not cover
 them (known v1 limit, transport-protected). `skillTools` reads through `resolveFromStore`, so a run
 reports no `client.getSkill*` usage, and returns nil silently when no store is set. The FDv2 reader
-copies `tools` verbatim (`envelopeFields`); dropping bad entries is the decoder's job.
+copies `tools` verbatim (`envelopeFields`); dropping bad entries is the decoder's job. A wrongly
+typed `description` or `customParameters` is dropped from the tool with a warning; a missing
+`description` and `""` are indistinguishable in `aiserver.Tool`. A variation tool with the same key
+as a skill tool always warns, identical or not (the server forbids the overlap). `now` in
+`writeskills.go` is the manifest clock seam for tests.
 
 **Common pitfalls.**
 

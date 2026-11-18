@@ -81,3 +81,22 @@ func TestSkillToolsReachTheProviderAndDispatch(t *testing.T) {
 		}
 	}
 }
+
+// §1.3 on a messages handler: a NativeTool under a skill tool's key is not
+// sent to the model.
+func TestNativeToolUnderASkillToolKeyIsNotSentByAMessagesHandler(t *testing.T) {
+	f, client := fakeClient(t, textResp("ok", 1, 1))
+	v := maps.Clone(variation)
+	v["skills"] = []any{map[string]any{"key": "search", "version": 1}}
+	installClient(t, &fakeLD{variation: v}, tracetest.NewInMemoryExporter())
+	skills.SetSkillStore(skills.NewInMemorySkillStore(map[string]any{"s": skillEnvelope("search", 1, skillToolDef("web"))}))
+	h := must(newHandler(Options{Client: client}))
+	inst := aiserver.Config(aiserver.ConfigArgs{Key: "cfg", Handlers: []*aiserver.ProviderHandler{h},
+		ToolHandlers: map[string]aiserver.ToolHandler{"web": &aiserver.NativeTool{ToolName: "web_search"}}})
+	if _, err := inst.Invoke(bg, "hi", ldcontext.New("u-1")); err != nil {
+		t.Fatal(err)
+	}
+	if tools, _ := f.requests[0]["tools"].([]any); len(tools) != 0 {
+		t.Fatalf("tools = %v", tools)
+	}
+}

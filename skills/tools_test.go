@@ -353,3 +353,30 @@ func TestASkillThatCannotBeReadAddsNoTools(t *testing.T) {
 		})
 	}
 }
+
+// Go's Tool has plain string and map fields, so a missing description and ""
+// are both "", and a wrongly typed optional field is dropped with a warning
+// while the tool is kept.
+func TestWronglyTypedOptionalToolFieldsAreDroppedWithAWarning(t *testing.T) {
+	rec, logs := setup(t)
+	badDesc := toolEntry("bad-desc")
+	badDesc["description"] = 7.0
+	badCustom := toolEntry("bad-custom")
+	badCustom["customParameters"] = []any{"x"}
+	nulls := toolEntry("nulls")
+	nulls["description"], nulls["customParameters"] = nil, nil
+	storeOf(rawSkillWithTools("pdf", 1, "x", []any{badDesc, badCustom, nulls}))
+	for range 2 {
+		s, _ := GetSkill("pdf", 1)
+		tools := s.Tools()
+		if !slices.Equal(toolNames(tools), []string{"bad-desc", "bad-custom", "nulls"}) ||
+			tools[0].Description != "" || tools[1].CustomParameters != nil || tools[2].Description != "" || tools[2].CustomParameters != nil {
+			t.Fatalf("tools = %+v", tools)
+		}
+	}
+	w := warnings(logs)
+	if len(w) != 2 || !strings.Contains(w[0].msg, "tool 'bad-desc'") || !strings.Contains(w[1].msg, "tool 'bad-custom'") {
+		t.Fatalf("want one warning per bad field, once per process, got %v", logs.all())
+	}
+	noIntegritySignal(t, rec, logs)
+}

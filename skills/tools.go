@@ -70,9 +70,18 @@ func decodeSkillTools(key string, version int, v any, present bool) []aiserver.T
 		}
 		seen[name] = true
 		t := aiserver.Tool{Name: name, Type: "function", Parameters: deepCloneMap(params)}
-		t.Description, _ = obj["description"].(string)
-		if cp, ok := obj["customParameters"].(map[string]any); ok {
-			t.CustomParameters = deepCloneMap(cp)
+		// A wrongly typed optional field is dropped, keeping the tool.
+		if d, present := obj["description"]; present && d != nil {
+			if t.Description, ok = d.(string); !ok {
+				warnOnce(toolWarning{key, version, name, warnBadDescription}, fmt.Sprintf("skill '%s' version %d: tool '%s' has a description that is not a string; it is offered without one", safeKey(key), version, name))
+			}
+		}
+		if cp, present := obj["customParameters"]; present && cp != nil {
+			m, isMap := cp.(map[string]any)
+			if !isMap {
+				warnOnce(toolWarning{key, version, name, warnBadCustomParameters}, fmt.Sprintf("skill '%s' version %d: tool '%s' has customParameters that is not an object; it is offered without them", safeKey(key), version, name))
+			}
+			t.CustomParameters = deepCloneMap(m)
 		}
 		out = append(out, t)
 	}
@@ -97,6 +106,8 @@ const (
 	warnUnreadable = iota
 	warnNotArray
 	warnDropped
+	warnBadDescription
+	warnBadCustomParameters
 )
 
 func warnOnce(id toolWarning, msg string, attrs ...any) {
@@ -108,7 +119,7 @@ func warnOnce(id toolWarning, msg string, attrs ...any) {
 		return
 	}
 	attrs = append([]any{"skill_key", safeKey(id.key), "skill_version", id.version}, attrs...)
-	if id.kind == warnDropped {
+	if id.kind >= warnDropped {
 		attrs = append(attrs, "tool", id.tool)
 	}
 	currentLogger().Warn(msg, attrs...)

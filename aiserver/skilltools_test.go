@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -128,6 +129,21 @@ func TestVariationAndSkillShareAToolKeyVariationWins(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("warning does not name %s: %q", want, out)
 		}
+	}
+}
+
+// AIC-3975 rejects any key a variation shares with an attached skill, so an
+// identical definition warns too.
+func TestVariationAndSkillWithAnIdenticalToolStillWarn(t *testing.T) {
+	logs := captureLogs(t)
+	same := Tool{Name: "own", Type: "function", Parameters: map[string]any{}}
+	withSkillToolsFake(t, map[skillPin][]Tool{s1: {same}})
+	cfg := withSkillTools("cfg", parsedWithSkills(t, ownTools("own"), s1))
+	if !reflect.DeepEqual(cfg.Tools["own"], same) || len(cfg.Tools) != 1 {
+		t.Fatalf("tools = %+v", cfg.Tools)
+	}
+	if strings.Count(logs.String(), "level=WARN") != 1 {
+		t.Fatalf("want one warning, got %q", logs)
 	}
 }
 

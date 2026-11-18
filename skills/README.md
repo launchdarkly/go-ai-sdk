@@ -69,8 +69,9 @@ When this package is linked in and a store is set, every `aiserver.Config` run a
 tools of the skills its variation attaches to the `Config.Tools` the handler receives, after reading
 each skill at its pinned version. A skill tool is offered only when `ToolHandlers` has a handler for its
 key, like any tool. An exact duplicate across skills is offered once. If a skill tool has the key of a
-tool on the variation, the variation's definition is offered; if two skills define one key
-differently, the first skill's is. Each of those logs a warning once per process. A skill that cannot
+tool on the variation, the variation's definition is offered, with a warning even when the two are
+identical, because the server rejects any key a variation shares with an attached skill; if two
+skills define one key differently, the first skill's is. Each of those logs a warning once per process. A skill that cannot
 be read adds no tools and the run goes on. With no store, nothing is added and nothing is logged.
 These reads report no usage event. `aiserver.InspectConfig` still returns only the variation's own tools.
 
@@ -78,6 +79,11 @@ A malformed entry (not an object, no string `name`, `type` not `"function"`, no 
 or a repeated `name`) is dropped with one warning per process naming the skill and the tool. A
 `tools` that is not an array drops every tool. The skill is still returned and no integrity signal
 is recorded.
+
+Go limits: `aiserver.Tool` has plain fields, so a missing `description` and `""` both read as `""`,
+and a missing `customParameters` is nil. A `description` that is not a string, or a
+`customParameters` that is not an object, is dropped from the tool (the tool is kept) with one
+warning per process.
 
 Tools stay in memory: `WriteSkills` never writes them to disk or to the manifest.
 

@@ -5,15 +5,18 @@ package skills
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"testing"
+	"time"
 )
 
 // §3.21a "Tools stay in memory only" and §3.22: WriteSkills writes only
 // SKILL.md, and the manifest is the same as for the skill without tools.
 func TestWriteSkillsWritesNoTool(t *testing.T) {
 	_, _ = setup(t)
+	fixed := time.Date(2026, 11, 18, 12, 0, 0, 0, time.UTC)
+	now = func() time.Time { return fixed }
+	t.Cleanup(func() { now = time.Now })
 	withTools, without := t.TempDir(), t.TempDir()
 	storeOf(rawSkillWithTools("pdf", 1, "# PDF", []any{toolEntry("get-weather")}))
 	mustWrite(t, []SkillInput{SkillKey("pdf")}, withTools, nil)
@@ -27,13 +30,8 @@ func TestWriteSkillsWritesNoTool(t *testing.T) {
 	if readFile(t, filepath.Join(withTools, "pdf", SkillFilename)) != "# PDF" {
 		t.Fatal("SKILL.md is not the content verbatim")
 	}
-	// No clock seam: writtenAt (second resolution) is the one field two writes
-	// may differ in, so it is normalized and every other byte must match.
-	writtenAt := regexp.MustCompile(`"writtenAt": "[^"]*"`)
-	read := func(root string) string {
-		return writtenAt.ReplaceAllString(readFile(t, filepath.Join(root, ManifestFilename)), `"writtenAt": "T"`)
-	}
-	if a, b := read(withTools), read(without); a != b {
+	a, b := readFile(t, filepath.Join(withTools, ManifestFilename)), readFile(t, filepath.Join(without, ManifestFilename))
+	if a != b {
 		t.Fatalf("manifest with tools:\n%s\ndiffers from without:\n%s", a, b)
 	}
 }
