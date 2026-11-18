@@ -691,6 +691,28 @@ func TestStream(t *testing.T) {
 		}
 	})
 
+	t.Run("a failure in the middle of the stream closes the body, returns the error and ends the root with ERROR", func(t *testing.T) {
+		mid := chunk(`{"content":"a"}`, "") + `data: {"error":{"message":"upstream broke","type":"server_error"}}` + "\n\n"
+		h, f, exp := setup(t, "HANG:"+mid)
+		evs, err := collect(t, h, aiserver.HandlerRequest{Config: cfg(nil)})
+		if err == nil {
+			t.Fatalf("want an error, got events %+v", evs)
+		}
+		for _, ev := range evs {
+			if ev.Type == aiserver.EventDone {
+				t.Errorf("a failed stream must not end with done: %+v", evs)
+			}
+		}
+		select {
+		case <-f.closed:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the response body was not closed after the failure")
+		}
+		if s := spansByName(exp)[SpanName]; len(s) != 1 || s[0].Status().Code != codes.Error || s[0].EndTime().IsZero() {
+			t.Errorf("root = %v, want one ended ERROR root span", s)
+		}
+	})
+
 	t.Run("cancellation closes the response body and ends every span", func(t *testing.T) {
 		h, f, exp := setup(t, "HANG:"+chunk(`{"content":"a"}`, ""))
 		ctx, cancel := context.WithCancel(bg)

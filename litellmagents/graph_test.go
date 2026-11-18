@@ -207,6 +207,22 @@ func TestToLiteLLMAgentsHistoryAndNativeTool(t *testing.T) {
 	}
 }
 
+// An empty, non-nil history is the same as no history.
+func TestToLiteLLMAgentsEmptyHistory(t *testing.T) {
+	installClient(t, twoNode(nil))
+	requests := func(opts ...aiserver.CallOption) []msg {
+		f, c := fakeClient(t, textResp("ok", 1, 1))
+		if _, err := adapter(t, resolve(t, "g"), &NativeGraphOptions{Handler: Options{Client: c}}).Invoke(bg, "hello", opts...); err != nil {
+			t.Fatal(err)
+		}
+		return messages(f.request(0))
+	}
+	none, empty := requests(), requests(aiserver.WithHistory([]aiserver.Message{}))
+	if len(none) != 2 || !slices.Equal(none, empty) {
+		t.Errorf("no history = %+v, empty history = %+v, want the same system + user pair", none, empty)
+	}
+}
+
 // A missing proxy, a failing ClientFactory and a run error share one error
 // path: the graph span records the error and ends, and invocation_failure
 // is tracked on the graph key. Definition errors come from Invoke too.
