@@ -125,15 +125,15 @@ func (c *apiClient) post(ctx context.Context, path string, body any, idempotent 
 	return c.request(ctx, http.MethodPost, path, nil, body, idempotent)
 }
 
-// patch sends a PATCH. The offline-evaluation reconcile calls it with
-// idempotent false: a timed-out success that replays can overwrite a newer
-// snapshot from another writer.
+// patch sends a PATCH. The offline-evaluation reconcile marks it idempotent:
+// the server applies only what changed, so replaying the same snapshot is a
+// no-op; a changed snapshot overwrites by design.
 func (c *apiClient) patch(ctx context.Context, path string, body any, idempotent bool) (any, error) {
 	return c.request(ctx, http.MethodPatch, path, nil, body, idempotent)
 }
 
 // request sends one call, retrying only where a replay cannot duplicate
-// work: 429 always, 5xx and transport failures only for GET/HEAD and POSTs
+// work: 429 always, 5xx and transport failures only for GET/HEAD and writes
 // the caller marks idempotent.
 func (c *apiClient) request(ctx context.Context, method, path string, params []param, body any, idempotent bool) (any, error) {
 	var payload []byte
