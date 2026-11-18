@@ -319,8 +319,12 @@ func TestSkillsDirRemoved(t *testing.T) {
 		resp string
 		run  func(h *aiserver.ProviderHandler, req aiserver.HandlerRequest) error
 	}{
-		{"api error", "STATUS400", func(h *aiserver.ProviderHandler, req aiserver.HandlerRequest) error { return run(h, "invoke", req) }},
-		{"stream api error", "STATUS400", func(h *aiserver.ProviderHandler, req aiserver.HandlerRequest) error { return run(h, "stream", req) }},
+		{"api error", "STATUS400", func(h *aiserver.ProviderHandler, req aiserver.HandlerRequest) error {
+			return apiError(run(h, "invoke", req))
+		}},
+		{"stream api error", "STATUS400", func(h *aiserver.ProviderHandler, req aiserver.HandlerRequest) error {
+			return apiError(run(h, "stream", req))
+		}},
 		{"stream break", sse([]string{"a", "b", "c"}, "", 1, 1), func(h *aiserver.ProviderHandler, req aiserver.HandlerRequest) error {
 			for range h.Stream(bg, req) {
 				break
@@ -373,6 +377,28 @@ func maxTurns(err error) error {
 		return nil
 	}
 	return fmt.Errorf("err = %v, want ErrMaxSteps", err)
+}
+
+// apiError is nil when err is the run's own API error, so a case can report
+// any other outcome.
+func apiError(err error) error {
+	if apiErr := (*anthropic.Error)(nil); errors.As(err, &apiErr) {
+		return nil
+	}
+	return fmt.Errorf("err = %v, want the run's own API error", err)
+}
+
+// sseTool streams one tool_use block calling name with input, stopping for tools.
+func sseTool(name, input string) string {
+	var b strings.Builder
+	ev := func(n, data string) { fmt.Fprintf(&b, "event: %s\ndata: %s\n\n", n, data) }
+	ev("message_start", `{"type":"message_start","message":{"id":"m","type":"message","role":"assistant","model":"test-model","content":[],"stop_reason":null,"usage":{"input_tokens":1,"output_tokens":0}}}`)
+	ev("content_block_start", fmt.Sprintf(`{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tu_%s","name":%q,"input":{}}}`, name, name))
+	ev("content_block_delta", fmt.Sprintf(`{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":%q}}`, input))
+	ev("content_block_stop", `{"type":"content_block_stop","index":0}`)
+	ev("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":1}}`)
+	ev("message_stop", `{"type":"message_stop"}`)
+	return b.String()
 }
 
 // syncBuffer is a bytes.Buffer safe for a logger shared across goroutines.
@@ -516,7 +542,7 @@ func (notReadyStore) IsInitialized() (bool, error) { return false, nil }
 // A reconcile that is not ok fails the invoke before any model request,
 // names each failed skill, and leaves no directory.
 func TestSkillsFailClosed(t *testing.T) {
-	tampered := storedSkill("w", 1, "withheld")
+	tampered := storedSkill("w", 1, "tampered body")
 	tampered["contentHash"] = strings.Repeat("0", 64)
 	cases := []struct {
 		name    string
@@ -534,7 +560,7 @@ func TestSkillsFailClosed(t *testing.T) {
 			if err := s.Put(tampered); err != nil {
 				t.Fatal(err)
 			}
-		}, []ref{{"a", 1}, {"w", 1}}, []string{"w"}, []string{"a v1", "withheld"}},
+		}, []ref{{"a", 1}, {"w", 1}}, []string{"w"}, []string{"a v1", "tampered body"}},
 		{"missing pin", func(t *testing.T) { skillStore(t) }, []ref{{"b", 1}, {"a", 5}}, []string{"a"}, []string{"b v1"}},
 	}
 	for _, path := range paths {
@@ -645,6 +671,9 @@ func TestSkillToolCall(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			skillTurn := toolResp("Skill", `{"skill":"launchdarkly:a"}`)
 			lookupTurn := toolResp("lookup", `{}`)
+			if path == "stream" { // a streaming request needs streamed tool turns
+				skillTurn, lookupTurn = sseTool("Skill", `{"skill":"launchdarkly:a"}`), sseTool("lookup", `{}`)
+			}
 			e := setup(t, map[string]any{"cfg": agentVariation("inst", map[string]any{
 				"skills": refsValue([]ref{{"a", 2}}),
 				"tools":  map[string]any{"lookup": map[string]any{"name": "lookup", "type": "function", "parameters": map[string]any{}}},
