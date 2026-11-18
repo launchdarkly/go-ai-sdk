@@ -208,6 +208,25 @@ func TestToLiteLLMAgentsHistoryAndNativeTool(t *testing.T) {
 	}
 }
 
+// Invoke history reaches the root request once, and the handoff target's
+// request holds it once too: the run's conversation, not a second copy.
+func TestToLiteLLMAgentsHistoryOnceAcrossHandoff(t *testing.T) {
+	installClient(t, twoNode(nil))
+	f, c := fakeClient(t, toolResp(call{"transfer_to_billing", "{}"}), textResp("ok", 1, 1))
+	history := []aiserver.Message{{Role: "user", Text: "earlier question"}, {Role: "assistant", Text: "earlier answer"}}
+	if _, err := adapter(t, resolve(t, "g"), &NativeGraphOptions{Handler: Options{Client: c}}).Invoke(bg, "now", aiserver.WithHistory(history)); err != nil {
+		t.Fatal(err)
+	}
+	for i, who := range []string{"root", "handoff target"} {
+		m := messages(f.request(i))
+		for _, h := range []msg{{role: "user", content: "earlier question"}, {role: "assistant", content: "earlier answer"}} {
+			if n := slices.Index(m, h); n < 0 || slices.Index(m[n+1:], h) >= 0 {
+				t.Errorf("%s messages = %+v, want %+v exactly once", who, m, h)
+			}
+		}
+	}
+}
+
 // An empty, non-nil history is the same as no history.
 func TestToLiteLLMAgentsEmptyHistory(t *testing.T) {
 	installClient(t, twoNode(nil))
