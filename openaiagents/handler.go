@@ -19,9 +19,9 @@ import (
 	"github.com/openai/openai-go/v3/option"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/agentloop"
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
-	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
@@ -125,7 +125,7 @@ type handler struct {
 
 // run builds the single agent for req and runs it; onText is nil when
 // blocking. abandoned reports that the stream consumer stopped iterating.
-func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText func(string) bool) (res runResult, abandoned bool, err error) {
+func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText func(string) bool) (res agentloop.Result, abandoned bool, err error) {
 	cfg := req.Config
 	// Agent mode: instructions win over config system messages;
 	// history and userInput become structured input items.
@@ -139,8 +139,9 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 	if onText == nil { // streaming ignores outputFormat
 		a.outputType = buildOutputType(cfg.OutputFormat)
 	}
-	r := &runner{client: h.client, maxTurns: maxTurns(cfg.Model.Parameters, h.maxTurns), span: span, onText: onText}
-	res, stopped, err := r.run(span.Context(), a, openaiwire.Turns(p.Turns))
+	r := newRunner(h.client, agentloop.MaxTurns(cfg.Model.Parameters, h.maxTurns))
+	r.Span, r.OnText = span, onText
+	res, stopped, err := r.Run(span.Context(), a, p.Turns)
 	switch {
 	case stopped:
 		span.Abandon()
@@ -149,7 +150,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 		span.Fail(err)
 		return res, false, err
 	}
-	span.Finish(res.model, aiserver.ToolResultString(res.output))
+	span.Finish(res.Model, aiserver.ToolResultString(res.Output))
 	return res, false, nil
 }
 
@@ -158,7 +159,7 @@ func (h *handler) invoke(ctx context.Context, req aiserver.HandlerRequest) (aise
 	if err != nil {
 		return aiserver.HandlerResult{}, err
 	}
-	return aiserver.HandlerResult{Output: res.output, Usage: res.usage.Raw()}, nil
+	return aiserver.HandlerResult{Output: res.Output, Usage: res.Tokens.Raw()}, nil
 }
 
 func (h *handler) stream(ctx context.Context, req aiserver.HandlerRequest) iter.Seq2[aiserver.HandlerStreamEvent, error] {
@@ -173,6 +174,6 @@ func (h *handler) stream(ctx context.Context, req aiserver.HandlerRequest) iter.
 			yield(aiserver.HandlerStreamEvent{}, err)
 			return
 		}
-		yield(aiserver.HandlerStreamEvent{Type: aiserver.EventDone, Output: &res.text, Usage: res.usage.Raw()}, nil)
+		yield(aiserver.HandlerStreamEvent{Type: aiserver.EventDone, Output: &res.Text, Usage: res.Tokens.Raw()}, nil)
 	}
 }

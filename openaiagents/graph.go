@@ -10,15 +10,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/responses"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/agentloop"
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
-	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
 )
 
@@ -155,7 +154,7 @@ func (g *NativeGraph) Invoke(ctx context.Context, input string, opts ...aiserver
 		n.graphEvent("$ld:ai:graph:invocation_failure", nil, 1)
 		return aiserver.GraphResponse{}, err
 	}
-	usage := aiserver.TokenUsage{Input: float64(res.usage.Input), Output: float64(res.usage.Output)}
+	usage := aiserver.TokenUsage{Input: float64(res.Tokens.Input), Output: float64(res.Tokens.Output)}
 	usage.Total = usage.Input + usage.Output
 	span.SetAttributes(attribute.String("launchdarkly.graph.path", strings.Join(n.path, "->")))
 	kitbase.SetUsageSpanAttributes(span, kitbase.SpanUsage{Input: usage.Input, Output: usage.Output})
@@ -164,7 +163,7 @@ func (g *NativeGraph) Invoke(ctx context.Context, input string, opts ...aiserver
 	}
 	n.graphEvent("$ld:ai:graph:invocation_success", nil, 1)
 	span.SetStatus(codes.Ok, "")
-	return aiserver.GraphResponse{Response: aiserver.ToolResultString(res.output), Usage: usage}, nil
+	return aiserver.GraphResponse{Response: aiserver.ToolResultString(res.Output), Usage: usage}, nil
 }
 
 // nativeRun is one Invoke's tracking state. Each stretch of the run one agent
@@ -178,7 +177,7 @@ type nativeRun struct {
 	tracking  bool // a run without a context tracks no events
 	graphTD   aiserver.TrackData
 	runID     string
-	runner    *runner
+	runner    *agentloop.Runner
 	rootTurns []aiserver.Message // the root's input, for its span's prompt content
 
 	path []string
@@ -208,18 +207,18 @@ func (n *nativeRun) nodeEvent(event string, td aiserver.TrackData, metric float6
 	}
 }
 
-func (n *nativeRun) hooks() hooks {
-	return hooks{
-		agentStart: n.agentStart,
-		agentEnd:   func(a *agent, output any) { n.endSegment(nil, aiserver.ToolResultString(output)) },
-		handoff: func(from, _ *agent) {
+func (n *nativeRun) hooks() agentloop.Hooks {
+	return agentloop.Hooks{
+		AgentStart: func(a agentloop.Agent) { n.agentStart(a.(*agent)) },
+		AgentEnd:   func(_ agentloop.Agent, output any) { n.endSegment(nil, aiserver.ToolResultString(output)) },
+		Handoff: func(from, _ agentloop.Agent) {
 			n.endSegment(nil, n.seg.text)
-			n.from = from
+			n.from = from.(*agent)
 		},
-		turnEnd: func(a *agent, resp *responses.Response) {
-			n.seg.usage.Add(openaiwire.Usage(resp.Usage))
-			n.seg.model = openaiwire.ResponseModel(resp, a.model)
-			n.seg.text = resp.OutputText()
+		TurnEnd: func(_ agentloop.Agent, t agentloop.Turn) {
+			n.seg.usage.Add(t.Usage)
+			n.seg.model = t.Model
+			n.seg.text = t.Text
 		},
 	}
 }
@@ -238,7 +237,7 @@ func (n *nativeRun) agentStart(a *agent) {
 	span := handlerkit.StartHandlerRun(n.ctx, kitbase.HandlerSpanOptions{
 		Tracer: PackageName, System: "openai", Operation: operation, RequestModel: a.model, NoRoot: true,
 	}, aiserver.HandlerRequest{}, p) // a node's spans nest under the graph span; its $ld:ai:graph:node event names it
-	n.runner.span = span
+	n.runner.Span = span
 	n.seg = &segment{a: a, from: n.from, span: span, start: time.Now()}
 }
 
@@ -274,18 +273,18 @@ func (n *nativeRun) endSegment(err error, output string) {
 
 // run builds the agents and runs the root; one run spans every handoff, so
 // the turn cap is the root node's (as in the JavaScript and Python adapters).
-func (g *NativeGraph) run(ctx context.Context, variables map[string]any, n *nativeRun, input string, history []aiserver.Message) (runResult, error) {
+func (g *NativeGraph) run(ctx context.Context, variables map[string]any, n *nativeRun, input string, history []aiserver.Message) (agentloop.Result, error) {
 	agents, err := g.buildAgents(ctx, variables, n.runID, n.tracking)
 	if err != nil {
-		return runResult{}, err
+		return agentloop.Result{}, err
 	}
 	root := g.def.Root
 	// History seeds the root only; handoff targets see the conversation
 	// through previous_response_id, never the original history array.
 	turns := handlerkit.ComposePrompt(aiserver.HandlerRequest{UserInput: input, History: history}, aiserver.ModeAgent).Turns
 	n.rootTurns = turns
-	r := &runner{client: g.client, maxTurns: maxTurns(root.Config.Model.Parameters, g.opts.Handler.MaxTurns)}
-	n.runner, r.hooks = r, n.hooks()
-	res, _, err := r.run(ctx, agents[root.Key], openaiwire.Turns(turns))
+	r := newRunner(g.client, agentloop.MaxTurns(root.Config.Model.Parameters, g.opts.Handler.MaxTurns))
+	n.runner, r.Hooks = r, n.hooks()
+	res, _, err := r.Run(ctx, agents[root.Key], turns)
 	return res, err
 }
