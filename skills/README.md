@@ -52,7 +52,9 @@ No client, an evaluation error, the default, or a malformed `skills` list is a f
 reconcile reports a run-level `error` and changes nothing on disk. A disabled variation answers no
 skills, so they leave disk. The watcher follows changes to the config key through the LaunchDarkly
 client's flag-change signal; with no client, an offline client, or a client without
-`GetFlagTracker`, `WatchSkillsFrom` returns `ErrStoreNotWatchable`.
+`GetFlagTracker`, `WatchSkillsFrom` returns `ErrStoreNotWatchable`. Under daemon mode
+(`ldcomponents.ExternalUpdatesOnly()`) the client's flag-change signal never fires, and no check
+can detect that, so the watcher follows skill-store changes and `Notify` only.
 
 For a one-shot write at boot, `skills.WriteSkillsFrom(ctx, src, root, nil)` reads the source once.
 `SkillRefs(aiserver.InspectConfig(...).Config)` with `WriteSkills` is also safe at boot, but do
