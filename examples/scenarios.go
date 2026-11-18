@@ -251,7 +251,14 @@ func judge(ctx context.Context, key, input string) error {
 			ok = false
 			continue
 		}
-		if o.task.EvaluationMetricKey != "" {
+		// A multi-label (TypeSafe) judge returns one metric per label: track
+		// those, never evaluationMetricKey.
+		for _, m := range o.res.Metrics {
+			td := o.res.TrackData
+			td.JudgeConfigKey = m.JudgeConfigKey
+			aiserver.Track(m.EventKey, user, td, m.Score)
+		}
+		if o.res.Metrics == nil && o.task.EvaluationMetricKey != "" {
 			aiserver.Track(o.task.EvaluationMetricKey, user, o.res.TrackData, o.res.Score)
 		}
 		checks := map[string]bool{

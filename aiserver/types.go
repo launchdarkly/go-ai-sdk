@@ -117,7 +117,11 @@ type AiConfig struct {
 	JudgeConfiguration  *JudgeConfiguration `json:"judgeConfiguration,omitempty"`
 	EvaluationMetricKey string              `json:"evaluationMetricKey,omitempty"`
 	OutputFormat        map[string]any      `json:"outputFormat,omitempty"`
-	Raw                 map[string]any      `json:"-"`
+	// Classifiers are a TypeSafe judge's questions (key, eventKey, type,
+	// instructions, ...). A non-empty list makes a config valid without
+	// instructions or messages.
+	Classifiers []map[string]any `json:"classifiers,omitempty"`
+	Raw         map[string]any   `json:"-"`
 }
 
 // VariationMeta is the variation's `_ldMeta`.
@@ -253,6 +257,9 @@ type JudgeResult struct {
 	Score    float64    `json:"score"`
 	Response string     `json:"response"`
 	Usage    TokenUsage `json:"usage"`
+	// EventKey is the metric this score is tracked under. Set only when the
+	// judge produced one result per label (a TypeSafe judge).
+	EventKey string `json:"eventKey,omitempty"`
 }
 
 // ProviderResponse is the result of Config(...).Invoke.

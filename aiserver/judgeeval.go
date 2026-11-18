@@ -15,10 +15,11 @@ import (
 // finishes, so the score can be written onto it. Only handlers built
 // on kitHandlerRun participate; a custom handler's span ends normally.
 type judgeScope struct {
-	key     string
-	mu      sync.Mutex
-	span    trace.Span
-	endedAt time.Time
+	key      string
+	mu       sync.Mutex
+	span     trace.Span
+	endedAt  time.Time
+	mirrored bool // the span attributes already mirror an earlier result
 }
 
 type judgeScopeKey struct{}
@@ -40,23 +41,31 @@ func (s *judgeScope) hold(span trace.Span) bool {
 	return true
 }
 
-// record writes the evaluation event and mirrored attributes. explanation is
-// written only when non-empty (the caller applies the captureContent gate).
-func (s *judgeScope) record(score float64, explanation string) {
+// record writes one evaluation event named name ("" = the judge key). The
+// span attributes mirror the first recorded result only, so a multi-label
+// judge's span carries its first label. explanation is written only when
+// non-empty (the caller applies the captureContent gate).
+func (s *judgeScope) record(name string, score float64, explanation string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.span == nil {
 		return
 	}
+	if name == "" {
+		name = s.key
+	}
 	attrs := []attribute.KeyValue{
-		attribute.String("gen_ai.evaluation.name", s.key),
+		attribute.String("gen_ai.evaluation.name", name),
 		attribute.Float64("gen_ai.evaluation.score.value", score),
 	}
 	if explanation != "" {
 		attrs = append(attrs, attribute.String("gen_ai.evaluation.explanation", explanation))
 	}
 	s.span.AddEvent("gen_ai.evaluation.result", trace.WithAttributes(attrs...))
-	s.span.SetAttributes(attrs...)
+	if !s.mirrored {
+		s.span.SetAttributes(attrs...)
+		s.mirrored = true
+	}
 }
 
 // release ends a held span at the handler's own end time, so tracking and
@@ -74,7 +83,7 @@ func (s *judgeScope) release() {
 // one the judge's metric event carries: every SDK span the judge starts gets
 // its non-empty run id, config key and variation key, so a judge can be
 // joined to the run it graded.
-func withJudgeEvaluation(ctx context.Context, judgeKey string, target TrackData, fn func(ctx context.Context, record func(score float64, explanation string)) error) error {
+func withJudgeEvaluation(ctx context.Context, judgeKey string, target TrackData, fn func(ctx context.Context, record func(name string, score float64, explanation string)) error) error {
 	s := &judgeScope{key: judgeKey}
 	defer s.release()
 	ctx = telemetry.WithSpanAttributes(ctx, judgeTargetAttributes(target)...)

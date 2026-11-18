@@ -105,6 +105,51 @@ func reasonText(v any) string {
 	}
 }
 
+// TypesafeEntry is one label of a TypeSafe judge call.
+type TypesafeEntry struct {
+	Key      string
+	EventKey string
+	Score    float64
+	Reason   string
+}
+
+// TypesafeEntries reads a TypeSafe judge payload, `{"kind": "typesafe",
+// "results": [...]}` (a JSON string, possibly fenced, or a decoded object).
+// It returns nil, nil for any other payload, so the {score, reasoning}
+// parser runs, and an error when the payload is TypeSafe but malformed.
+func TypesafeEntries(raw any) ([]TypesafeEntry, error) {
+	if s, ok := raw.(string); ok {
+		raw, _ = ParseJSONWithPossibleFences(s)
+	}
+	obj, _ := raw.(map[string]any)
+	if obj["kind"] != "typesafe" {
+		return nil, nil
+	}
+	results, _ := obj["results"].([]any)
+	if len(results) == 0 {
+		return nil, errors.New("TypeSafe judge output is missing results")
+	}
+	entries := make([]TypesafeEntry, len(results))
+	for i, r := range results {
+		item, _ := r.(map[string]any)
+		key, _ := item["key"].(string)
+		if key == "" {
+			return nil, errors.New("TypeSafe judge result is missing a key")
+		}
+		score, ok := NumericScore(item["score"])
+		if !ok {
+			return nil, fmt.Errorf("TypeSafe judge result '%s' is missing a finite score", key)
+		}
+		eventKey, _ := item["eventKey"].(string)
+		if eventKey == "" {
+			return nil, fmt.Errorf("TypeSafe judge result '%s' is missing an eventKey", key)
+		}
+		reason, _ := item["reason"].(string)
+		entries[i] = TypesafeEntry{Key: key, EventKey: eventKey, Score: score, Reason: reason}
+	}
+	return entries, nil
+}
+
 // HasOutputFormat reports whether a judge config carries its own
 // outputFormat, either parsed or only in the raw variation.
 func HasOutputFormat(outputFormat, raw map[string]any) bool {
