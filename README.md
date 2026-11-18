@@ -23,7 +23,7 @@ Requires Go 1.26.
 | [`openaimessages`](openaimessages) | 1 | OpenAI Responses API handler — `{OpenAI, messages}` |
 | [`bedrockmessages`](bedrockmessages) | 1 | Amazon Bedrock Converse handler — `{Bedrock, messages}` |
 | [`langchainmessages`](langchainmessages) | 1 | LangChain-style handler for any provider — `{*, messages}` |
-| [`claudeagents`](claudeagents) | 1 | Anthropic agent handler, `ClaudeGraph`, `ToClaudeAgents` — `{Anthropic, agent}` |
+| [`claudeagents`](claudeagents) | 1 | Anthropic agent handler, skills handler (`NewSkillsHandler`), `ClaudeGraph`, `ToClaudeAgents` — `{Anthropic, agent}` |
 | [`openaiagents`](openaiagents) | 1 | OpenAI agent handler, `OpenAIGraph`, `ToOpenAIAgents` — `{OpenAI, agent}` |
 | [`bedrockagents`](bedrockagents) | 1 | Bedrock agent handler, `BedrockGraph` — `{Bedrock, agent}` |
 | [`langchainagents`](langchainagents) | 1 | LangChain-style agent handler, `LangChainGraph`, `ToLangGraph` — `{*, agent}` |

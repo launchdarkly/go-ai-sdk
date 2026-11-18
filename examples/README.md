@@ -30,6 +30,7 @@ LaunchDarkly), `OTEL_EXPORTER_OTLP_ENDPOINT`, `LD_SERVICE_NAME`,
 | `graph-streaming` | `Graph().Stream` built inside a conversation scope and iterated after it; text on stdout, `[node_start]` / `[node_done]` / `[handoff]` on stderr; no JSON file | `travel-agent-flow` |
 | `graph-history` | `Graph().Invoke` with a generated image in history, two shapes; fails unless both answers name the colour | `travel-agent-flow` |
 | `native-graph` | `ResolveGraph` + `claudeagents.ToClaudeAgents` | `travel-agent-flow` |
+| `claude-skills` | `claudeagents.NewSkillsHandler` with a `skills.LaunchDarklySkillStore`: the variation's skills are offered as the `Skill` tool (unix only) | an Anthropic agent config with skills attached |
 | `native-graph-langchain` | `ResolveGraph` + `langchainagents.ToLangGraph`: the graph runs as one state graph on the SDK's own runner; tracked for the example context | `travel-agent-flow` |
 
 Failure cases exit 1 with one `Error: …` line, e.g.
