@@ -147,3 +147,9 @@ var GraphUserContext any
 
 // TrackNativeTool is func(*aiserver.NativeTool).
 var TrackNativeTool any
+
+// SkillTools is func(key string, version int) []aiserver.Tool: the tools of
+// one attached skill, or nil when it cannot be resolved. Set by the skills
+// package at init, so it is nil unless skills is linked in; the core asserts
+// it at call time.
+var SkillTools any

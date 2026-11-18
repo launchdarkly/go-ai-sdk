@@ -22,6 +22,7 @@ handler packages they use.
 | `judgeeval.go` | Holds a judge's root span open to write `gen_ai.evaluation.result`; binds the graded run's `launchdarkly.judge.target.run.id` / `.config.key` / `.variation.key` (non-empty only) so `ConversationIDSpanProcessor` stamps them on every SDK span the judge starts |
 | `graph.go` | `ResolveGraph`, `GraphDefinition`, `Graph().Invoke/Stream`, handoff routing |
 | `telemetry.go` | Conversation-id processor, LD span attributes (`setLDSpanAttributesFromVars`, `kitSetLDSpanAttributesFor`) |
+| `skilltools.go` | `withSkillTools`: adds the tools of a variation's attached skills (read through `bridge.SkillTools`, set by `skills`) to the `Config.Tools` of every `Config` run and graph node. Variation wins a key conflict, first skill wins a skill conflict, each warned once per process; `InspectConfig` is unaffected |
 | `handlerkit.go` | The handler kit, unexported: `kitComposePrompt`, the span tree (`kitStartHandlerRun`, `kitHandlerRun`), `kitCallableTools` |
 | `kitexport.go` | Registers the handler kit in `internal/bridge` for `internal/handlerkit` |
 | `capture.go` | `Configure`, `SDKOptions`, `ContentCapture`, `ErrConfigureLocked`; binds a handler's capture setting per call |

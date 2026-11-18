@@ -57,7 +57,29 @@ case skills.ReasonOK:
 ```
 
 For local development and tests, `skills.NewInMemorySkillStore(map[string]any{...})` holds raw
-wire objects (`key`, `version`, `content`, `contentHash`, optional `name`, `description`).
+wire objects (`key`, `version`, `content`, `contentHash`, optional `name`, `description`, `tools`).
+
+## Skill tools
+
+A skill can pin tools. `Skill.Tools()` returns them as `[]aiserver.Tool`, in the order the author set,
+as a fresh deep copy on every call, and an empty slice when there are none. Bring-your-own-content
+code passes them as `SkillFields.Tools` (nil means none).
+
+When this package is linked in and a store is set, every `aiserver.Config` run and graph node adds the
+tools of the skills its variation attaches to the `Config.Tools` the handler receives, after reading
+each skill at its pinned version. A skill tool is offered only when `ToolHandlers` has a handler for its
+key, like any tool. An exact duplicate across skills is offered once. If a skill tool has the key of a
+tool on the variation, the variation's definition is offered; if two skills define one key
+differently, the first skill's is. Each of those logs a warning once per process. A skill that cannot
+be read adds no tools and the run goes on. With no store, nothing is added and nothing is logged.
+These reads report no usage event. `aiserver.InspectConfig` still returns only the variation's own tools.
+
+A malformed entry (not an object, no string `name`, `type` not `"function"`, no object `parameters`,
+or a repeated `name`) is dropped with one warning per process naming the skill and the tool. A
+`tools` that is not an array drops every tool. The skill is still returned and no integrity signal
+is recorded.
+
+Tools stay in memory: `WriteSkills` never writes them to disk or to the manifest.
 
 ## API reference
 
@@ -91,6 +113,9 @@ wire objects (`key`, `version`, `content`, `contentHash`, optional `name`, `desc
 The skills API reads none. The examples read `LD_SDK_KEY` (required there) for the store.
 
 ## Integrity log record
+
+`contentHash` covers only `content`, not `tools` (a known v1 limit). A skill's tools are protected by
+the transport (TLS), not by a hash you can check on disk.
 
 An integrity failure is logged at ERROR through the SDK logger (`aiserver.SetLogger`, default `slog.Default()`) as
 `ld.skills.integrity_failure {sorted-key JSON}`, with the same mapping on the `ld_skills` attribute.

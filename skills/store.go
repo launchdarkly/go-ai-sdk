@@ -136,6 +136,7 @@ func clearState() {
 	defer stateMu.Unlock()
 	store = nil
 	emitter = noopEmitter{}
+	clearToolWarnings()
 }
 
 // setEmitterForTesting installs a recording emitter. nil restores the no-op.

@@ -108,7 +108,7 @@ func extractVariation(ctx context.Context, key string, userCtx ldcontext.Context
 	if err != nil {
 		return AiConfig{}, VariationMeta{}, ldvalue.Null(), errorf("invalid AI config for %q: %w", key, err)
 	}
-	return cfg, *meta, value, nil
+	return withSkillTools(key, cfg), *meta, value, nil
 }
 
 func selectHandler(cfg AiConfig, meta VariationMeta, handlers []*ProviderHandler) (*ProviderHandler, error) {

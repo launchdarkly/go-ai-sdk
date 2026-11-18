@@ -222,6 +222,9 @@ provider's Tier 1 packages, their `internal/*wire` helper and `llms`.
 - **A `NativeTool` on a messages handler or Bedrock/LangChain is dropped
   silently.** Only `claudeagents` and `openaiagents` wire built-ins; elsewhere
   the tool is just not offered.
+- **Skill tools are attached tools.** A variation's `Config.Tools` includes the tools of the skills it
+  attaches (TESTING.md §3.21a), but only when `skills` is imported and a store is set. Register a
+  `ToolHandlers` entry under each skill tool's key, as for any tool.
 - **Tool keys must match the variation's `tools` map exactly.** A handler
   under a differently-cased key is never offered to the model.
 - **Prompt, completion and tool content is on spans by default**. Set the handler's `CaptureContent: aiserver.CaptureOff`, or `aiserver.Configure` before the first call, to keep it off spans. Model, usage and status are written either way.
