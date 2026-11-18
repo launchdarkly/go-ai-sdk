@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/launchdarkly/go-ai-sdk/internal/procgroup"
 )
 
 // Host tool limits, matching Claude Code where it documents one.
@@ -323,7 +325,7 @@ func runBash(ctx context.Context, w *workspace, input json.RawMessage) (string, 
 	out := &capWriter{max: maxToolOutput}
 	cmd.Stdout, cmd.Stderr = out, out
 	cmd.WaitDelay = 2 * time.Second // background children holding the pipe cannot block the run
-	killProcessGroup(cmd)
+	procgroup.KillOnCancel(cmd)
 	err := cmd.Run()
 	text := out.String()
 	var exit *exec.ExitError
