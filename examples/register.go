@@ -11,6 +11,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/claudemessages"
 	"github.com/launchdarkly/go-ai-sdk/langchainagents"
 	"github.com/launchdarkly/go-ai-sdk/langchainmessages"
+	"github.com/launchdarkly/go-ai-sdk/litellmmessages"
 	"github.com/launchdarkly/go-ai-sdk/openaiagents"
 	"github.com/launchdarkly/go-ai-sdk/openaimessages"
 )
@@ -45,7 +46,14 @@ func register() {
 	add("openai-agents")(openaiagents.NewHandler(openaiagents.Options{}))
 	add("claude-messages")(claudemessages.NewHandler(claudemessages.Options{}))
 	add("claude-agents")(claudeagents.NewHandler(claudeagents.Options{}))
-	add("langchain-messages")(langchainmessages.NewHandler(langchainmessages.Options{}))
+	// {*, messages}: serves messages configs no provider-specific handler claims.
+	// With a LiteLLM proxy (LITELLM_BASE_URL) the proxy serves them; two unscoped
+	// "*" handlers for one mode would replace each other.
+	if os.Getenv("LITELLM_BASE_URL") != "" {
+		add("litellm-messages")(litellmmessages.NewHandler(litellmmessages.Options{}))
+	} else {
+		add("langchain-messages")(langchainmessages.NewHandler(langchainmessages.Options{}))
+	}
 	// {*, agent}: serves agent configs no provider-specific handler claims.
 	add("langchain-agents")(langchainagents.NewHandler(langchainagents.Options{}))
 	// Bedrock handlers need an AWS configuration; they are skipped when none loads.
