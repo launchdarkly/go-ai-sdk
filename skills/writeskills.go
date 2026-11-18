@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"time"
@@ -60,11 +61,13 @@ func parseWriteOptions(opts *WriteSkillsOptions) (writeConfig, error) {
 	return cfg, nil
 }
 
-// selection is what a reconcile writes: an explicit list, or every skill the
-// store holds.
+// selection is what a reconcile writes: an explicit list, every skill the
+// store holds, or what a SkillSource answers when it is read (under ctx).
 type selection struct {
 	all   bool
 	items []SkillInput
+	src   *SkillSource
+	ctx   context.Context
 }
 
 // WriteSkills materializes skills under a managed root at
@@ -138,6 +141,16 @@ func resolveRequests(sel selection, cfg writeConfig) ([]pendingWrite, bool, erro
 	if sel.all {
 		return resolveAll(cfg)
 	}
+	if sel.src != nil {
+		refs, failed := readSourceRefs(sel.ctx, sel.src, cfg)
+		if failed != "" {
+			return unavailableRun(cfg, failed)
+		}
+		sel = selection{items: make([]SkillInput, len(refs))}
+		for i, r := range refs {
+			sel.items[i] = r
+		}
+	}
 	var (
 		out        []pendingWrite
 		incomplete bool
@@ -181,21 +194,24 @@ func resolveReference(cfg writeConfig, key string, version int) resolution {
 	return resolveFromStore(s, key, version)
 }
 
-func resolveAll(cfg writeConfig) ([]pendingWrite, bool, error) {
-	unavailableRun := func(reason string) ([]pendingWrite, bool, error) {
-		if cfg.onUnavailable == OnUnavailableRaise {
-			return nil, false, unavailableError(reason)
-		}
-		return []pendingWrite{{key: "", err: unavailablePrefix + reason}}, true, nil
+// unavailableRun is a run whose requested set could not be retrieved: an
+// error, or one run-level failure that suppresses pruning.
+func unavailableRun(cfg writeConfig, reason string) ([]pendingWrite, bool, error) {
+	if cfg.onUnavailable == OnUnavailableRaise {
+		return nil, false, unavailableError(reason)
 	}
+	return []pendingWrite{{key: "", err: unavailablePrefix + reason}}, true, nil
+}
+
+func resolveAll(cfg writeConfig) ([]pendingWrite, bool, error) {
 	s, blocked := availableStore(cfg, "the skill set")
 	if blocked != "" {
-		return unavailableRun(blocked)
+		return unavailableRun(cfg, blocked)
 	}
 	objects, err := allObjects(s)
 	if err != nil {
 		currentLogger().Error("the skill store failed while listing skills", "error", err)
-		return unavailableRun(fmt.Sprintf("the skill store returned an error while listing skills: %v", err))
+		return unavailableRun(cfg, fmt.Sprintf("the skill store returned an error while listing skills: %v", err))
 	}
 	candidates := newestByKey(objects)
 	out := make([]pendingWrite, 0, len(candidates))
