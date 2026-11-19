@@ -3,7 +3,7 @@
 ## Role and tier
 
 Tier 1 handler package. The handler's `ProvidesFor` field is `{"*", "messages"}`: the wildcard fallback for any
-messages-mode variation. Built on the SDK's own [`llms`](../llms) package (model interface plus
+messages-mode variation, or, with `Options.Providers`, for the listed providers only (`ProviderHandler.WithProviders`). Built on the SDK's own [`llms`](../llms) package (model interface plus
 built-in OpenAI Chat Completions, Anthropic Messages and Bedrock Converse models). LangChain has
 no official Go SDK, and the community ports were removed.
 
@@ -24,7 +24,7 @@ no official Go SDK, and the community ports were removed.
 const PackageName, PackageVersion, SpanName
 var ErrMaxSteps, ErrNoToolHandler, ErrEmptyResponse
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
-type Options struct{ Model llms.Model; ModelFactory ModelFactory; MaxRetries *int; CaptureContent aiserver.ContentCapture }
+type Options struct{ Model llms.Model; ModelFactory ModelFactory; MaxRetries *int; CaptureContent aiserver.ContentCapture; Providers []string }
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func LangChainMessages(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)

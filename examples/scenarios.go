@@ -13,6 +13,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/claudeagents"
 	"github.com/launchdarkly/go-ai-sdk/langchainagents"
+	"github.com/launchdarkly/go-ai-sdk/litellmagents"
 	"github.com/launchdarkly/go-ai-sdk/openaiagents"
 )
 
@@ -38,6 +39,23 @@ func agent(ctx context.Context, key, input string) error {
 // own tools and no registry.
 func openaiOnly(ctx context.Context, key, input string) error {
 	resp, err := openaiagents.OpenAIAgents(ctx, key, input, newContext(), &openaiagents.InvokeOptions{
+		ToolHandlers: map[string]aiserver.ToolHandler{
+			"search-ld-documentation":          aiserver.ToolFunc(searchLDDocumentation),
+			"fetch-launchdarkly-documentation": aiserver.ToolFunc(fetchLDDocumentation),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	printJSON(resp)
+	return writeOutput(resp)
+}
+
+// litellmAgents demonstrates litellmAgents: any provider's agent config run
+// through a LiteLLM proxy (LITELLM_BASE_URL, LITELLM_API_KEY), with its own
+// tools and no registry.
+func litellmAgents(ctx context.Context, key, input string) error {
+	resp, err := litellmagents.LiteLLMAgents(ctx, key, input, newContext(), &litellmagents.InvokeOptions{
 		ToolHandlers: map[string]aiserver.ToolHandler{
 			"search-ld-documentation":          aiserver.ToolFunc(searchLDDocumentation),
 			"fetch-launchdarkly-documentation": aiserver.ToolFunc(fetchLDDocumentation),

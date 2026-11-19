@@ -72,10 +72,15 @@ type Options struct {
 	// CaptureContent gates prompt, completion, tool and judge-explanation
 	// content on spans. CaptureDefault follows aiserver.Configure, else on.
 	CaptureContent aiserver.ContentCapture
+	// Providers scopes the "*" handler to these config.provider.name values
+	// (see aiserver.ProviderHandler.WithProviders). nil matches any provider.
+	// NewHandler refuses an empty list, a blank name or a padded name.
+	Providers []string
 }
 
 // NewHandler returns the LangChain messages handler (createLangChainMessagesHandler).
-// It returns an error for an invalid option (see Options.MaxRetries).
+// It returns an error for an invalid option (see Options.MaxRetries and
+// Options.Providers).
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error) {
 	handlerkit.ReportUsage("langchain-messages.createLangChainMessagesHandler", PackageName, PackageVersion)
 	return newHandler(opts)
@@ -100,7 +105,11 @@ func newHandler(opts Options) (*aiserver.ProviderHandler, error) {
 		return nil, err
 	}
 	h := &handler{opts: opts}
-	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent), nil
+	ph := sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent)
+	if opts.Providers == nil {
+		return ph, nil
+	}
+	return ph.WithProviders(opts.Providers...)
 }
 
 // InvokeOptions are the optional arguments to LangChainMessages.

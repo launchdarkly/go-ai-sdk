@@ -17,6 +17,13 @@ any variation whose `_ldMeta.mode` is `agent`: the router picks it when no handl
 variation's `provider.name` exactly. List exact-provider agent handlers (`claudeagents`,
 `openaiagents`, `bedrockagents`) first if you want them to win.
 
+To scope the wildcard to some providers, set `Options.Providers`, for example `[]string{"Bedrock"}`. The
+handler then serves only variations whose `provider.name` is in the list (compared exactly), so two
+scoped handlers of this package, one per provider, can be registered together. An exact-provider
+handler still wins, and among wildcards the shortest list that names the provider wins. `NewHandler`,
+`LangChainAgents` and `LangChainGraph` return an error wrapping `aiserver.ErrInvalidProviders` for an empty list, a blank name or a name
+with surrounding whitespace.
+
 ## Examples
 
 Single handler, through the convenience wrapper:
@@ -130,6 +137,7 @@ type Options struct {
 	Model          llms.Model   // used for every call when set
 	ModelFactory   ModelFactory // func(cfg aiserver.AiConfig) (llms.Model, error), per call
 	CaptureContent aiserver.ContentCapture // CaptureDefault follows aiserver.Configure, else on
+	Providers      []string // scopes the wildcard to these provider names; nil = any provider
 }
 func LangChainAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 func LangChainGraph(key string, options aiserver.GraphOptions, handler Options) (*aiserver.AgentGraph, error)

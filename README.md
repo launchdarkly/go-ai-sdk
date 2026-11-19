@@ -26,6 +26,7 @@ Requires Go 1.26.
 | [`claudeagents`](claudeagents) | 1 | Anthropic agent handler, `ClaudeGraph`, `ToClaudeAgents` — `{Anthropic, agent}` |
 | [`openaiagents`](openaiagents) | 1 | OpenAI agent handler, `OpenAIGraph`, `ToOpenAIAgents` — `{OpenAI, agent}` |
 | [`bedrockagents`](bedrockagents) | 1 | Bedrock agent handler, `BedrockGraph` — `{Bedrock, agent}` |
+| [`litellmagents`](litellmagents) | 1 | LiteLLM proxy agent handler, `LiteLLMGraph`, `ToLiteLLMAgents` — `{*, agent}` |
 | [`langchainagents`](langchainagents) | 1 | LangChain-style agent handler, `LangChainGraph`, `ToLangGraph` — `{*, agent}` |
 | [`llms`](llms) | 1 | Chat-model interface and built-in OpenAI / Anthropic / Bedrock models for the LangChain handlers |
 | [`examples`](examples) | — | Integration entry point |

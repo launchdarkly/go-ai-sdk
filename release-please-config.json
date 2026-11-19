@@ -15,6 +15,7 @@
         "claudemessages/handler.go",
         "langchainagents/handler.go",
         "langchainmessages/handler.go",
+        "litellmagents/handler.go",
         "openaiagents/handler.go",
         "openaimessages/handler.go"
       ],
