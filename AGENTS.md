@@ -13,6 +13,7 @@ Tier 0  aiserver                 core: no provider SDK imports
         internal/{bridge,trajectory,judging}   shared internals
         internal/kitbase     type-free handler-kit helpers (SpanUsage, HandlerSpanOptions, Run, ...); imports nothing from aiserver
         internal/handlerkit  typed access to the handler kit that stays unexported in aiserver; imports aiserver, never imported by it
+        internal/gatewaymodel  Vercel AI Gateway "creator/model" id for an AI Config (for the Vercel handlers); imports aiserver only
 Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         claudeagents   openaiagents   bedrockagents
         internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers for each provider's messages/agents pair; bedrockwire is also used by llms and langchainwire
