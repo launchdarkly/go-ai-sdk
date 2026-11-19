@@ -292,6 +292,17 @@ func TestChatSpan(t *testing.T) {
 		if got, has := eventAttr(chat, "gen_ai.content.completion", "gen_ai.completion"); !has || got != out {
 			t.Errorf("gen_ai.content.completion = %q, %v; want the answer", got, has)
 		}
+		// Content goes on the chat span only: the root carries none.
+		root := spansByName(exp)[SpanName][0]
+		for k := range attrs(root) {
+			if strings.HasPrefix(k, "gen_ai.prompt.") || strings.HasPrefix(k, "gen_ai.completion.") ||
+				k == "gen_ai.input.messages" || k == "gen_ai.output.messages" || k == "gen_ai.system_instructions" {
+				t.Errorf("root %s carries %s: content belongs on the chat span only", SpanName, k)
+			}
+		}
+		if n := eventNames(root); slices.Contains(n, "gen_ai.content.prompt") || slices.Contains(n, "gen_ai.content.completion") {
+			t.Errorf("root %s content events %v: content belongs on the chat span only", SpanName, n)
+		}
 	})
 
 	t.Run("capture off: no prompt or completion on any span", func(t *testing.T) {
