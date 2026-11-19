@@ -21,6 +21,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 const (
@@ -247,7 +248,7 @@ func (a *agent) run(ctx context.Context, req aiserver.HandlerRequest, onText fun
 	p := handlerkit.ComposePrompt(req, aiserver.ModeAgent)
 	system := providerName(req.Config)
 	r := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{
-		Tracer: PackageName, Name: SpanName, System: system, Operation: "invoke_agent", RequestModel: modelID,
+		Tracer: PackageName, Name: SpanName, System: system, ProviderName: telemetry.ProviderName(system), Operation: "invoke_agent", RequestModel: modelID,
 	}, req, p)
 	defer r.EndOnPanic()
 	fail := func(err error) (result, error) {
