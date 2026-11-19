@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"regexp"
 	"strings"
 )
@@ -136,7 +137,7 @@ func TypesafeEntries(raw any) ([]TypesafeEntry, error) {
 		if key == "" {
 			return nil, errors.New("TypeSafe judge result is missing a key")
 		}
-		score, ok := NumericScore(item["score"])
+		score, ok := labelScore(item["score"])
 		if !ok {
 			return nil, fmt.Errorf("TypeSafe judge result '%s' is missing a finite score", key)
 		}
@@ -148,6 +149,21 @@ func TypesafeEntries(raw any) ([]TypesafeEntry, error) {
 		entries[i] = TypesafeEntry{Key: key, EventKey: eventKey, Score: score, Reason: reason}
 	}
 	return entries, nil
+}
+
+// labelScore is NumericScore that also takes a Go integer, from a handler
+// that returned a literal map rather than decoded JSON. A bool is no score.
+func labelScore(v any) (float64, bool) {
+	if f, ok := NumericScore(v); ok {
+		return f, true
+	}
+	switch rv := reflect.ValueOf(v); rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return float64(rv.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return float64(rv.Uint()), true
+	}
+	return 0, false
 }
 
 // HasOutputFormat reports whether a judge config carries its own

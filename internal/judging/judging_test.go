@@ -78,6 +78,15 @@ func TestTypesafeEntries(t *testing.T) {
 	if e, err := TypesafeEntries(map[string]any{"kind": "typesafe", "results": []any{map[string]any{"key": "a", "eventKey": "e", "score": 0.5}}}); err != nil || len(e) != 1 {
 		t.Errorf("decoded: %v %v", e, err)
 	}
+	// A handler's literal map may carry Go integer scores.
+	if e, err := TypesafeEntries(map[string]any{"kind": "typesafe", "results": []any{
+		map[string]any{"key": "a", "eventKey": "ea", "score": 1}, map[string]any{"key": "b", "eventKey": "eb", "score": uint8(0)},
+	}}); err != nil || len(e) != 2 || e[0].Score != 1 || e[1].Score != 0 {
+		t.Errorf("integer scores: %v %v", e, err)
+	}
+	if _, err := TypesafeEntries(map[string]any{"kind": "typesafe", "results": []any{map[string]any{"key": "a", "eventKey": "e", "score": true}}}); err == nil {
+		t.Error("a Go bool score was accepted")
+	}
 	for name, in := range map[string]string{
 		"no results":       `{"kind":"typesafe"}`,
 		"empty results":    `{"kind":"typesafe","results":[]}`,
