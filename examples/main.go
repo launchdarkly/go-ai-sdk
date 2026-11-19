@@ -19,6 +19,7 @@ type scenario func(ctx context.Context, key, input string) error
 var scenarios = map[string]scenario{
 	"agent":                  agent,
 	"openai-only":            openaiOnly,
+	"litellm-messages":       litellmMessages,
 	"streaming":              streaming,
 	"history":                history,
 	"conversation":           conversation,

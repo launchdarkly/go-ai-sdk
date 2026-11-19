@@ -25,6 +25,7 @@ LaunchDarkly), `OTEL_EXPORTER_OTLP_ENDPOINT`, `LD_SERVICE_NAME`,
 | `conversation` | several turns under one `gen_ai.conversation.id`, inline judge scores on stderr | same |
 | `streaming` | `Config().Stream` | same |
 | `openai-only` | `openaiagents.OpenAIAgents` with its own tools, no registry | `launch-darkly-documentation-summarizer-open-ai-only` |
+| `litellm-messages` | `litellmmessages.LiteLLMMessages` through a LiteLLM proxy (`LITELLM_BASE_URL`, optional `LITELLM_API_KEY`) with its own tools and a `user_input` variable, no registry; the proxy routes the config's model name | `launch-darkly-documentation-summarizer-messages` |
 | `judge` | `SkipJudges` → `JudgeTasks` → `RunJudge` on goroutines, with four verification checks | `launch-darkly-documentation-summarizer` |
 | `graph` | `Graph().Invoke` | `travel-agent-flow` |
 | `graph-streaming` | `Graph().Stream` built inside a conversation scope and iterated after it; text on stdout, `[node_start]` / `[node_done]` / `[handoff]` on stderr; no JSON file | `travel-agent-flow` |
