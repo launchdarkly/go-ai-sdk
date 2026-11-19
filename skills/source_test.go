@@ -90,8 +90,14 @@ type trackedLD struct {
 func (f *trackedLD) GetFlagTracker() interfaces.FlagTracker { return f.tracker }
 func (f *trackedLD) IsOffline() bool                        { return f.offline }
 
-// fakeTracker hands out unbuffered channels, as the base SDK's tracker does,
-// so a send returns only once the watcher has taken the change.
+// nilTrackerLD is an online client whose GetFlagTracker answers nil.
+type nilTrackerLD struct{ plainLD }
+
+func (*nilTrackerLD) GetFlagTracker() interfaces.FlagTracker { return nil }
+func (*nilTrackerLD) IsOffline() bool                        { return false }
+
+// fakeTracker hands out unbuffered channels, stricter than the base SDK's
+// buffer of 10, so a send returns only once the watcher has taken the change.
 type fakeTracker struct {
 	mu        sync.Mutex
 	listeners []chan interfaces.FlagChangeEvent
@@ -720,6 +726,7 @@ func TestWatchSkillsFromNeedsAChangeSignal(t *testing.T) {
 	cases := map[string]func(t *testing.T) *fakeTracker{
 		"no AI client":                func(t *testing.T) *fakeTracker { noClient(t); return nil },
 		"a client with no change API": func(t *testing.T) *fakeTracker { installClient(t, &plainLD{}); return nil },
+		"a client with a nil tracker": func(t *testing.T) *fakeTracker { installClient(t, &nilTrackerLD{}); return nil },
 		"a client that is offline": func(t *testing.T) *fakeTracker {
 			tr := &fakeTracker{}
 			installClient(t, &trackedLD{tracker: tr, offline: true})

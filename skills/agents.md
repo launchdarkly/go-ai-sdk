@@ -97,8 +97,8 @@ keys and hashes are shape-checked and redacted before reaching any signal or rec
   A nil slice is not "no skills"; that is `[]SkillReference{}`. A failed read goes down
   `unavailableRun` (never a prune). With timeout 0, `refs` is not called.
 - **The config listener drains its channel until `RemoveFlagChangeListener` closes it.** The
-  base SDK sends unbuffered while holding its broadcaster lock, so a listener that stopped
-  reading early would block flag delivery, and `detach` would deadlock. It only calls `notify`.
+  base SDK sends while holding its broadcaster lock (the channel buffers 10), so a listener that
+  stopped reading early would block flag delivery once the buffer fills, and `detach` would deadlock. It only calls `notify`.
 - `StoreDiagnostics.ObjectsRevoked` moves only at `payload-transferred`; `deleteObject` never
   counts, so an abandoned or declined transfer counts nothing.
 

@@ -164,21 +164,24 @@ type changeTracker interface {
 // followConfig registers one flag-change listener that only signals the
 // watcher for the source's keys.
 func (w *SkillWatcher) followConfig(keys []string) error {
-	c, err := aiserver.GetClient()
-	ct, ok := c.(changeTracker)
-	if err != nil || !ok || ct.IsOffline() {
+	var tracker interfaces.FlagTracker
+	if c, err := aiserver.GetClient(); err == nil {
+		if ct, ok := c.(changeTracker); ok && !ct.IsOffline() {
+			tracker = ct.GetFlagTracker()
+		}
+	}
+	if tracker == nil {
 		return fmt.Errorf("%w: WatchSkillsFrom follows the config keys %q through the LaunchDarkly client's "+
 			"flag-change signal, and the AI client has none (not initialized, offline, or a client without "+
-			"GetFlagTracker). Initialize an online LaunchDarkly client, or build the source with empty configKeys "+
+			"a flag tracker). Initialize an online LaunchDarkly client, or build the source with empty configKeys "+
 			"and call SkillWatcher.Notify when its answer changes", ErrStoreNotWatchable, keys)
 	}
-	tracker := ct.GetFlagTracker()
 	ch := tracker.AddFlagChangeListener()
 	w.mu.Lock()
 	w.tracker, w.flagCh = tracker, ch
 	w.mu.Unlock()
-	// Drain until RemoveFlagChangeListener closes ch: the base SDK sends
-	// unbuffered while holding its lock, so stopping early would block it.
+	// Drain until RemoveFlagChangeListener closes ch: the base SDK sends while
+	// holding its lock, so once the small buffer fills, stopping early would block it.
 	go func() {
 		for ev := range ch {
 			if slices.Contains(keys, ev.Key) {
