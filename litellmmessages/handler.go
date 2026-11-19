@@ -122,7 +122,7 @@ func proxyClient(opts Options) (*openai.Client, error) {
 	if base == "" {
 		base = os.Getenv("LITELLM_BASE_URL")
 	}
-	if base == "" {
+	if strings.TrimSpace(base) == "" {
 		return nil, ErrNoBaseURL
 	}
 	key := opts.APIKey

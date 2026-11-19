@@ -41,6 +41,16 @@ func TestFactoryMetadata(t *testing.T) {
 	}
 }
 
+// A whitespace-only base URL, from Options or LITELLM_BASE_URL, is no base URL.
+func TestBlankBaseURLIsRefused(t *testing.T) {
+	t.Setenv("LITELLM_BASE_URL", " \t")
+	for name, o := range map[string]Options{"env": {}, "option": {BaseURL: "  "}} {
+		if h, err := NewHandler(o); !errors.Is(err, ErrNoBaseURL) || h != nil {
+			t.Errorf("%s: NewHandler = %v, %v; want nil, ErrNoBaseURL", name, h, err)
+		}
+	}
+}
+
 func TestNoBaseURLIsRefused(t *testing.T) {
 	t.Setenv("LITELLM_BASE_URL", "")
 	t.Setenv("OPENAI_BASE_URL", "http://127.0.0.1:1")
