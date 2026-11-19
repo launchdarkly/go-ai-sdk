@@ -164,6 +164,31 @@
         }
       }
     },
+    "go-ai-litellm-agents": {
+      "name": "Go AI SDK for LiteLLM Agents",
+      "type": "ai-provider",
+      "path": "litellmagents",
+      "languages": [
+        "Go"
+      ],
+      "aiSdkNames": [
+        "github.com/launchdarkly/go-ai-sdk/litellmagents"
+      ],
+      "releases": {
+        "tag-prefix": "v"
+      },
+      "features": {
+        "aiAgentConfig": {
+          "introduced": "1.1"
+        },
+        "aiAgentGraph": {
+          "introduced": "1.1"
+        },
+        "aiTrackMetrics": {
+          "introduced": "1.1"
+        }
+      }
+    },
     "go-ai-openai-agents": {
       "name": "Go AI SDK for OpenAI Agents",
       "type": "ai-provider",
