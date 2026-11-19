@@ -164,6 +164,25 @@
         }
       }
     },
+    "go-ai-litellm-messages": {
+      "name": "Go AI SDK for LiteLLM Messages",
+      "type": "ai-provider",
+      "path": "litellmmessages",
+      "languages": [
+        "Go"
+      ],
+      "aiSdkNames": [
+        "github.com/launchdarkly/go-ai-sdk/litellmmessages"
+      ],
+      "releases": {
+        "tag-prefix": "v"
+      },
+      "features": {
+        "aiCompletionConfig": {
+          "introduced": "1.1"
+        }
+      }
+    },
     "go-ai-openai-agents": {
       "name": "Go AI SDK for OpenAI Agents",
       "type": "ai-provider",
