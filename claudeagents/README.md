@@ -177,7 +177,8 @@ On each invoke with skills, the handler:
    `{"skill": "launchdarkly:<key>"}` (required), and its description lists each skill as
    `launchdarkly:<key>` with the skill's description. A call returns that skill's `SKILL.md`
    and gets an `execute_tool Skill` span. It sends no `$ld:ai:tool_call`, because `Skill`
-   is not an AI Config tool. Any other name is an `is_error` tool result with no file content;
+   is not an AI Config tool. Any other name is an `is_error` tool result with no file content.
+   A config function tool named `Skill` fails the run before any model request;
 3. removes the directory when the run ends, on every path: success, error, a broken-off
    stream, the step limit or a cancelled context. A directory that cannot be removed is
    logged at warning level, and the run's own result or error is still returned.

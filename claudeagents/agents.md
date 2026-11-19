@@ -127,7 +127,7 @@ with pruning off; each reference resolved once, so the tool lists the written ve
 description; any resolution failure stops before a write). Any failure returns an error naming
 the keys and the skills package's action texts, before any model request. The `Skill` tool is
 an extra `localTool` with `soft: true` (its errors are `is_error` results, not run failures),
-appended after the config tools; it reads only `<key>/SKILL.md` for a listed
+appended after the config tools (a config tool of the same name fails the run in `buildTools`); it reads only `<key>/SKILL.md` for a listed
 `launchdarkly:<key>` through an `os.Root` on `<dir>/launchdarkly/skills`. `os.RemoveAll` runs
 in a `defer` (inside the iterator on the stream path); a failure is a `Warn` on the SDK logger.
 The wrappers and `ToClaudeAgents` use `newHandler`, so they never write skills.
