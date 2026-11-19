@@ -117,8 +117,6 @@ func (o Options) connect() (clientFunc, error) {
 	// applies first: the proxy never sees OpenAI credentials or headers.
 	reqOpts := []option.RequestOption{
 		option.WithBaseURL(base),
-		option.WithAPIKey(cmp.Or(o.APIKey, os.Getenv("LITELLM_API_KEY"))),
-		option.WithAdminAPIKey(""),
 		option.WithHeaderDel("OpenAI-Organization"),
 		option.WithHeaderDel("OpenAI-Project"),
 	}
@@ -127,6 +125,11 @@ func (o Options) connect() (clientFunc, error) {
 			reqOpts = append(reqOpts, option.WithHeaderDel(strings.TrimSpace(name)))
 		}
 	}
+	// The credentials go last: a header delete (an Authorization entry in
+	// OPENAI_CUSTOM_HEADERS) applied after WithAPIKey would drop the proxy key.
+	reqOpts = append(reqOpts,
+		option.WithAPIKey(cmp.Or(o.APIKey, os.Getenv("LITELLM_API_KEY"))),
+		option.WithAdminAPIKey(""))
 	c := openai.NewClient(reqOpts...)
 	return func(aiserver.AiConfig) (*openai.Client, error) { return &c, nil }, nil
 }
