@@ -167,6 +167,8 @@ type stub struct {
 	delay   time.Duration
 	panics  bool
 	span    bool
+	// before, when set, runs at the start of each Invoke call.
+	before func()
 }
 
 func (s *stub) handler(provider string) *aiserver.ProviderHandler {
@@ -176,6 +178,9 @@ func (s *stub) handler(provider string) *aiserver.ProviderHandler {
 			s.mu.Lock()
 			s.calls = append(s.calls, req)
 			s.mu.Unlock()
+			if s.before != nil {
+				s.before()
+			}
 			if s.span {
 				run := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/test", Name: "test.run", System: "test"}, req, handlerkit.ComposePrompt(req, aiserver.ModeMessages))
 				defer run.Finish("", s.out)

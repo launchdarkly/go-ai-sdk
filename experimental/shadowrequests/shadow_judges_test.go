@@ -324,9 +324,10 @@ func TestShadowResultJudgeResultsRoundTripJSON(t *testing.T) {
 	}
 }
 
-// A panicking judge is logged and skipped like a failing one: the shadow
-// keeps its result and usage, and the shadow's other judges still score.
-func TestAPanickingShadowJudgeLeavesTheShadowResultIntact(t *testing.T) {
+// installTwoJudges gives the shadow variation two judges: "boom" on BoomCo,
+// then "quality" on JudgeCo. It returns boom's stub and all the handlers.
+func installTwoJudges(t *testing.T) (*shadowLD, judged, *stub, []*aiserver.ProviderHandler) {
+	t.Helper()
 	f := installJudged(t, 1, false)
 	variations := f.value.(map[string]any)["shadowConfiguration"].(map[string]any)["variations"].(map[string]any)
 	variations["claude-candidate"].(map[string]any)["judgeConfiguration"] = map[string]any{"judges": []any{
@@ -338,31 +339,100 @@ func TestAPanickingShadowJudgeLeavesTheShadowResultIntact(t *testing.T) {
 	boomVariation["evaluationMetricKey"] = "boom-score"
 	f.values["boom"] = boomVariation
 	j := newJudged()
-	boom := &stub{panics: true}
-	handlers := append(j.handlers(), boom.handler("BoomCo"))
+	boom := &stub{out: `{"score":0.1,"reasoning":"bad"}`}
+	return f, j, boom, append(j.handlers(), boom.handler("BoomCo"))
+}
 
-	task := judgedTask(t, mustShadow(t, handlers, ShadowOptions{}))
-	res := RunShadow(context.Background(), task, handlers)
-	if res.Error != "" || res.Usage.Total != 7 {
-		t.Fatalf("error %q, usage %+v", res.Error, res.Usage)
+// A judge that panics is logged and skipped like one that returns an error:
+// the shadow keeps its result and usage, and the shadow's other judges still
+// score.
+func TestAFailingFirstShadowJudgeLeavesTheShadowResultIntact(t *testing.T) {
+	for name, set := range map[string]func(*stub){
+		"returns an error": func(s *stub) { s.err = errors.New("judge down") },
+		"panics":           func(s *stub) { s.panics = true },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, j, boom, handlers := installTwoJudges(t)
+			set(boom)
+
+			task := judgedTask(t, mustShadow(t, handlers, ShadowOptions{}))
+			res := RunShadow(context.Background(), task, handlers)
+			if res.Error != "" || res.Usage.Total != 7 {
+				t.Fatalf("error %q, usage %+v", res.Error, res.Usage)
+			}
+			if boom.count() != 1 || j.judge.count() != 1 {
+				t.Fatalf("boom calls %d, quality calls %d", boom.count(), j.judge.count())
+			}
+			if len(res.JudgeResults) != 1 || res.JudgeResults["quality"].Score != 0.8 {
+				t.Fatalf("JudgeResults %+v", res.JudgeResults)
+			}
+			if len(f.metrics("boom-score")) != 0 || len(f.metrics(judgeMetric)) != 1 {
+				t.Fatalf("boom metrics %d, quality metrics %d", len(f.metrics("boom-score")), len(f.metrics(judgeMetric)))
+			}
+			var boomErrors int
+			for _, e := range f.metrics("$ld:ai:generation:error") {
+				if e.data["configKey"] == "boom" {
+					boomErrors++
+				}
+			}
+			if boomErrors != 1 {
+				t.Fatalf("the failing judge's generation errors %d, want 1", boomErrors)
+			}
+		})
 	}
-	if boom.count() != 1 || j.judge.count() != 1 {
-		t.Fatalf("boom calls %d, quality calls %d", boom.count(), j.judge.count())
-	}
-	if len(res.JudgeResults) != 1 || res.JudgeResults["quality"].Score != 0.8 {
-		t.Fatalf("JudgeResults %+v", res.JudgeResults)
-	}
-	if len(f.metrics("boom-score")) != 0 || len(f.metrics(judgeMetric)) != 1 {
-		t.Fatalf("boom metrics %d, quality metrics %d", len(f.metrics("boom-score")), len(f.metrics(judgeMetric)))
-	}
-	var boomErrors int
-	for _, e := range f.metrics("$ld:ai:generation:error") {
-		if e.data["configKey"] == "boom" {
-			boomErrors++
+}
+
+// A shadow whose client shuts down mid-run resolves no further judge, starts
+// no client and records no judge score, whether Shutdown lands in B's handler
+// or in a judge's, and whether the shadow runs in the background or through
+// RunShadow. A judge already running when Shutdown lands still returns.
+func TestShadowJudgesAfterAMidRunShutdownStartNoClient(t *testing.T) {
+	shutdown := func() { _ = aiserver.Shutdown(context.Background()) }
+	for _, tc := range []struct {
+		name string
+		// in picks the stub whose handler calls Shutdown.
+		in func(j judged, boom *stub) *stub
+		// boomCalls is how many times the first judge runs.
+		boomCalls int
+	}{
+		{"in B's handler", func(j judged, _ *stub) *stub { return j.b }, 0},
+		{"in the first judge's handler", func(_ judged, boom *stub) *stub { return boom }, 1},
+	} {
+		for _, deferred := range []bool{false, true} {
+			name := tc.name + "/background"
+			if deferred {
+				name = tc.name + "/RunShadow"
+			}
+			t.Run(name, func(t *testing.T) {
+				t.Setenv("LD_SDK_KEY", "sdk-not-a-real-key")
+				f, j, boom, handlers := installTwoJudges(t)
+				var res ShadowResult
+				if deferred {
+					task := judgedTask(t, mustShadow(t, handlers, ShadowOptions{}))
+					tc.in(j, boom).before = shutdown
+					start := time.Now()
+					res = RunShadow(context.Background(), task, handlers)
+					if time.Since(start) > time.Second {
+						t.Fatalf("RunShadow took %v", time.Since(start))
+					}
+				} else {
+					tc.in(j, boom).before = shutdown
+					invokeAndWait(t, mustShadow(t, handlers, ShadowOptions{}))
+				}
+				if j.b.count() != 1 || boom.count() != tc.boomCalls || j.judge.count() != 0 {
+					t.Fatalf("shadow calls %d, boom calls %d, quality calls %d", j.b.count(), boom.count(), j.judge.count())
+				}
+				if _, err := aiserver.GetClient(); err == nil {
+					t.Fatal("a shadow judge after Shutdown created a client")
+				}
+				if len(f.metrics("boom-score")) != 0 || len(f.metrics(judgeMetric)) != 0 {
+					t.Fatalf("boom metrics %d, quality metrics %d", len(f.metrics("boom-score")), len(f.metrics(judgeMetric)))
+				}
+				if _, ok := res.JudgeResults["quality"]; deferred && (res.Error != "" || ok) {
+					t.Fatalf("error %q, JudgeResults %+v", res.Error, res.JudgeResults)
+				}
+			})
 		}
-	}
-	if boomErrors != 1 {
-		t.Fatalf("the panicking judge's generation errors %d, want 1", boomErrors)
 	}
 }
 
