@@ -7,11 +7,11 @@ import (
 )
 
 // providerCases: the configured provider, the gen_ai.provider.name it becomes
-// and the gen_ai.system it keeps. Bedrock is written aws.bedrock in the
-// provider name in any case; gen_ai.system stays the lower-cased provider.
+// and the gen_ai.system it becomes. Bedrock is written aws.bedrock in both,
+// in any case; other providers are lower-cased and an empty one is opencode.
 var providerCases = []struct{ provider, want, system string }{
-	{"Bedrock", "aws.bedrock", "bedrock"},
-	{"bedrock", "aws.bedrock", "bedrock"},
+	{"Bedrock", "aws.bedrock", "aws.bedrock"},
+	{"bedrock", "aws.bedrock", "aws.bedrock"},
 	{"Anthropic", "anthropic", "anthropic"},
 	{"", "opencode", "opencode"},
 }
