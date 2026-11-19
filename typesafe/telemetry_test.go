@@ -2,6 +2,7 @@ package typesafe
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"reflect"
 	"slices"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
@@ -217,5 +219,145 @@ func TestSdkUsage(t *testing.T) {
 	}
 	if !info {
 		t.Error("init() must register the package for $ld:ai:sdk:info")
+	}
+}
+
+// The reduced telemetry a TypeSafe judge call writes: one chat span carrying
+// the provider id, the response model, usage and, with capture on, the state
+// as one user prompt and the answer as the completion.
+func TestChatSpan(t *testing.T) {
+	run := func(t *testing.T, model string, capture aiserver.ContentCapture, rp reply) (*fakeJev, aiserver.HandlerResult, *tracetest.InMemoryExporter) {
+		t.Helper()
+		jev := newJev(t, rp)
+		exp := tracetest.NewInMemoryExporter()
+		installClient(t, &fakeLD{}, exp)
+		res, err := must(NewHandler(Options{CaptureContent: capture})).Invoke(bg, aiserver.HandlerRequest{
+			Config: configOf(t, judgeVariation(model, classifiers)), UserInput: "assistant output",
+			Variables: map[string]any{"input": "the question", "__ld": ldFixture}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return jev, res, exp
+	}
+	chatOf := func(t *testing.T, exp *tracetest.InMemoryExporter, name string) sdktrace.ReadOnlySpan {
+		t.Helper()
+		spans := spansByName(exp)
+		var chats []string
+		for n := range spans {
+			if strings.HasPrefix(n, "chat") {
+				chats = append(chats, n)
+			}
+		}
+		if len(chats) != 1 || len(spans[name]) != 1 {
+			t.Fatalf("chat spans = %v, want one %q", chats, name)
+		}
+		return spans[name][0]
+	}
+
+	t.Run("provider id, response model and usage", func(t *testing.T) {
+		_, _, exp := run(t, "jev-latest", aiserver.CaptureDefault, ok(threeAnswers, 100, 20))
+		c := attrs(chatOf(t, exp, "chat jev-latest"))
+		for k, v := range map[string]string{"gen_ai.system": "typesafe", "gen_ai.response.model": "jev-2026-01-01",
+			"gen_ai.usage.input_tokens": "100", "gen_ai.usage.output_tokens": "20"} {
+			if c[k] != v {
+				t.Errorf("chat %s = %q, want %q", k, c[k], v)
+			}
+		}
+	})
+
+	t.Run("capture on: the state is the one user prompt, the answer the completion", func(t *testing.T) {
+		jev, res, exp := run(t, "jev-latest", aiserver.CaptureOn, ok(threeAnswers, 1, 1))
+		chat := chatOf(t, exp, "chat jev-latest")
+		c := attrs(chat)
+		if c["gen_ai.prompt.0.role"] != "user" {
+			t.Errorf("gen_ai.prompt.0.role = %q, want user", c["gen_ai.prompt.0.role"])
+		}
+		var onSpan map[string]any
+		if err := json.Unmarshal([]byte(c["gen_ai.prompt.0.content"]), &onSpan); err != nil ||
+			!reflect.DeepEqual(onSpan, jev.reqs()[0].body["state"]) {
+			t.Errorf("gen_ai.prompt.0.content = %q, want the state sent (%v)", c["gen_ai.prompt.0.content"], jev.reqs()[0].body["state"])
+		}
+		for k := range c {
+			if strings.HasPrefix(k, "gen_ai.prompt.") && !strings.HasPrefix(k, "gen_ai.prompt.0.") {
+				t.Errorf("extra prompt message %s: the state is a single user prompt", k)
+			}
+		}
+		if p, has := eventAttr(chat, "gen_ai.content.prompt", "gen_ai.prompt"); !has || !strings.Contains(p, "the question") {
+			t.Errorf("gen_ai.content.prompt = %q, %v; want the state", p, has)
+		}
+		out := res.Output.(string)
+		if c["gen_ai.completion.0.role"] != "assistant" || c["gen_ai.completion.0.content"] != out {
+			t.Errorf("completion = %q %q, want assistant %q", c["gen_ai.completion.0.role"], c["gen_ai.completion.0.content"], out)
+		}
+		if got, has := eventAttr(chat, "gen_ai.content.completion", "gen_ai.completion"); !has || got != out {
+			t.Errorf("gen_ai.content.completion = %q, %v; want the answer", got, has)
+		}
+	})
+
+	t.Run("capture off: no prompt or completion on any span", func(t *testing.T) {
+		_, _, exp := run(t, "jev-latest", aiserver.CaptureOff, ok(threeAnswers, 1, 1))
+		for _, s := range exp.GetSpans().Snapshots() {
+			for k := range attrs(s) {
+				if strings.HasPrefix(k, "gen_ai.prompt.") || strings.HasPrefix(k, "gen_ai.completion.") {
+					t.Errorf("%s carries %s with capture off", s.Name(), k)
+				}
+			}
+			if n := eventNames(s); slices.Contains(n, "gen_ai.content.prompt") || slices.Contains(n, "gen_ai.content.completion") {
+				t.Errorf("%s content events %v with capture off", s.Name(), n)
+			}
+		}
+	})
+
+	t.Run("an empty model name still names the span chat jev", func(t *testing.T) {
+		_, _, exp := run(t, "", aiserver.CaptureDefault, ok(threeAnswers, 1, 1))
+		chatOf(t, exp, "chat jev")
+	})
+
+	t.Run("no usage reported: none on the root", func(t *testing.T) {
+		_, _, exp := run(t, "jev-latest", aiserver.CaptureDefault, reply{body: `{"model":"jev-2026-01-01","answers":` + threeAnswers + `}`})
+		chatOf(t, exp, "chat jev-latest")
+		for k := range attrs(spansByName(exp)[SpanName][0]) {
+			if strings.HasPrefix(k, "gen_ai.usage.") {
+				t.Errorf("root carries %s with no usage reported", k)
+			}
+		}
+	})
+}
+
+// Context identity follows the shared rules: on the root span and its
+// feature_flag event, never on the chat span.
+func TestContextIdentity(t *testing.T) {
+	newJev(t, ok(threeAnswers, 1, 1))
+	exp := tracetest.NewInMemoryExporter()
+	v := judgeVariation("jev-latest", classifiers)
+	delete(v["_ldMeta"].(map[string]any), "mode")
+	installClient(t, &fakeLD{variations: map[string]map[string]any{"cfg": v}}, exp)
+	multi := ldcontext.NewMulti(ldcontext.New("u-1"), ldcontext.NewWithKind("org", "o-1"))
+	if _, err := aiserver.Config(aiserver.ConfigArgs{Key: "cfg", Handlers: []*aiserver.ProviderHandler{must(NewHandler(Options{}))}}).
+		Invoke(bg, "q", multi); err != nil {
+		t.Fatal(err)
+	}
+	snaps := exp.GetSpans().Snapshots()
+	if len(snaps) != 2 {
+		t.Fatalf("spans = %d, want invoke_agent and one chat", len(snaps))
+	}
+	for _, s := range snaps {
+		var keys []string
+		for k := range attrs(s) {
+			if strings.HasPrefix(k, "context.contextKeys.") {
+				keys = append(keys, k)
+			}
+		}
+		if (s.Name() == SpanName) != (len(keys) == 2) {
+			t.Errorf("%s context keys = %v", s.Name(), keys)
+		}
+		if s.Name() != SpanName {
+			continue
+		}
+		id, _ := eventAttr(s, "feature_flag", "feature_flag.context.id")
+		ck, _ := eventAttr(s, "feature_flag", "feature_flag.contextKeys")
+		if id != multi.FullyQualifiedKey() || ck != `{"org":"o-1","user":"u-1"}` {
+			t.Errorf("feature_flag context id %q keys %q", id, ck)
+		}
 	}
 }

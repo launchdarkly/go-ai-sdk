@@ -227,6 +227,14 @@ func TestState(t *testing.T) {
 			t.Errorf("state = %v, want only output", s)
 		}
 	})
+	t.Run("every empty-string variable is left out", func(t *testing.T) {
+		s := state(t, aiserver.HandlerRequest{UserInput: "typed", Variables: map[string]any{
+			"input": "", "response_to_evaluate": "", "message_history": "", "trajectory": "",
+			"expected_output": "", "ground_truth_context": ""}})
+		if !reflect.DeepEqual(s, map[string]any{"user_input": "typed"}) {
+			t.Errorf("state = %v, want only user_input", s)
+		}
+	})
 }
 
 // The JavaScript handler's main case: one result per label, in label order,
@@ -320,12 +328,13 @@ func TestInvalidClassifiersRejectBeforeRequest(t *testing.T) {
 
 // An answer without its value rejects the call, as in the JavaScript handler.
 func TestMissingAnswerRejects(t *testing.T) {
-	for name, answers := range map[string]string{
-		"no answer":         `{}`,
-		"noul without noul": `{"q":{"type":"noul"}}`,
+	for name, rp := range map[string]reply{
+		"no answers field":  {body: `{"model":"jev","usage":{"input_tokens":1,"output_tokens":1}}`},
+		"no answer":         ok(`{}`, 1, 1),
+		"noul without noul": ok(`{"q":{"type":"noul"}}`, 1, 1),
 	} {
 		t.Run(name, func(t *testing.T) {
-			jev := newJev(t, ok(answers, 1, 1))
+			jev := newJev(t, rp)
 			labels := []any{map[string]any{"key": "q", "eventKey": "eq", "instructions": "q?", "type": "noul"}}
 			_, err := invoke(t, aiserver.HandlerRequest{Config: configOf(t, judgeVariation("jev", labels))})
 			// The request must have been made, so the error is the answer's.
