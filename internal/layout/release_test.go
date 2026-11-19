@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -26,6 +27,27 @@ func TestReleaseMarkersInExtraFiles(t *testing.T) {
 	for _, f := range markedFiles(t) {
 		if !slices.Contains(extra, f) {
 			t.Errorf("%s has a release-please marker but is not in release-please-config.json extra-files", f)
+		}
+	}
+}
+
+// Every package with a release-please version marker reports an AI SDK
+// identity, so its import path is an aiSdkNames entry in .sdk_metadata.json;
+// a missing one reports an identity nothing resolves.
+func TestReleaseMarkersInSdkMetadata(t *testing.T) {
+	var meta struct {
+		Sdks map[string]struct {
+			AiSdkNames []string `json:"aiSdkNames"`
+		} `json:"sdks"`
+	}
+	readJSON(t, ".sdk_metadata.json", &meta)
+	var names []string
+	for _, s := range meta.Sdks {
+		names = append(names, s.AiSdkNames...)
+	}
+	for _, f := range markedFiles(t) {
+		if pkg := module + "/" + path.Dir(f); !slices.Contains(names, pkg) {
+			t.Errorf("%s is not an aiSdkNames entry in .sdk_metadata.json", pkg)
 		}
 	}
 }
