@@ -52,7 +52,8 @@ func (*NativeGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
   `BaseURL` / `LITELLM_BASE_URL` and `APIKey` / `LITELLM_API_KEY`. Without any of them,
   `NewHandler`, `LiteLLMGraph` and `LiteLLMAgents` return `ErrNoBaseURL`; `ToLiteLLMAgents`
   returns it from `Invoke`. The built client overrides the `OPENAI_*` defaults openai-go applies
-  (base URL, API key, admin key, organization and project headers).
+  (base URL, API key, admin key, organization and project headers) and deletes every header
+  named in `OPENAI_CUSTOM_HEADERS`. Keep that when changing `connect`.
 - **Config**: `handlerkit.ComposePrompt(req, ModeAgent)` gives the system prompt and turns. The
   system prompt is the first message of every turn, so a handoff target's instructions replace the
   source's. `requestModel` applies the Bedrock region prefix (route-aware, as the JavaScript
@@ -101,5 +102,3 @@ Handler packages emit spans through the global tracer provider and do not config
   run.
 - **`NativeTool` is never offered.** Use `openaiagents` or `claudeagents` for provider built-ins.
 - **Streaming ignores `outputFormat`.**
-- **`OPENAI_CUSTOM_HEADERS` is still applied by openai-go** to the client this package builds.
-  Inject a `Client` if that environment variable is set for another purpose.

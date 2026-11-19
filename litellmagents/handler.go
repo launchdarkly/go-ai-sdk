@@ -113,15 +113,20 @@ func (o Options) connect() (clientFunc, error) {
 		return nil, ErrNoBaseURL
 	}
 	// Later options override the OPENAI_* environment defaults openai-go
-	// applies first: the proxy never sees OpenAI credentials.
-	// ponytail: OPENAI_CUSTOM_HEADERS is still applied; strip it if a proxy user reports it.
-	c := openai.NewClient(
+	// applies first: the proxy never sees OpenAI credentials or headers.
+	reqOpts := []option.RequestOption{
 		option.WithBaseURL(base),
 		option.WithAPIKey(cmp.Or(o.APIKey, os.Getenv("LITELLM_API_KEY"))),
 		option.WithAdminAPIKey(""),
 		option.WithHeaderDel("OpenAI-Organization"),
 		option.WithHeaderDel("OpenAI-Project"),
-	)
+	}
+	for _, line := range strings.Split(os.Getenv("OPENAI_CUSTOM_HEADERS"), "\n") {
+		if name, _, ok := strings.Cut(line, ":"); ok {
+			reqOpts = append(reqOpts, option.WithHeaderDel(strings.TrimSpace(name)))
+		}
+	}
+	c := openai.NewClient(reqOpts...)
 	return func(aiserver.AiConfig) (*openai.Client, error) { return &c, nil }, nil
 }
 

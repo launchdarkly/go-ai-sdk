@@ -27,6 +27,7 @@ var bg = context.Background()
 // recorded is one request the fake proxy received.
 type recorded struct {
 	path, auth string
+	header     http.Header
 	raw        string
 	body       map[string]any
 }
@@ -47,7 +48,7 @@ func (f *fakeProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
 	_ = json.Unmarshal(b, &body)
 	f.mu.Lock()
-	f.requests = append(f.requests, recorded{r.URL.Path, r.Header.Get("Authorization"), string(b), body})
+	f.requests = append(f.requests, recorded{r.URL.Path, r.Header.Get("Authorization"), r.Header.Clone(), string(b), body})
 	i := len(f.requests) - 1
 	f.mu.Unlock()
 	if i >= len(f.responses) {

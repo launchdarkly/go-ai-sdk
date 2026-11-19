@@ -117,8 +117,8 @@ out, err := g.Invoke(ctx, "I was double charged") // ErrNoBaseURL here without a
 | `LITELLM_API_KEY` | Optional | Proxy key, unless `Options.APIKey` is set. A proxy without authentication needs none. |
 | `LD_SDK_KEY` | Yes, unless `InitOptions.SDKKey` or `aiserver.InitWithClient` is used | LaunchDarkly server SDK key, read by `aiserver`. |
 
-`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID` and `OPENAI_PROJECT_ID` are never sent to
-the proxy, and there is no fallback to the OpenAI API.
+`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID` and
+`OPENAI_CUSTOM_HEADERS` never reach the proxy, and there is no fallback to the OpenAI API.
 
 ## API
 

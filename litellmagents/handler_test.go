@@ -198,6 +198,9 @@ func TestProxyConnection(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			tripwire(t)
+			t.Setenv("OPENAI_ORG_ID", "org-x")
+			t.Setenv("OPENAI_PROJECT_ID", "proj-x")
+			t.Setenv("OPENAI_CUSTOM_HEADERS", "X-Leak: yes")
 			f, url := proxy(t, textResp("ok", 1, 1))
 			if tc.envURL {
 				t.Setenv("LITELLM_BASE_URL", url)
@@ -219,6 +222,11 @@ func TestProxyConnection(t *testing.T) {
 			}
 			if strings.Contains(r.auth, "sk-from-openai-env") {
 				t.Errorf("OPENAI_API_KEY reached the proxy: %q", r.auth)
+			}
+			for _, hdr := range []string{"OpenAI-Organization", "OpenAI-Project", "X-Leak"} {
+				if v := r.header.Get(hdr); v != "" {
+					t.Errorf("%s = %q reached the proxy", hdr, v)
+				}
 			}
 		})
 	}
