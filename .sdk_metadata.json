@@ -207,6 +207,25 @@
           "introduced": "0.1"
         }
       }
+    },
+    "go-ai-typesafe": {
+      "name": "Go AI SDK for TypeSafe",
+      "type": "ai-provider",
+      "path": "typesafe",
+      "languages": [
+        "Go"
+      ],
+      "aiSdkNames": [
+        "github.com/launchdarkly/go-ai-sdk/typesafe"
+      ],
+      "releases": {
+        "tag-prefix": "v"
+      },
+      "features": {
+        "aiJudgeConfig": {
+          "introduced": "1.1"
+        }
+      }
     }
   }
 }

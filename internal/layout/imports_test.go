@@ -12,7 +12,7 @@ const module = "github.com/launchdarkly/go-ai-sdk"
 
 // minPackages is the number of packages in the module. Raise it in the same
 // change that adds a package, so a listing that silently drops packages fails.
-const minPackages = 28
+const minPackages = 29
 
 // Stable packages never depend on experimental code, directly or through
 // another package.
