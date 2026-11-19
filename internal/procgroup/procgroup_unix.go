@@ -11,7 +11,8 @@ import (
 
 // KillOnCancel runs the command in its own process group and kills the whole
 // group when the command's context is done, so children started by the
-// command do not outlive it.
+// command do not outlive it. Call it before Start or Run. It overwrites
+// cmd.SysProcAttr and cmd.Cancel.
 func KillOnCancel(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }

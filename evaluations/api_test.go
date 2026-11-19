@@ -121,6 +121,8 @@ func TestAPIRetryPolicy(t *testing.T) {
 		{"transport failure on GET is replayed", "GET", false, []resp{{err: timeout}, {status: 200, body: map[string]any{}}}, 2, nil},
 		{"idempotent POST 503 then 200", "POST", true, []resp{{status: 503}, {status: 200, body: map[string]any{}}}, 2, nil},
 		{"idempotent POST timeout then success", "POST", true, []resp{{err: timeout}, {status: 200, body: map[string]any{}}}, 2, nil},
+		{"idempotent PATCH 503 then 200", "PATCH", true, []resp{{status: 503}, {status: 200, body: map[string]any{}}}, 2, nil},
+		{"idempotent PATCH timeout then success", "PATCH", true, []resp{{err: timeout}, {status: 200, body: map[string]any{}}}, 2, nil},
 		{"403 is never retried", "GET", false, []resp{{status: 403}, {status: 200}}, 1, ErrAPI},
 		{"retries are bounded", "GET", false, []resp{{status: 503}}, defaultMaxAttempts, ErrAPI},
 	}
