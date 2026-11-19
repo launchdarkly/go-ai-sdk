@@ -21,7 +21,7 @@ Seams (package vars, replaced by tests): `getClient`, `initClient`,
 `resolveJudgeConfig` (flag delivery via `internal/bridge.ExtractVariationRaw`),
 `defaultPollInterval`, `defaultPollTimeout`, `verdictWaitTimeout`; `EvaluationsModule.flushBound`; `apiClient.sleep/random/now`.
 
-Rules that are easy to break: `Run` issues no tool request (library tools come pinned from `Tools().Get`); only `Get` can make a library `EvalTool`, and `Run` rejects one whose `Key`, `Schema` or `Description` no longer match what `Get` pinned; judges never get tools; a judge config's own `outputFormat` is dropped (the verdict is always `{score, reasoning}`) with one warning per judge per run; the judge config is passed unrendered; an `invalid_score` message names the value as JSON (`null`, `"high"`, `NaN`, `Infinity`), never a Go repr; `PollIntervalExact` / `PollTimeoutExact` win over the plain poll fields, and only they can say zero; a negative plain poll field is still an error when its Exact field is set;
+Rules that are easy to break: `Run` issues no tool request (library tools come pinned from `Tools().Get`); only `Get` can make a library `EvalTool`, and `Run` rejects one whose `Key`, `Schema` or `Description` no longer match what `Get` pinned; judges never get tools; a TypeSafe judge (`judging.TypesafeEntries`) scores its criterion with the first label's score and key as the reason, and a malformed payload is an `invalid_judge_output` error; a judge config's own `outputFormat` is dropped (the verdict is always `{score, reasoning}`) with one warning per judge per run; the judge config is passed unrendered; an `invalid_score` message names the value as JSON (`null`, `"high"`, `NaN`, `Infinity`), never a Go repr; `PollIntervalExact` / `PollTimeoutExact` win over the plain poll fields, and only they can say zero; a negative plain poll field is still an error when its Exact field is set;
 `message_history` comes only from `internal/judging.BuildMessageHistory`; a row that failed
 generation gets no criterion event; the final flush is deferred; an inline run omits
 `datasetId`/`datasetKey` everywhere; the default thresholds, event names and hosts stay unexported.
@@ -73,7 +73,7 @@ result events is resolved when `Run` starts, before its first management API req
 | `aiserver` | `ProviderHandler`, `ToolHandler`, client lifecycle (`LDClient.TrackMetric` / `Flush` emit results). |
 | `internal/handlerkit`, `internal/kitbase` | The handler kit: `ReportUsage`, `ParseAiConfig`, `NormalizeMode`, `SelectHandler`, `ParseUsage`, span usage attributes. |
 | `internal/bridge` | Flag delivery for judge configs (`ExtractVariationRaw`) and the shared logger. |
-| `internal/judging` | `BuildMessageHistory` and judge prompt helpers shared with core judges. |
+| `internal/judging` | `BuildMessageHistory`, judge prompt helpers and the verdict and TypeSafe payload parsers shared with core judges. |
 | `internal/trajectory` | Per-row trajectory recorder fed to judges. |
 | `go-sdk-common/v3` (`ldcontext`, `ldvalue`) | Event contexts and payload values. |
 | `golang.org/x/text` | Unicode case folding for the tool key collision check. |

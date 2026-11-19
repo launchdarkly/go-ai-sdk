@@ -666,12 +666,24 @@ func (r *runState) runJudge(ctx context.Context, g *genResult, j *Judge) *critRe
 	if err != nil {
 		return res.fail(causeHandlerRaised, err.Error()) // errorMessage equals the error message
 	}
-	raw, reasoning, err := judging.ParseVerdict(hr.Output)
+	entries, err := judging.TypesafeEntries(hr.Output)
 	if err != nil {
 		return res.fail(causeInvalidJudgeOutput, err.Error())
 	}
-	if reasoning == "" {
-		return res.fail(causeInvalidJudgeOutput, "judge response has no reasoning")
+	var raw any
+	var reasoning string
+	if entries != nil {
+		// A criterion event is one score: the first label's. Its key is the
+		// reason, since a label has no prose verdict and an empty reason is dropped.
+		raw, reasoning = entries[0].Score, entries[0].Key
+	} else {
+		raw, reasoning, err = judging.ParseVerdict(hr.Output)
+		if err != nil {
+			return res.fail(causeInvalidJudgeOutput, err.Error())
+		}
+		if reasoning == "" {
+			return res.fail(causeInvalidJudgeOutput, "judge response has no reasoning")
+		}
 	}
 	score, ok := judgeScore(raw)
 	if !ok || score < 0 || score > 1 {

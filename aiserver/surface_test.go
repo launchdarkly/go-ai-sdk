@@ -21,7 +21,7 @@ var rootSurface = []string{
 	"GraphEdge", "GraphNode", "GraphOptions", "GraphResponse", "GraphStreamEvent", "HandlerRequest",
 	"HandlerResult", "HandlerStreamEvent", "ImageSource", "InitClient", "InitOptions", "InitWithClient",
 	"InputDetails", "InspectConfig", "InspectResult", "InvokeFunc", "JudgeConfiguration", "JudgeRef",
-	"JudgeResult", "JudgeRunResult", "JudgeTask", "LDClient", "Message", "Mode", "ModeAgent", "ModeMessages",
+	"JudgeMetric", "JudgeResult", "JudgeRunResult", "JudgeTask", "LDClient", "Message", "Mode", "ModeAgent", "ModeMessages",
 	"Model", "NativeGraphRunner", "NativeTool", "NewCallOptions", "NewRegistry", "PackageName",
 	"PackageVersion", "ParseTemplate", "ProviderHandler", "ProviderResponse", "ProvidesFor", "Registry",
 	"RegistryEntries", "ResolveGraph", "RouteResult", "RunJudge", "RunNodeOptions", "SDKOptions", "SetLogger",

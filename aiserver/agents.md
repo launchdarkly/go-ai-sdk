@@ -11,7 +11,7 @@ handler packages they use.
 | File | Responsibility |
 |---|---|
 | `types.go` | Public value types: `AiConfig`, `Message`, `ProviderHandler`, `HandlerRequest`, `ToolHandler`, `TrackData`, results |
-| `parse.go` | `kitParseAiConfig` — variation validation incl. fail-closed `skills` refs |
+| `parse.go` | `kitParseAiConfig` — variation validation incl. fail-closed `skills` refs; a non-empty `classifiers` list stands in for instructions or messages |
 | `errors.go` | Exported sentinel errors for `errors.Is` |
 | `utils.go` | `ParseTemplate`, `kitParseUsage`, `kitNormalizeMode` |
 | `registry.go` | `Registry`, `Compose`, handler/tool resolution |
@@ -27,7 +27,7 @@ handler packages they use.
 | `capture.go` | `Configure`, `SDKOptions`, `ContentCapture`, `ErrConfigureLocked`; binds a handler's capture setting per call |
 
 Internal packages: `internal/trajectory`, `internal/judging`
-(judge message history and verdict parsing), `internal/bridge` (shutdown hooks and
+(judge message history, verdict and TypeSafe payload parsing), `internal/bridge` (shutdown hooks and
 the shared logger, used by `skills`, the experimental entry point and handler
 packages), `internal/telemetry` (the content gate's state and per-call binding, GenAI chat/tool content writers, span-attribute and
 span-counter bindings, tracer flush), `internal/sdkapi` (handler-package entry
@@ -63,7 +63,7 @@ ProviderHandler, ProvidesFor, Mode, ModeMessages, ModeAgent,
 CreateHandler, InvokeFunc, StreamFunc, HandlerRequest,
 HandlerResult, HandlerStreamEvent, ToolHandler, ToolFunc, NativeTool, ToolResultString
 // judges
-RunJudge, JudgeTask, JudgeResult, JudgeRunResult
+RunJudge, JudgeTask, JudgeResult, JudgeRunResult, JudgeMetric
 // registry, utils, telemetry
 Registry, RegistryEntries, NewRegistry, Compose, ParseTemplate, WithConversationID,
 ConversationIDSpanProcessor, Track, PackageName, PackageVersion
@@ -101,6 +101,12 @@ ConversationIDSpanProcessor, Track, PackageName, PackageVersion
 6. Run judges inline, or build `JudgeTasks` when `SkipJudges`. A judge's own
    `outputFormat` is dropped (warned once at resolution; `RunJudge` also drops it
    from older tasks), since the verdict is always `{score, reasoning}`.
+   A TypeSafe payload (`judging.TypesafeEntries`, `{"kind": "typesafe"}`) is read
+   first: one result per label keyed `<judge>.<label>`, each with the call's full
+   usage, tracked on its own `eventKey` with that key as `judgeConfigKey`; the
+   span gets one evaluation event per label and the first label's attributes
+   (`judgeScope.record` mirrors only the first). Deferred: `RunJudge` returns
+   `Results` / `Metrics` and the first label at the top level, and tracks nothing.
 
 ### Content capture
 

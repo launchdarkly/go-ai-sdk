@@ -82,6 +82,10 @@ if !res.Passed { os.Exit(1) }
 | `PollInterval` / `PollTimeout` | Summary polling (default 2s / 3m; 0 means the default). Large datasets need a longer timeout. |
 | `PollIntervalExact` / `PollTimeoutExact` | Optional `*time.Duration` overrides used as given, so `new(time.Duration(0))` is a real zero (no wait between polls; one poll before the deadline). When set, they replace `PollInterval` / `PollTimeout`. A negative value in any of the four fields is rejected, even when the other field of the pair is set. |
 
+A TypeSafe judge (a config with `classifiers`) returns several labels from one call; its criterion
+event is one score, the first label's, with that label's key as the reason. A malformed TypeSafe
+payload makes the criterion `ERROR` with a message naming the missing field.
+
 The SDK never computes a verdict: it reports scores, and LaunchDarkly rules on them against the
 thresholds pinned on the evaluation. Once the run's rows are all accounted for and the summary
 reports a criterion with a pass rate threshold, `Run` reads the run's `Verdict` (waiting up to 30s

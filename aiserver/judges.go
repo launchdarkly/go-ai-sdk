@@ -133,7 +133,7 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 			effective = collapseMessages(jcfg)
 		}
 		history := judging.BuildMessageHistory(a.userInput, a.trajectory, a.output)
-		err := withJudgeEvaluation(ctx, j.Key, a.parentTD, func(ctx context.Context, record func(float64, string)) error {
+		err := withJudgeEvaluation(ctx, j.Key, a.parentTD, func(ctx context.Context, record func(string, float64, string)) error {
 			res, err := executeAndTrack(ctx, execArgs{
 				configKey: j.Key, config: effective, meta: jmeta, value: jvalue, userCtx: a.userCtx, handler: h,
 				userInput: a.output, graphKey: a.graphKey,
@@ -144,6 +144,24 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 			if err != nil {
 				return err
 			}
+			entries, terr := judging.TypesafeEntries(res.Output)
+			if terr != nil {
+				sdkLogger().Error("judge returned invalid output", "judge", j.Key, "error", terr)
+				return nil
+			}
+			// One TypeSafe call: every label gets the call's full usage and is
+			// tracked on its own eventKey, never on evaluationMetricKey.
+			for _, e := range entries {
+				key := j.Key + "." + e.Key
+				results[key] = JudgeResult{Score: e.Score, Response: e.Reason, Usage: res.Usage, EventKey: e.EventKey}
+				record(key, e.Score, judgeExplanation(h, e.Reason))
+				td := a.parentTD
+				td.JudgeConfigKey = key
+				track(e.EventKey, a.userCtx, td, e.Score)
+			}
+			if entries != nil {
+				return nil
+			}
 			rawScore, reasoning, perr := judging.ParseVerdict(res.Output)
 			score, numeric := judging.NumericScore(rawScore)
 			if perr != nil || !numeric {
@@ -151,11 +169,7 @@ func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error)
 				return nil
 			}
 			results[j.Key] = JudgeResult{Score: score, Response: reasoning, Usage: res.Usage}
-			explanation := ""
-			if h.CaptureContent.enabled() {
-				explanation = reasoning
-			}
-			record(score, explanation)
+			record("", score, judgeExplanation(h, reasoning))
 			if jcfg.EvaluationMetricKey != "" {
 				td := a.parentTD
 				td.JudgeConfigKey = j.Key
@@ -215,13 +229,40 @@ func buildJudgeTasks(ctx context.Context, a judgeArgs) ([]JudgeTask, error) {
 	return tasks, nil
 }
 
+// judgeExplanation is the reason, or "" when h does not capture content.
+func judgeExplanation(h *ProviderHandler, reason string) string {
+	if h.CaptureContent.enabled() {
+		return reason
+	}
+	return ""
+}
+
 // JudgeRunResult is a deferred judge's verdict. TrackData has
 // judgeConfigKey merged in, ready for Track on the caller's goroutine.
+//
+// For a multi-label (TypeSafe) judge, Score, Response, EventKey and
+// TrackData.JudgeConfigKey are the first label's. Track each entry of
+// Metrics, not those top-level fields and not evaluationMetricKey.
 type JudgeRunResult struct {
 	Score     float64
 	Response  string
 	Usage     TokenUsage
 	TrackData TrackData
+	// EventKey is the first label's metric; "" for a classic judge.
+	EventKey string
+	// Results holds one result per label, keyed `<judge key>.<label key>`;
+	// nil for a classic judge.
+	Results map[string]JudgeResult
+	// Metrics holds one LaunchDarkly metric per label; nil for a classic judge.
+	Metrics []JudgeMetric
+}
+
+// JudgeMetric is one label's metric from a multi-label judge: track Score
+// under EventKey with JudgeConfigKey in the track data.
+type JudgeMetric struct {
+	EventKey       string  `json:"eventKey"`
+	Score          float64 `json:"score"`
+	JudgeConfigKey string  `json:"judgeConfigKey"`
 }
 
 // RunJudge executes a deferred judge task with an explicit handler list and
@@ -257,7 +298,7 @@ func RunJudge(ctx context.Context, task JudgeTask, handlers []*ProviderHandler) 
 	vars["input"] = task.UserInput // always present, "" when there is none
 
 	var out *JudgeRunResult
-	err := withJudgeEvaluation(ctx, task.ConfigKey, task.ParentTrackData, func(ctx context.Context, record func(float64, string)) error {
+	err := withJudgeEvaluation(ctx, task.ConfigKey, task.ParentTrackData, func(ctx context.Context, record func(string, float64, string)) error {
 		res, err := executeAndTrack(ctx, execArgs{
 			configKey: task.ConfigKey, config: cfg, meta: task.JudgeMeta, value: task.JudgeValue, userCtx: task.UserContext,
 			handler: h, userInput: task.ActualOutput, variables: vars,
@@ -265,18 +306,31 @@ func RunJudge(ctx context.Context, task JudgeTask, handlers []*ProviderHandler) 
 		if err != nil {
 			return err
 		}
+		// The score belongs to the evaluated (parent) config, exactly as in the inline path.
+		td := task.ParentTrackData
+		entries, terr := judging.TypesafeEntries(res.Output)
+		if terr != nil {
+			return nil
+		}
+		if entries != nil {
+			first := entries[0]
+			td.JudgeConfigKey = task.ConfigKey + "." + first.Key
+			out = &JudgeRunResult{Score: first.Score, Response: first.Reason, Usage: res.Usage, TrackData: td,
+				EventKey: first.EventKey, Results: map[string]JudgeResult{}}
+			for _, e := range entries {
+				key := task.ConfigKey + "." + e.Key
+				out.Results[key] = JudgeResult{Score: e.Score, Response: e.Reason, Usage: res.Usage, EventKey: e.EventKey}
+				out.Metrics = append(out.Metrics, JudgeMetric{EventKey: e.EventKey, Score: e.Score, JudgeConfigKey: key})
+				record(key, e.Score, judgeExplanation(h, e.Reason))
+			}
+			return nil
+		}
 		rawScore, reasoning, perr := judging.ParseVerdict(res.Output)
 		score, numeric := judging.NumericScore(rawScore)
 		if perr != nil || !numeric {
 			return nil
 		}
-		explanation := ""
-		if h.CaptureContent.enabled() {
-			explanation = reasoning
-		}
-		record(score, explanation)
-		// The score belongs to the evaluated (parent) config, exactly as in the inline path.
-		td := task.ParentTrackData
+		record("", score, judgeExplanation(h, reasoning))
 		td.JudgeConfigKey = task.ConfigKey
 		out = &JudgeRunResult{Score: score, Response: reasoning, Usage: res.Usage, TrackData: td}
 		return nil
