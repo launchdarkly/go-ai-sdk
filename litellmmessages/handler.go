@@ -135,7 +135,7 @@ func proxyClient(opts Options) (*openai.Client, error) {
 		key = "not-needed" // openai-go requires a key; an open proxy ignores it
 	}
 	reqOpts := []option.RequestOption{
-		option.WithBaseURL(base), option.WithAPIKey(key),
+		option.WithBaseURL(base),
 		option.WithHeaderDel("OpenAI-Organization"), option.WithHeaderDel("OpenAI-Project"),
 	}
 	for _, line := range strings.Split(os.Getenv("OPENAI_CUSTOM_HEADERS"), "\n") {
@@ -143,6 +143,9 @@ func proxyClient(opts Options) (*openai.Client, error) {
 			reqOpts = append(reqOpts, option.WithHeaderDel(strings.TrimSpace(name)))
 		}
 	}
+	// The key goes after the deletes: an Authorization entry in
+	// OPENAI_CUSTOM_HEADERS would otherwise drop it.
+	reqOpts = append(reqOpts, option.WithAPIKey(key))
 	if opts.MaxRetries != nil {
 		reqOpts = append(reqOpts, option.WithMaxRetries(*opts.MaxRetries))
 	}
