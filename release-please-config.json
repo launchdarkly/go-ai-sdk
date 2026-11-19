@@ -16,7 +16,8 @@
         "langchainagents/handler.go",
         "langchainmessages/handler.go",
         "openaiagents/handler.go",
-        "openaimessages/handler.go"
+        "openaimessages/handler.go",
+        "typesafe/handler.go"
       ],
       "exclude-paths": [
         ".github"
