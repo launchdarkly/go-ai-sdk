@@ -13,6 +13,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/claudeagents"
 	"github.com/launchdarkly/go-ai-sdk/langchainagents"
+	"github.com/launchdarkly/go-ai-sdk/litellmmessages"
 	"github.com/launchdarkly/go-ai-sdk/openaiagents"
 )
 
@@ -43,6 +44,18 @@ func openaiOnly(ctx context.Context, key, input string) error {
 			"fetch-launchdarkly-documentation": aiserver.ToolFunc(fetchLDDocumentation),
 		},
 	})
+	if err != nil {
+		return err
+	}
+	printJSON(resp)
+	return writeOutput(resp)
+}
+
+// litellmMessages demonstrates litellmMessages: any provider's messages
+// config sent through a LiteLLM proxy (LITELLM_BASE_URL, LITELLM_API_KEY),
+// with no registry.
+func litellmMessages(ctx context.Context, key, input string) error {
+	resp, err := litellmmessages.LiteLLMMessages(ctx, key, input, newContext(), nil)
 	if err != nil {
 		return err
 	}

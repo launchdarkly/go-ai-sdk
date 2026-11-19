@@ -11,8 +11,6 @@ export LD_SDK_KEY=<your server-side SDK key>
 export OPENAI_API_KEY=... ANTHROPIC_API_KEY=...   # whichever providers your AI Configs use
 # For Bedrock configs, set the usual AWS credentials (AWS_PROFILE or AWS_ACCESS_KEY_ID /
 # AWS_SECRET_ACCESS_KEY, AWS_REGION) or AWS_BEARER_TOKEN_BEDROCK.
-# To send messages configs through a LiteLLM proxy instead of the LangChain fallback:
-# export LITELLM_BASE_URL=http://localhost:4000 LITELLM_API_KEY=...
 go run ./examples <scenario> <flag-key> "<user input>"
 ```
 
@@ -27,6 +25,7 @@ LaunchDarkly), `OTEL_EXPORTER_OTLP_ENDPOINT`, `LD_SERVICE_NAME`,
 | `conversation` | several turns under one `gen_ai.conversation.id`, inline judge scores on stderr | same |
 | `streaming` | `Config().Stream` | same |
 | `openai-only` | `openaiagents.OpenAIAgents` with its own tools, no registry | `launch-darkly-documentation-summarizer-open-ai-only` |
+| `litellm-messages` | `litellmmessages.LiteLLMMessages` through a LiteLLM proxy (`LITELLM_BASE_URL`, optional `LITELLM_API_KEY`), no registry; the proxy routes the config's model name | `launch-darkly-documentation-summarizer-messages` |
 | `judge` | `SkipJudges` → `JudgeTasks` → `RunJudge` on goroutines, with four verification checks | `launch-darkly-documentation-summarizer` |
 | `graph` | `Graph().Invoke` | `travel-agent-flow` |
 | `graph-streaming` | `Graph().Stream` built inside a conversation scope and iterated after it; text on stdout, `[node_start]` / `[node_done]` / `[handoff]` on stderr; no JSON file | `travel-agent-flow` |
@@ -47,7 +46,7 @@ no official LangChain for Go); with a missing or disabled graph flag it exits 1 
 | File | Purpose |
 |---|---|
 | `main.go` | Scenario dispatch, client init and shutdown, exit codes |
-| `register.go` | Builds the `registry` every scenario uses from every handler and tool (`web-search` → `claudeagents.ClaudeWebSearch`; `langchainagents` as the `{*, agent}` fallback; `litellmmessages` as the `{*, messages}` fallback when `LITELLM_BASE_URL` is set, else `langchainmessages`) |
+| `register.go` | Builds the `registry` every scenario uses from every handler and tool (`web-search` → `claudeagents.ClaudeWebSearch`; `langchainagents` as the `{*, agent}` fallback) |
 | `tools.go` | Tool implementations, keyed exactly as the flag variations name them |
 | `scenarios.go` | One function per scenario |
 | `utils.go` | `newContext`, `newMultiContext`, `newConversationID`, `writeOutput` (→ `output/`), `solidColorPNGBase64` |
