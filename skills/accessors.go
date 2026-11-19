@@ -20,6 +20,11 @@ import (
 // WriteSkills with pruning would delete the dropped skill's files.
 func SkillRefs(config *aiserver.AiConfig) ([]SkillReference, error) {
 	handlerkit.ReportUsage("client.skillRefs", "", "")
+	return skillRefs(config)
+}
+
+// skillRefs is SkillRefs without the usage event, for ConfigSkills' reads.
+func skillRefs(config *aiserver.AiConfig) ([]SkillReference, error) {
 	if config == nil {
 		return nil, invalidArg("SkillRefs was given a nil AI Config. A failed InspectConfig returns a nil " +
 			"Config; handle that before deriving skill references, because an empty list passed to " +

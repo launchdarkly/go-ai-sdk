@@ -5,8 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
+	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
+	"github.com/launchdarkly/go-server-sdk/v7/interfaces"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/skills"
@@ -78,6 +83,42 @@ func usageRows(ctx context.Context, fail bool) []struct {
 			_, w, err := skills.WatchAllSkills(ctx, t.TempDir(), nil)
 			return closeW(w, err)
 		}},
+		{"client.writeSkills", func(t *testing.T) error {
+			_, err := skills.WriteSkillsFrom(ctx, source(t, fail), t.TempDir(), wopts)
+			return err
+		}},
+		{"client.watchSkills", func(t *testing.T) error {
+			_, w, err := skills.WatchSkillsFrom(ctx, source(t, fail), t.TempDir(), nil)
+			return closeW(w, err)
+		}},
+	}
+}
+
+// source is a hand-built SkillSource answering skill "a"; with fail set it
+// is the zero SkillSource, which every call refuses.
+func source(t *testing.T, fail bool) skills.SkillSource {
+	t.Helper()
+	if fail {
+		return skills.SkillSource{}
+	}
+	src, err := skills.NewSkillSource(func(context.Context) ([]skills.SkillReference, error) {
+		return []skills.SkillReference{skills.NewSkillReference("a", 1)}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return src
+}
+
+// ConfigSkills reports client.configSkills when it is called, an invalid key
+// included, and building a source by hand reports nothing.
+func TestConfigSkillsUsageAtCallTime(t *testing.T) {
+	fake, _ := freshClient(t)
+	_ = skills.ConfigSkills("agent", ldcontext.New("u"))
+	_ = skills.ConfigSkills("", ldcontext.New("u"))
+	_ = source(t, false)
+	if got := fake.usage(); !slices.Equal(got, []string{"client.configSkills"}) {
+		t.Fatalf("usage events %v", got)
 	}
 }
 
@@ -208,6 +249,108 @@ func TestSkillsInternalCallsDoNotReport(t *testing.T) {
 		}
 		defer store.Close()
 		if got := fake.usage(); len(got) != 0 {
+			t.Fatalf("usage events %v", got)
+		}
+	})
+}
+
+// pinsSkillA is an enabled AI Config that pins skill a@1, so a read of a
+// ConfigSkills source gets as far as the config's skills list.
+var pinsSkillA = ldvalue.CopyArbitraryValue(map[string]any{
+	"_ldMeta": map[string]any{"enabled": true, "variationKey": "v1"},
+	"skills":  []any{map[string]any{"key": "a", "version": 1}},
+})
+
+// trackedUsageLD adds a change signal to usageFakeLD, so WatchSkillsFrom can
+// follow a ConfigSkills source.
+type trackedUsageLD struct {
+	*usageFakeLD
+	tracker *closingTracker
+}
+
+func (f trackedUsageLD) GetFlagTracker() interfaces.FlagTracker { return f.tracker }
+func (trackedUsageLD) IsOffline() bool                          { return false }
+
+// closingTracker never fires; it closes a listener's channel on removal, as
+// the base SDK does.
+type closingTracker struct {
+	mu  sync.Mutex
+	chs []chan interfaces.FlagChangeEvent
+}
+
+func (c *closingTracker) AddFlagChangeListener() <-chan interfaces.FlagChangeEvent {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ch := make(chan interfaces.FlagChangeEvent)
+	c.chs = append(c.chs, ch)
+	return ch
+}
+
+func (c *closingTracker) RemoveFlagChangeListener(l <-chan interfaces.FlagChangeEvent) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i, ch := range c.chs {
+		if (<-chan interfaces.FlagChangeEvent)(ch) == l {
+			close(ch)
+			c.chs = slices.Delete(c.chs, i, i+1)
+			return
+		}
+	}
+}
+
+func (*closingTracker) AddFlagValueChangeListener(string, ldcontext.Context, ldvalue.Value) <-chan interfaces.FlagValueChangeEvent {
+	return make(chan interfaces.FlagValueChangeEvent)
+}
+func (*closingTracker) RemoveFlagValueChangeListener(<-chan interfaces.FlagValueChangeEvent) {}
+
+// A ConfigSkills source is read without the public SkillRefs: writing or
+// watching from it reports client.writeSkills or client.watchSkills, and its
+// reads, a re-reconcile's included, report nothing.
+func TestConfigSkillsSourceReadsReportNothing(t *testing.T) {
+	ctx := context.Background()
+	t.Run("writeSkills", func(t *testing.T) {
+		fake, _ := freshClient(t)
+		fake.value = pinsSkillA
+		src := skills.ConfigSkills("agent", ldcontext.New("u"))
+		for range 2 {
+			r, err := skills.WriteSkillsFrom(ctx, src, t.TempDir(), nil)
+			if err != nil || !r.OK() {
+				t.Fatalf("the read did not reach the skills list: %v %v", r.Errors(), err)
+			}
+		}
+		if got := fake.usage(); !slices.Equal(got, []string{"client.configSkills", "client.writeSkills"}) {
+			t.Fatalf("usage events %v", got)
+		}
+	})
+	t.Run("watchSkills and a re-reconcile", func(t *testing.T) {
+		_ = aiserver.Shutdown(ctx)
+		fake := &usageFakeLD{value: pinsSkillA}
+		if _, err := aiserver.InitWithClient(ctx, trackedUsageLD{fake, &closingTracker{}}, aiserver.InitOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = aiserver.Shutdown(ctx) })
+		skills.SetSkillStore(skills.NewInMemorySkillStore(map[string]any{"a": validRaw("a", 1, "a1")}))
+		src := skills.ConfigSkills("agent", ldcontext.New("u"))
+		reports := make(chan skills.ReconcileReport, 1)
+		initial, w, err := skills.WatchSkillsFrom(ctx, src, t.TempDir(), &skills.WatchSkillsOptions{
+			Debounce: 10 * time.Millisecond, OnReconcile: func(r skills.ReconcileReport) { reports <- r }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer w.Close()
+		if !initial.OK() {
+			t.Fatalf("the initial read did not reach the skills list: %v", initial.Errors())
+		}
+		w.Notify()
+		select {
+		case r := <-reports:
+			if !r.OK() {
+				t.Fatalf("the re-reconcile's read did not reach the skills list: %v", r.Errors())
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("no re-reconcile")
+		}
+		if got := fake.usage(); !slices.Equal(got, []string{"client.configSkills", "client.watchSkills"}) {
 			t.Fatalf("usage events %v", got)
 		}
 	})

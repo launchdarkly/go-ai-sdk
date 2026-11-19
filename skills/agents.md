@@ -17,12 +17,13 @@ before any argument or store check, so a failing call still reports. The IDs mat
 | `client.getSkillResult` | `GetSkillResult` |
 | `client.getSkills` | `GetSkills` |
 | `client.skillRefs` | `SkillRefs` |
-| `client.writeSkills` | `WriteSkills`, `WriteAllSkills` |
-| `client.watchSkills` | `WatchSkills`, `WatchAllSkills` |
+| `client.writeSkills` | `WriteSkills`, `WriteAllSkills`, `WriteSkillsFrom` |
+| `client.watchSkills` | `WatchSkills`, `WatchAllSkills`, `WatchSkillsFrom` |
+| `client.configSkills` | `ConfigSkills` (at call time, not on a read) |
 
 No helper calls another: the watcher's initial and later reconciles run the unexported
-`writeSkills`, `WriteSkills` resolves through `resolveFromStore` and raw objects, and the accessors
-share `resolveFromStore`. Keep it that way, or call a non-reporting version. `SetSkillStore`, the
+`writeSkills`, `WriteSkills` resolves through `resolveFromStore` and raw objects, the accessors
+share `resolveFromStore`, and a `ConfigSkills` read uses the unexported `skillRefs`. Keep it that way, or call a non-reporting version. `SetSkillStore`, the
 store constructors and methods, and the watcher's methods report nothing. `usage_test.go` checks the
 helpers, the watcher's reconciles, `SetSkillStore` and the constructors.
 
@@ -39,6 +40,7 @@ helpers, the watcher's reconciles, `SetSkillStore` and the constructors.
 | `safefs_unix.go` | Descriptor-pinned primitives on `golang.org/x/sys/unix` and the `fsOps` interception hooks. |
 | `fdv2_reader.go`, `fdv2_store.go` | Pure FDv2 protocol reader; transport (HTTP, SSE, backoff, lifecycle). Standard library only. |
 | `watch.go` | Watcher goroutine: trailing debounce, context cancellation, detach on close. |
+| `source.go` | `SkillSource`, `ConfigSkills` classification, `WriteSkillsFrom` / `WatchSkillsFrom`, `Notify`, the config-change listener. |
 
 ```go
 // skills exports
@@ -52,6 +54,7 @@ ErrNoSkillStore ErrInvalidArgument ErrSkillsUnavailable ErrStoreNotWatchable Err
 ErrStoreClosed ErrUnsupportedPlatform NewSkillReference NewSkill NewSkillOutcome NewListener
 NewInMemorySkillStore NewLaunchDarklySkillStore SetSkillStore SkillRefs GetSkill GetSkillResult
 GetSkills AllSkills WriteSkills WriteAllSkills WatchSkills WatchAllSkills
+SkillSource ErrInvalidSkillSource NewSkillSource ConfigSkills WriteSkillsFrom WatchSkillsFrom
 ```
 
 **Lifecycle.** `aiserver.InitClient` is not required for skills; a store is configured with `SetSkillStore`
@@ -90,6 +93,12 @@ keys and hashes are shape-checked and redacted before reaching any signal or rec
 - Tests that touch `fsOps`, the umask or module state must not run in parallel.
 - `NewLaunchDarklySkillStore` reads `LD_BASE_URI` / `LD_STREAM_URI` when no URI option is set. A
   test that asserts a default host clears both first (`clearEndpointEnv`).
+- **A `SkillSource` read is a failed read unless it answers a non-nil slice of valid references.**
+  A nil slice is not "no skills"; that is `[]SkillReference{}`. A failed read goes down
+  `unavailableRun` (never a prune). With timeout 0, `refs` is not called.
+- **The config listener drains its channel until `RemoveFlagChangeListener` closes it.** The
+  base SDK sends while holding its broadcaster lock (the channel buffers 10), so a listener that
+  stopped reading early would block flag delivery once the buffer fills, and `detach` would deadlock. It only calls `notify`.
 - `StoreDiagnostics.ObjectsRevoked` moves only at `payload-transferred`; `deleteObject` never
   counts, so an abandoned or declined transfer counts nothing.
 

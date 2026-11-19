@@ -46,13 +46,18 @@ type track struct {
 	data  map[string]any
 }
 
+// usageFakeLD records usage events. value, when set, is the answer to every
+// variation; otherwise it answers null.
 type usageFakeLD struct {
 	mu     sync.Mutex
 	tracks []track
+	value  ldvalue.Value
 }
 
 func (f *usageFakeLD) JSONVariation(string, ldcontext.Context, ldvalue.Value) (ldvalue.Value, error) {
-	return ldvalue.Null(), nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.value, nil
 }
 func (f *usageFakeLD) TrackMetric(event string, _ ldcontext.Context, _ float64, data ldvalue.Value) error {
 	var d map[string]any

@@ -45,54 +45,88 @@ func waitDone(t *testing.T, w *SkillWatcher) {
 	}
 }
 
+type watchEntry func(t *testing.T, ctx context.Context, root string, opts *WatchSkillsOptions) (ReconcileReport, *SkillWatcher, error)
+
+// watchEntryPoints runs the general watcher rules through "*" and through a
+// SkillSource (no config keys, so no client is needed) answering keys.
+func watchEntryPoints(keys ...SkillKey) map[string]watchEntry {
+	return map[string]watchEntry{
+		"WatchSkills": func(_ *testing.T, ctx context.Context, root string, opts *WatchSkillsOptions) (ReconcileReport, *SkillWatcher, error) {
+			if len(keys) == 0 {
+				return WatchAllSkills(ctx, root, opts)
+			}
+			return WatchSkills(ctx, keys, root, opts)
+		},
+		"WatchSkillsFrom": func(t *testing.T, ctx context.Context, root string, opts *WatchSkillsOptions) (ReconcileReport, *SkillWatcher, error) {
+			refs := make([]SkillReference, 0, len(keys))
+			for _, k := range keys {
+				refs = append(refs, NewSkillReference(string(k), 1))
+			}
+			return WatchSkillsFrom(ctx, newSource(t, fixed(refs...)), root, opts)
+		},
+	}
+}
+
 func TestWatchRequiresAWatchableStore(t *testing.T) {
-	_, _ = setup(t)
-	root := t.TempDir()
-	if _, _, err := WatchAllSkills(context.Background(), root, nil); !errors.Is(err, ErrNoSkillStore) {
-		t.Fatalf("no store: %v", err)
-	}
-	SetSkillStore(&funcStore{})
-	_, _, err := WatchAllSkills(context.Background(), root, nil)
-	if !errors.Is(err, ErrStoreNotWatchable) || !strings.Contains(err.Error(), "WriteSkills") || !strings.Contains(err.Error(), "LaunchDarklySkillStore") {
-		t.Fatalf("store without AddListener: %v", err)
-	}
-	SetSkillStore(NewInMemorySkillStore(nil))
-	if _, _, err := WatchAllSkills(context.Background(), root, &WatchSkillsOptions{Debounce: -time.Millisecond}); !errors.Is(err, ErrInvalidArgument) {
-		t.Fatalf("negative debounce: %v", err)
+	for name, watch := range watchEntryPoints() {
+		t.Run(name, func(t *testing.T) {
+			_, _ = setup(t)
+			root := t.TempDir()
+			if _, _, err := watch(t, context.Background(), root, nil); !errors.Is(err, ErrNoSkillStore) {
+				t.Fatalf("no store: %v", err)
+			}
+			SetSkillStore(&funcStore{})
+			_, _, err := watch(t, context.Background(), root, nil)
+			if !errors.Is(err, ErrStoreNotWatchable) || !strings.Contains(err.Error(), "WriteSkills") || !strings.Contains(err.Error(), "LaunchDarklySkillStore") {
+				t.Fatalf("store without AddListener: %v", err)
+			}
+			SetSkillStore(NewInMemorySkillStore(nil))
+			if _, _, err := watch(t, context.Background(), root, &WatchSkillsOptions{Debounce: -time.Millisecond}); !errors.Is(err, ErrInvalidArgument) {
+				t.Fatalf("negative debounce: %v", err)
+			}
+		})
 	}
 }
 
 func TestWatchInitialReconcileRunsOnTheCaller(t *testing.T) {
-	_, _ = setup(t)
-	store := &countingStore{InMemorySkillStore: NewInMemorySkillStore(nil)}
-	SetSkillStore(store)
-	_, _, err := WatchAllSkills(context.Background(), filepath.Join(t.TempDir(), "x", "y"), nil)
-	if !errors.Is(err, ErrInvalidArgument) {
-		t.Fatalf("a bad root must fail WatchSkills itself: %v", err)
-	}
-	if store.removed != 1 {
-		t.Fatal("a failed start must detach its listener")
+	for name, watch := range watchEntryPoints() {
+		t.Run(name, func(t *testing.T) {
+			_, _ = setup(t)
+			store := &countingStore{InMemorySkillStore: NewInMemorySkillStore(nil)}
+			SetSkillStore(store)
+			_, _, err := watch(t, context.Background(), filepath.Join(t.TempDir(), "x", "y"), nil)
+			if !errors.Is(err, ErrInvalidArgument) {
+				t.Fatalf("a bad root must fail the watch call itself: %v", err)
+			}
+			if store.removed != 1 {
+				t.Fatal("a failed start must detach its listener")
+			}
+		})
 	}
 }
 
 // Every WriteSkills argument means the same thing: one case driven
 // through both gives the same report.
 func TestWatchPassesArgumentsThrough(t *testing.T) {
-	_, _ = setup(t)
-	SetSkillStore(NewInMemorySkillStore(map[string]any{"a": rawSkill("a", 1, "a")}))
-	opts := WriteSkillsOptions{NoPrune: true}
-	direct, watched := t.TempDir(), t.TempDir()
-	for _, root := range []string{direct, watched} {
-		mustWrite(t, []Skill{skillOf("stale", 1, "s")}, root, nil)
-	}
-	want := mustWrite(t, []SkillKey{"a"}, direct, &opts)
-	got, w, err := WatchSkills(context.Background(), []SkillKey{"a"}, watched, &WatchSkillsOptions{WriteSkillsOptions: opts})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer w.Close()
-	if !slices.Equal(actionKinds(got), actionKinds(want)) {
-		t.Fatalf("watched %v, direct %v", actionKinds(got), actionKinds(want))
+	for name, watch := range watchEntryPoints("a") {
+		t.Run(name, func(t *testing.T) {
+			_, _ = setup(t)
+			SetSkillStore(NewInMemorySkillStore(map[string]any{"a": rawSkill("a", 1, "a")}))
+			opts := WriteSkillsOptions{NoPrune: true}
+			direct, watched := t.TempDir(), t.TempDir()
+			for _, root := range []string{direct, watched} {
+				mustWrite(t, []Skill{skillOf("stale", 1, "s")}, root, nil)
+			}
+			want := mustWrite(t, []SkillKey{"a"}, direct, &opts)
+			got, w, err := watch(t, context.Background(), watched, &WatchSkillsOptions{WriteSkillsOptions: opts})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer w.Close()
+			if !slices.Equal(actionKinds(got), actionKinds(want)) {
+				t.Fatalf("watched %v, direct %v", actionKinds(got), actionKinds(want))
+			}
+		})
 	}
 }
 

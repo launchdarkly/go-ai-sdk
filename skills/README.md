@@ -36,12 +36,50 @@ A skill revoked in LaunchDarkly is removed from disk within the debounce window 
 
 ## The skills one AI Config uses
 
+`ConfigSkills` is the form to use under a watcher: it evaluates the AI Config on every reconcile,
+so a config that moves a skill to a new version, or stops referencing one, reaches disk.
+
 ```go
-res := aiserver.InspectConfig(ctx, "my-agent", ldcontext.New("user-1"))
-refs, err := skills.SkillRefs(res.Config) // an error, never [], when the config failed to resolve
-if err != nil { return err }
-report, err := skills.WriteSkills(refs, "/etc/agent/skills", nil)
+// After aiserver.InitClient (ConfigSkills never initializes the client) and SetSkillStore.
+src := skills.ConfigSkills("my-agent", ldcontext.New("user-1"))
+report, watcher, err := skills.WatchSkillsFrom(ctx, src, "/etc/agent/skills", nil)
+if err != nil { log.Fatal(err) }
+defer watcher.Close()
 ```
+
+Each read is a real evaluation (one per reconcile, bounded by the debounce) with a null default.
+No client, an evaluation error, the default, or a malformed `skills` list is a failed read: the
+reconcile reports a run-level `error` and changes nothing on disk. A disabled variation answers no
+skills, so they leave disk. The watcher follows changes to the config key through the LaunchDarkly
+client's flag-change signal; with no client, an offline client, or a client without
+`GetFlagTracker`, `WatchSkillsFrom` returns `ErrStoreNotWatchable`. Under daemon mode
+(`ldcomponents.ExternalUpdatesOnly()`) the client's flag-change signal never fires, and no check
+can detect that, so the watcher follows skill-store changes and `Notify` only.
+
+For a one-shot write at boot, `skills.WriteSkillsFrom(ctx, src, root, nil)` reads the source once.
+`SkillRefs(aiserver.InspectConfig(...).Config)` with `WriteSkills` is also safe at boot, but do
+not hand that list to `WatchSkills`: it is fixed, so the watcher never sees the config change.
+
+Which changes in LaunchDarkly reach disk depends on what the watcher was given:
+
+| Change in LaunchDarkly | `WatchAllSkills` | `WatchSkills` (fixed list) | `WatchSkillsFrom` |
+| --- | --- | --- | --- |
+| A skill is deleted (possible only once nothing pins it) | pruned | stays on disk, reported `error` on every run | already pruned, when the config stopped referencing it |
+| A config moves `pdf-extraction` v2 → v3 | unaffected: `"*"` already follows the newest version | v2 stays on disk, reported `error`; v3 is never written | v3 replaces v2 |
+| A config stops referencing a skill | unaffected: `"*"` asks for the whole library | stays on disk | pruned |
+
+### Your own source
+
+```go
+src, err := skills.NewSkillSource(func(ctx context.Context) ([]skills.SkillReference, error) {
+	return lookUpRefs(ctx) // honour ctx: it carries the reconcile's timeout
+}, "planner", "researcher") // the AI Config keys whose changes trigger a read; may be empty
+```
+
+Return `[]skills.SkillReference{}` for "no skills" (it prunes). A nil slice, an error, or an entry
+with an invalid key or a version below 1 is a failed read, so a bug in the source cannot prune
+everything. With no config keys, the watcher needs no client: it re-reads on store changes and
+when you call `watcher.Notify()`, which goes through the same debounce.
 
 ## Read content without touching disk
 
@@ -72,6 +110,11 @@ wire objects (`key`, `version`, `content`, `contentHash`, optional `name`, `desc
 | `WriteSkills(skills, root, *WriteSkillsOptions)` | `ReconcileReport, error` | Any slice of `Skill`, `*Skill`, `SkillReference`, `SkillKey` (or mixed `[]SkillInput`). |
 | `WriteAllSkills(root, *WriteSkillsOptions)` | `ReconcileReport, error` | Every skill the store holds (the `"*"` key). |
 | `WatchSkills` / `WatchAllSkills(ctx, …, *WatchSkillsOptions)` | `ReconcileReport, *SkillWatcher, error` | Needs a store with `AddListener`; stops on `Close` or when `ctx` is done. |
+| `ConfigSkills(key, ldcontext.Context)` | `SkillSource` | The skills one AI Config pins for one context, evaluated on every read. A blank key gives a source every call refuses. |
+| `NewSkillSource(refs, configKeys...)` | `SkillSource, error` | A nil `refs` or a blank key is `ErrInvalidSkillSource` (wraps `ErrInvalidArgument`). |
+| `WriteSkillsFrom(ctx, SkillSource, root, *WriteSkillsOptions)` | `ReconcileReport, error` | Reads the source once, within `Timeout`; a failed read is unavailable retrieval. |
+| `WatchSkillsFrom(ctx, SkillSource, root, *WatchSkillsOptions)` | `ReconcileReport, *SkillWatcher, error` | Reads the source on every store change, config-key change and `Notify`. |
+| `(*SkillWatcher).Notify()` | — | Schedules a reconcile through the debounce; a no-op after `Close`. |
 | `NewLaunchDarklySkillStore(sdkKey, *LaunchDarklySkillStoreOptions)` | `*LaunchDarklySkillStore, error` | `Start`, `WaitForSkills`, `IsInitialized`, `Failed`, `Diagnostics`, `Close` (final). |
 
 - `WriteSkillsOptions`: `NoPrune` (pruning is on by default), `Timeout *time.Duration` (nil = 10s,

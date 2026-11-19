@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/launchdarkly/go-server-sdk/v7/interfaces"
+
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 )
 
@@ -54,6 +56,8 @@ type SkillWatcher struct {
 
 	mu         sync.Mutex
 	registered bool
+	tracker    interfaces.FlagTracker // set when a SkillSource follows config keys
+	flagCh     <-chan interfaces.FlagChangeEvent
 }
 
 // WatchSkills reconciles now, then again whenever delivery changes, so a
@@ -117,11 +121,20 @@ func watchSkills(ctx context.Context, sel selection, root string, opts *WatchSki
 		return ReconcileReport{}, nil, fmt.Errorf("%w: %w", ErrStoreNotWatchable, err)
 	}
 	w.registered = true
-	report, err := writeSkills(sel, root, &w.opts)
-	if err != nil {
+	fail := func(err error) (ReconcileReport, *SkillWatcher, error) {
 		w.detach()
 		close(w.done)
 		return ReconcileReport{}, nil, err
+	}
+	// Also before the initial reconcile, for the same reason.
+	if sel.src != nil && len(sel.src.configKeys) > 0 {
+		if err := w.followConfig(sel.src.configKeys); err != nil {
+			return fail(err)
+		}
+	}
+	report, err := writeSkills(sel, root, &w.opts)
+	if err != nil {
+		return fail(err)
 	}
 	w.started.Store(true)
 	go w.run(ctx)
@@ -214,8 +227,12 @@ func (w *SkillWatcher) detach() {
 		return
 	}
 	w.registered = false
+	tracker, ch := w.tracker, w.flagCh
 	w.mu.Unlock()
 	if r, ok := w.store.(ListenerRemover); ok {
 		r.RemoveListener(skillObjectKind, w.listener)
+	}
+	if tracker != nil {
+		tracker.RemoveFlagChangeListener(ch)
 	}
 }

@@ -13,7 +13,8 @@ import (
 // skillsSurface pins the exported names of package skills.
 // A new or removed name fails here, so it shows in review.
 var skillsSurface = []string{
-	"ActionError", "ActionRemoved", "ActionSkippedCurrent", "ActionUpdated", "ActionWritten", "AllSkills",
+	"ActionError", "ActionRemoved", "ActionSkippedCurrent", "ActionUpdated", "ActionWritten", "AllSkills", "ConfigSkills", "ErrInvalidSkillSource", "NewSkillSource",
+	"SkillSource", "WatchSkillsFrom", "WriteSkillsFrom",
 	"ErrInvalidArgument", "ErrNoSkillStore", "ErrSkillsUnavailable", "ErrStoreClosed", "ErrStoreNotWatchable",
 	"ErrUnsupportedKind", "ErrUnsupportedPlatform", "GetSkill", "GetSkillResult", "GetSkills",
 	"InMemorySkillStore", "InitializationProber", "LaunchDarklySkillStore", "LaunchDarklySkillStoreMode",
