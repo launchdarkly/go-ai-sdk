@@ -97,7 +97,13 @@ Convenience wrapper (one call, handler built for you):
 
 ```go
 res, err := litellmmessages.LiteLLMMessages(ctx, "my-ai-config", "Hello", ldcontext.New("user-123"),
-	&litellmmessages.InvokeOptions{Handler: litellmmessages.Options{BaseURL: "http://localhost:4000"}})
+	&litellmmessages.InvokeOptions{
+		Handler: litellmmessages.Options{BaseURL: "http://localhost:4000"},
+		ToolHandlers: map[string]aiserver.ToolHandler{
+			"search-ld-documentation": aiserver.ToolFunc(searchDocs),
+		},
+		Variables: map[string]any{"user_input": "Hello"},
+	})
 ```
 
 ## Environment variables

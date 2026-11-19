@@ -126,3 +126,10 @@ func truncate(s string, n int, suffix string) string {
 	}
 	return s
 }
+
+// webSearch is a stub for function-tool handlers; a messages handler does not
+// offer claudeagents.ClaudeWebSearch, which is an Anthropic built-in.
+func webSearch(_ context.Context, args map[string]any) (any, error) {
+	query, _ := args["query"].(string)
+	return fmt.Sprintf("Search results for %q: (stub - wire up a real search provider)", query), nil
+}

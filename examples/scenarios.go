@@ -53,9 +53,18 @@ func openaiOnly(ctx context.Context, key, input string) error {
 
 // litellmMessages demonstrates litellmMessages: any provider's messages
 // config sent through a LiteLLM proxy (LITELLM_BASE_URL, LITELLM_API_KEY),
-// with no registry.
+// with its own tools, a user_input variable and no registry.
 func litellmMessages(ctx context.Context, key, input string) error {
-	resp, err := litellmmessages.LiteLLMMessages(ctx, key, input, newContext(), nil)
+	resp, err := litellmmessages.LiteLLMMessages(ctx, key, input, newContext(), &litellmmessages.InvokeOptions{
+		ToolHandlers: map[string]aiserver.ToolHandler{
+			"get-user-preferences":             aiserver.ToolFunc(getPreferences),
+			"search-ld-documentation":          aiserver.ToolFunc(searchLDDocumentation),
+			"fetch-ld-documentation":           aiserver.ToolFunc(fetchLDDocumentation),
+			"fetch-launchdarkly-documentation": aiserver.ToolFunc(fetchLDDocumentation),
+			"web-search":                       aiserver.ToolFunc(webSearch),
+		},
+		Variables: map[string]any{"user_input": input},
+	})
 	if err != nil {
 		return err
 	}
