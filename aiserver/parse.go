@@ -31,7 +31,8 @@ func kitParseAiConfig(raw any) (AiConfig, error) {
 	}
 	_, hasInstructions := obj["instructions"].(string)
 	msgs, isArr := obj["messages"].([]any)
-	if !hasInstructions && len(msgs) == 0 {
+	classifiers, _ := obj["classifiers"].([]any)
+	if !hasInstructions && len(msgs) == 0 && len(classifiers) == 0 {
 		return AiConfig{}, errorf("AiConfig must have either instructions or a non-empty messages array")
 	}
 	if isArr {

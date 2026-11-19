@@ -25,7 +25,7 @@ LaunchDarkly), `OTEL_EXPORTER_OTLP_ENDPOINT`, `LD_SERVICE_NAME`,
 | `conversation` | several turns under one `gen_ai.conversation.id`, inline judge scores on stderr | same |
 | `streaming` | `Config().Stream` | same |
 | `openai-only` | `openaiagents.OpenAIAgents` with its own tools, no registry | `launch-darkly-documentation-summarizer-open-ai-only` |
-| `judge` | `SkipJudges` → `JudgeTasks` → `RunJudge` on goroutines, with four verification checks | `launch-darkly-documentation-summarizer` |
+| `judge` | `SkipJudges` → `JudgeTasks` → `RunJudge` on goroutines (tracks each `Metrics` entry for a TypeSafe judge), with four verification checks | `launch-darkly-documentation-summarizer` |
 | `graph` | `Graph().Invoke` | `travel-agent-flow` |
 | `graph-streaming` | `Graph().Stream` built inside a conversation scope and iterated after it; text on stdout, `[node_start]` / `[node_done]` / `[handoff]` on stderr; no JSON file | `travel-agent-flow` |
 | `graph-history` | `Graph().Invoke` with a generated image in history, two shapes; fails unless both answers name the colour | `travel-agent-flow` |

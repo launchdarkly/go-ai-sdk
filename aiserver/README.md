@@ -222,6 +222,28 @@ already produced; a judge's provider failure is returned. A judge always
 returns `{score, reasoning}`, so a judge config's own `outputFormat` is
 dropped with a warning.
 
+A TypeSafe judge (a config with `classifiers` and no instructions or messages)
+asks every question in one call and returns
+`{"kind": "typesafe", "results": [{key, eventKey, score, reason}, ...]}`. Inline,
+each label becomes its own `JudgeResults["<judge>.<label>"]` entry with the
+call's full usage and its `EventKey`, and is tracked on that `eventKey` (never on
+`evaluationMetricKey`). The judge span carries one `gen_ai.evaluation.result`
+event per label, and its attributes are the first label's. `RunJudge` fills
+`Results` and `Metrics`, and its top-level `Score`, `Response`, `EventKey` and
+`TrackData.JudgeConfigKey` are the first label's; track each entry of `Metrics`:
+
+```go
+for _, m := range res.Metrics {
+	td := res.TrackData
+	td.JudgeConfigKey = m.JudgeConfigKey
+	aiserver.Track(m.EventKey, user, td, m.Score)
+}
+```
+
+A TypeSafe payload that is malformed (no results, or a result without a key,
+a finite score or an eventKey) is logged and skipped inline, and `RunJudge`
+returns `(nil, nil)`.
+
 ## Development
 
 ```bash
