@@ -452,3 +452,16 @@ func TestCancellation(t *testing.T) {
 		t.Errorf("err = %v after %v, want context.DeadlineExceeded promptly", err, time.Since(start))
 	}
 }
+
+// A Retry-After that is not a usable delay (infinite, NaN, too large for a
+// time.Duration) falls back to the backoff; surrounding whitespace is ignored.
+func TestRetryDelayBounds(t *testing.T) {
+	for _, h := range []string{"+Inf", "Inf", "NaN", "1e300", "9223372037"} {
+		if d := retryDelay(0, h); d <= 0 || d > 5*time.Second {
+			t.Errorf("retryDelay(0, %q) = %v, want the 0.5 s backoff", h, d)
+		}
+	}
+	if d := retryDelay(0, " 2 "); d != 2*time.Second {
+		t.Errorf("retryDelay(0, %q) = %v, want 2s", " 2 ", d)
+	}
+}

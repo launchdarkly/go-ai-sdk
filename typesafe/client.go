@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand/v2"
 	"net/http"
 	"os"
@@ -112,7 +113,9 @@ func retryable(status int) bool {
 // retryDelay is Retry-After (seconds or an HTTP date) when present, else the
 // official SDKs' backoff: 0.5 s doubling to 5 s, with 25 % jitter.
 func retryDelay(attempt int, retryAfter string) time.Duration {
-	if s, err := strconv.ParseFloat(retryAfter, 64); err == nil && s >= 0 {
+	retryAfter = strings.TrimSpace(retryAfter)
+	// The upper bound rejects +Inf and values that overflow a time.Duration; NaN fails both checks.
+	if s, err := strconv.ParseFloat(retryAfter, 64); err == nil && s >= 0 && s < float64(math.MaxInt64/int64(time.Second)) {
 		return time.Duration(s * float64(time.Second))
 	}
 	if at, err := http.ParseTime(retryAfter); err == nil {
