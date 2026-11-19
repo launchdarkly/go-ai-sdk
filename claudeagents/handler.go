@@ -180,7 +180,8 @@ type toolset struct {
 // buildTools offers config tools that have a handler: a ToolFunc as a
 // custom tool, a NativeTool as its Anthropic server tool or as a
 // host-executed function tool under its Claude Code name. Extra tools (graph
-// sub-agents) are appended. The caller closes ts.ws.
+// sub-agents, the Skill tool) are appended; one whose name a config tool
+// already uses fails the run. The caller closes ts.ws.
 func buildTools(cfg aiserver.AiConfig, handlers map[string]aiserver.ToolHandler, extra []localTool, workDir string) (toolset, error) {
 	ts := toolset{local: map[string]aiserver.ToolFunc{}, soft: map[string]bool{}, natives: map[string]*aiserver.NativeTool{}, host: map[string]*aiserver.NativeTool{}}
 	for _, key := range slices.Sorted(maps.Keys(cfg.Tools)) {
@@ -208,6 +209,9 @@ func buildTools(cfg aiserver.AiConfig, handlers map[string]aiserver.ToolHandler,
 		}
 	}
 	for _, x := range extra {
+		if ts.local[x.name] != nil || ts.host[x.name] != nil {
+			return toolset{}, fmt.Errorf("claudeagents: tool name %q is used by both a config tool and a handler tool", x.name)
+		}
 		ts.params = append(ts.params, x.param)
 		ts.local[x.name] = x.fn
 		ts.soft[x.name] = x.soft

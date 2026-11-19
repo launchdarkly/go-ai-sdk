@@ -817,6 +817,20 @@ func TestSkillToolIsTheOnlyTool(t *testing.T) {
 	}
 }
 
+// A config function tool named Skill would be shadowed by the Skill tool,
+// so the run fails before any model request, as a built-in clash does.
+func TestSkillToolNameClash(t *testing.T) {
+	e := setup(t, nil, textResp("done", 1, 1))
+	skillStore(t)
+	c := skillsCfg([]ref{{"a", 1}})
+	c.Tools = map[string]aiserver.Tool{"Skill": {Name: "Skill", Parameters: map[string]any{}}}
+	err := run(e.skillsHandler(t, t.TempDir()), "invoke", aiserver.HandlerRequest{Config: c, UserInput: "q",
+		ToolHandlers: map[string]aiserver.ToolHandler{"Skill": aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) { return "", nil })}})
+	if err == nil || !strings.Contains(err.Error(), `"Skill"`) || len(e.api.reqs()) != 0 {
+		t.Errorf("err = %v, %d model requests, want a name clash error and none", err, len(e.api.reqs()))
+	}
+}
+
 // The handler owns the tool list: model.parameters.tools does not replace
 // or extend it, and Skill is still offered last.
 func TestSkillsParameterToolsIgnored(t *testing.T) {
