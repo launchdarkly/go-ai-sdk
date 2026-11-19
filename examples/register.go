@@ -13,6 +13,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/langchainmessages"
 	"github.com/launchdarkly/go-ai-sdk/openaiagents"
 	"github.com/launchdarkly/go-ai-sdk/openaimessages"
+	"github.com/launchdarkly/go-ai-sdk/typesafe"
 )
 
 // exampleTools are keyed exactly as the LaunchDarkly flag variations name
@@ -51,5 +52,7 @@ func register() {
 	// Bedrock handlers need an AWS configuration; they are skipped when none loads.
 	add("bedrock-messages")(bedrockmessages.NewHandler(bedrockmessages.Options{}))
 	add("bedrock-agents")(bedrockagents.NewHandler(bedrockagents.Options{}))
+	// TypeSafe judges; reads TYPESAFE_API_KEY when a judge runs.
+	add("typesafe")(typesafe.NewHandler(typesafe.Options{}))
 	registry = aiserver.NewRegistry(aiserver.RegistryEntries{Handlers: handlers, Tools: exampleTools})
 }

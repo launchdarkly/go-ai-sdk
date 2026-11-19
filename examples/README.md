@@ -9,6 +9,7 @@ command at them. Not a test suite: nothing asserts automatically except `graph-h
 ```bash
 export LD_SDK_KEY=<your server-side SDK key>
 export OPENAI_API_KEY=... ANTHROPIC_API_KEY=...   # whichever providers your AI Configs use
+export TYPESAFE_API_KEY=...   # for TypeSafe judges
 # For Bedrock configs, set the usual AWS credentials (AWS_PROFILE or AWS_ACCESS_KEY_ID /
 # AWS_SECRET_ACCESS_KEY, AWS_REGION) or AWS_BEARER_TOKEN_BEDROCK.
 go run ./examples <scenario> <flag-key> "<user input>"
