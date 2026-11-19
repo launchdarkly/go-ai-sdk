@@ -74,21 +74,20 @@ var gatewayCreators = map[string]string{
 // providerCreators maps every LaunchDarkly AI Config provider, keyed by
 // normalised name, to its Gateway creator. An empty value means the provider
 // hosts models from several creators, or its own models are not in the
-// Gateway catalog, so the creator must come from the model.
+// Gateway catalog, so the creator must come from the model. Providers in
+// notServed are absent: they never have a creator.
 var providerCreators = map[string]string{
 	"anthropic":   "anthropic",
 	"openai":      "openai",
 	"bedrock":     "",
 	"azure":       "openai",
 	"gemini":      "google",
-	"ai21labs":    "",
 	"cohere":      "cohere",
 	"cortex":      "",
 	"cursor":      "",
 	"databricks":  "",
 	"deepseek":    "deepseek",
 	"fireworksai": "",
-	"ibmwatson":   "",
 	"meta":        "meta",
 	"mistral":     "mistral",
 	"perplexity":  "perplexity",

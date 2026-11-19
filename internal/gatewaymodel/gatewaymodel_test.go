@@ -128,6 +128,12 @@ func TestDottedSegments(t *testing.T) {
 	wantID(t, config("OpenAI", "anthropic"), "openai/anthropic")
 }
 
+// The first creator segment wins and the rest stay in the model, as in
+// model-id.ts:98-103 and model_id.py:102-107 (scan left to right, return).
+func TestFirstCreatorSegmentWins(t *testing.T) {
+	wantID(t, config("Bedrock", "openai.anthropic.x"), "openai/anthropic.x")
+}
+
 func TestFailsForBedrockWithoutKnownCreator(t *testing.T) {
 	wantError(t, config("Bedrock", "custom-model"), ErrMultipleCreators, `"custom-model"`)
 }
