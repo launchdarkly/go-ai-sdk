@@ -184,4 +184,4 @@ Behavior:
 - Usage is returned as `input_tokens` / `output_tokens` summed over all turns. `prompt_tokens`
   already includes cached tokens.
 - Spans: `gen_ai.system` is `litellm`; `gen_ai.provider.name` is the config's provider in lower
-  case, else `litellm`.
+  case (`aws.bedrock` for Bedrock), else `litellm`.

@@ -6,6 +6,7 @@
 package litellmmessages
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/openaiwire"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 const (
@@ -201,13 +203,10 @@ func requestModel(cfg aiserver.AiConfig) string {
 	return name
 }
 
-// providerName is gen_ai.provider.name: the config provider in lower case,
-// else litellm.
+// providerName is gen_ai.provider.name: the config provider in lower case
+// ("aws.bedrock" for Bedrock), else litellm.
 func providerName(cfg aiserver.AiConfig) string {
-	if cfg.Provider.Name == "" {
-		return system
-	}
-	return strings.ToLower(cfg.Provider.Name)
+	return telemetry.ProviderName(cmp.Or(cfg.Provider.Name, system))
 }
 
 // forwardedParameters are the config.model.parameters keys forwarded: settings
