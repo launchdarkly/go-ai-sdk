@@ -26,6 +26,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 	"github.com/launchdarkly/go-ai-sdk/internal/sdkapi"
+	"github.com/launchdarkly/go-ai-sdk/internal/telemetry"
 )
 
 const (
@@ -181,12 +182,12 @@ type agentHandler struct {
 }
 
 // spanOptions is the root span identity: the configured provider as
-// gen_ai.provider.name (lowercased, "litellm" when unset) and the model id
-// sent to the proxy.
+// gen_ai.provider.name ("aws.bedrock" for Bedrock, else lowercased, "litellm"
+// when unset) and the model id sent to the proxy.
 func spanOptions(cfg aiserver.AiConfig) kitbase.HandlerSpanOptions {
 	return kitbase.HandlerSpanOptions{
 		Tracer: PackageName, Name: SpanName, System: system, Operation: operation,
-		RequestModel: requestModel(cfg), ProviderName: strings.ToLower(cmp.Or(cfg.Provider.Name, system)),
+		RequestModel: requestModel(cfg), ProviderName: telemetry.ProviderName(cmp.Or(cfg.Provider.Name, system)),
 	}
 }
 

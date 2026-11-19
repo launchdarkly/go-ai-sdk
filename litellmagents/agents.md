@@ -66,7 +66,7 @@ func (*NativeGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
   tool-call messages, `role: tool` results) and resends it every turn, across handoffs.
 
 Handler spans: root `invoke_agent` (blocking and streaming), `gen_ai.system = litellm`,
-`gen_ai.provider.name` = the lowercased provider or `litellm`, one `chat <sent model id>` child
+`gen_ai.provider.name` = the lowercased provider (`aws.bedrock` for Bedrock) or `litellm`, one `chat <sent model id>` child
 per turn and one `execute_tool <name>` child per tool call.
 
 Native graph: the same structure and events as `openaiagents.ToOpenAIAgents` (see its

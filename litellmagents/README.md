@@ -182,7 +182,7 @@ Behavior:
   handoff, the target's instructions replace the system message.
 - Usage is `input_tokens` / `output_tokens` summed over every turn (input already includes cached
   tokens). Streaming requests usage in the final chunk.
-- `gen_ai.provider.name` is the configured provider, lowercased, or `litellm` when unset.
+- `gen_ai.provider.name` is the configured provider, lowercased (`aws.bedrock` for Bedrock), or `litellm` when unset.
 
 ## Differences from the JavaScript package
 
