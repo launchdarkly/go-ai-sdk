@@ -145,7 +145,8 @@ type TokenUsage struct {
 	InputDetails *InputDetails `json:"inputDetails,omitempty"`
 }
 
-// TrackData is the payload on every `$ld:ai:*` event.
+// TrackData is the payload on every `$ld:ai:*` event (and on a shadow run's
+// `$ld:ai-shadow:*` events).
 type TrackData struct {
 	RunID          string `json:"runId"`
 	ConfigKey      string `json:"configKey"`
@@ -162,9 +163,13 @@ type TrackData struct {
 	extra          *extraTrackData
 }
 
-// extraTrackData holds fields merged into every event's data. A pointer
-// keeps TrackData comparable.
-type extraTrackData struct{ fields map[string]any }
+// extraTrackData holds fields merged into every event's data and, for a
+// shadow run, marks its events for the shadow namespace. A pointer keeps
+// TrackData comparable.
+type extraTrackData struct {
+	fields map[string]any
+	shadow bool // every event sent with this data goes on its bridge.ShadowEventKey
+}
 
 // ToolHandler is a value in a toolHandlers map: a ToolFunc or a NativeTool.
 type ToolHandler interface{ isToolHandler() }

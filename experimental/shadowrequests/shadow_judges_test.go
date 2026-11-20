@@ -14,7 +14,11 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 )
 
-const judgeMetric = "quality-score"
+const (
+	judgeMetric = "quality-score"
+	// shadowJudgeMetric is judgeMetric as a shadow's judge sends it.
+	shadowJudgeMetric = "$ld:ai-shadow:" + judgeMetric
+)
 
 var shadowFields = []string{"isShadow", "primaryVariationKey", "shadowRequestId", "ownerKind", "ownerId"}
 
@@ -110,7 +114,7 @@ func TestShadowJudgeScoresTheShadowResponse(t *testing.T) {
 	if req.UserInput != "shadow" || req.Variables["response_to_evaluate"] != "shadow" || req.Variables["input"] != "hello" {
 		t.Fatalf("judge saw input %q, variables %v", req.UserInput, req.Variables)
 	}
-	scores := f.metrics(judgeMetric)
+	scores := f.metrics(shadowJudgeMetric)
 	if len(scores) != 1 || scores[0].metric != 0.8 {
 		t.Fatalf("judge metrics %+v", scores)
 	}
@@ -119,8 +123,8 @@ func TestShadowJudgeScoresTheShadowResponse(t *testing.T) {
 		t.Fatalf("shadow judge metric data %v", d)
 	}
 	var shadowTD map[string]any
-	for _, e := range f.metrics("$ld:ai:generation:success") {
-		if e.data["isShadow"] == true {
+	for _, e := range f.metrics("$ld:ai-shadow:generation:success") {
+		if e.data["configKey"] == "cfg" {
 			shadowTD = e.data
 		}
 	}
@@ -141,20 +145,20 @@ func TestServedJudgeEventsCarryNoShadowField(t *testing.T) {
 	f := installJudged(t, 1, true)
 	j := newJudged()
 	invokeAndWait(t, mustShadow(t, j.handlers(), ShadowOptions{}))
-	scores := f.metrics(judgeMetric)
-	if len(scores) != 2 {
-		t.Fatalf("judge metrics %d, want one for A and one for B", len(scores))
+	scores := append(f.metrics(judgeMetric), f.metrics(shadowJudgeMetric)...)
+	if len(f.metrics(judgeMetric)) != 1 || len(scores) != 2 {
+		t.Fatalf("judge metrics %+v, want one for A on %s and one for B on %s", scores, judgeMetric, shadowJudgeMetric)
 	}
 	var served, shadow int
 	for _, s := range scores {
-		if s.data["variationKey"] == "gpt-main" {
+		if s.event == judgeMetric && s.data["variationKey"] == "gpt-main" {
 			served++
 			for _, k := range shadowFields {
 				if _, ok := s.data[k]; ok {
 					t.Errorf("A's judge event carries %s", k)
 				}
 			}
-		} else if s.data["isShadow"] == true && s.data["variationKey"] == "claude-candidate" {
+		} else if s.event == shadowJudgeMetric && s.data["isShadow"] == true && s.data["variationKey"] == "claude-candidate" {
 			shadow++
 		}
 	}
@@ -172,7 +176,7 @@ func TestShadowJudgeSamplingRate(t *testing.T) {
 		j := newJudged()
 		task := judgedTask(t, mustShadow(t, j.handlers(), ShadowOptions{}))
 		res := RunShadow(context.Background(), task, j.handlers())
-		if res.Error != "" || j.judge.count() != tc.calls || len(f.metrics(judgeMetric)) != tc.calls {
+		if res.Error != "" || j.judge.count() != tc.calls || len(f.metrics(shadowJudgeMetric)) != tc.calls {
 			t.Fatalf("rate %v: error %q, judge calls %d", tc.rate, res.Error, j.judge.count())
 		}
 		if (res.JudgeResults == nil) != (tc.calls == 0) {
@@ -196,7 +200,7 @@ func TestNoShadowJudgeWhenTheShadowFails(t *testing.T) {
 			set(j.b)
 			task := judgedTask(t, mustShadow(t, j.handlers(), ShadowOptions{Timeout: 30 * time.Millisecond}))
 			res := RunShadow(context.Background(), task, j.handlers())
-			if res.Error == "" || j.judge.count() != 0 || len(f.metrics(judgeMetric)) != 0 || res.JudgeResults != nil {
+			if res.Error == "" || j.judge.count() != 0 || len(f.metrics(shadowJudgeMetric)) != 0 || res.JudgeResults != nil {
 				t.Fatalf("error %q, judge calls %d, results %v", res.Error, j.judge.count(), res.JudgeResults)
 			}
 			if name == "timeout" && res.Error != "timeout" {
@@ -231,8 +235,8 @@ func TestAShadowJudgeFailureIsNotAShadowFailure(t *testing.T) {
 				t.Fatalf("error %q, results %v, judge calls %d", res.Error, res.JudgeResults, j.judge.count())
 			}
 			var shadowSuccess int
-			for _, e := range f.metrics("$ld:ai:generation:success") {
-				if e.data["isShadow"] == true {
+			for _, e := range f.metrics("$ld:ai-shadow:generation:success") {
+				if e.data["configKey"] == "cfg" {
 					shadowSuccess++
 				}
 			}
@@ -265,8 +269,8 @@ func TestSkipJudgesDoesNotSkipShadowJudges(t *testing.T) {
 	if len(resp.JudgeTasks) != 1 {
 		t.Fatalf("A's judge tasks %d", len(resp.JudgeTasks))
 	}
-	scores := f.metrics(judgeMetric)
-	if len(scores) != 1 || scores[0].data["isShadow"] != true {
+	scores := f.metrics(shadowJudgeMetric)
+	if len(scores) != 1 || scores[0].data["isShadow"] != true || len(f.metrics(judgeMetric)) != 0 {
 		t.Fatalf("judge metrics %+v", scores)
 	}
 }
@@ -290,7 +294,7 @@ func TestInvokeReturnsBeforeTheShadowJudgeRuns(t *testing.T) {
 }
 
 func TestBackgroundAndDeferredShadowJudgesAgree(t *testing.T) {
-	judgeEvents := func(f *shadowLD) []trackedEvent { return withoutRunID(f.metrics(judgeMetric)) }
+	judgeEvents := func(f *shadowLD) []trackedEvent { return withoutRunID(f.metrics(shadowJudgeMetric)) }
 	f := installJudged(t, 1, false)
 	j := newJudged()
 	invokeAndWait(t, mustShadow(t, j.handlers(), ShadowOptions{}))
@@ -366,11 +370,11 @@ func TestAFailingFirstShadowJudgeLeavesTheShadowResultIntact(t *testing.T) {
 			if len(res.JudgeResults) != 1 || res.JudgeResults["quality"].Score != 0.8 {
 				t.Fatalf("JudgeResults %+v", res.JudgeResults)
 			}
-			if len(f.metrics("boom-score")) != 0 || len(f.metrics(judgeMetric)) != 1 {
-				t.Fatalf("boom metrics %d, quality metrics %d", len(f.metrics("boom-score")), len(f.metrics(judgeMetric)))
+			if len(f.metrics("$ld:ai-shadow:boom-score")) != 0 || len(f.metrics(shadowJudgeMetric)) != 1 {
+				t.Fatalf("boom metrics %d, quality metrics %d", len(f.metrics("$ld:ai-shadow:boom-score")), len(f.metrics(shadowJudgeMetric)))
 			}
 			var boomErrors int
-			for _, e := range f.metrics("$ld:ai:generation:error") {
+			for _, e := range f.metrics("$ld:ai-shadow:generation:error") {
 				if e.data["configKey"] == "boom" {
 					boomErrors++
 				}
@@ -425,8 +429,8 @@ func TestShadowJudgesAfterAMidRunShutdownStartNoClient(t *testing.T) {
 				if _, err := aiserver.GetClient(); err == nil {
 					t.Fatal("a shadow judge after Shutdown created a client")
 				}
-				if len(f.metrics("boom-score")) != 0 || len(f.metrics(judgeMetric)) != 0 {
-					t.Fatalf("boom metrics %d, quality metrics %d", len(f.metrics("boom-score")), len(f.metrics(judgeMetric)))
+				if len(f.metrics("$ld:ai-shadow:boom-score")) != 0 || len(f.metrics(shadowJudgeMetric)) != 0 {
+					t.Fatalf("boom metrics %d, quality metrics %d", len(f.metrics("$ld:ai-shadow:boom-score")), len(f.metrics(shadowJudgeMetric)))
 				}
 				if _, ok := res.JudgeResults["quality"]; deferred && (res.Error != "" || ok) {
 					t.Fatalf("error %q, JudgeResults %+v", res.Error, res.JudgeResults)

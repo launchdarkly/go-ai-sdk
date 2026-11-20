@@ -28,6 +28,9 @@ func track(event string, ctx ldcontext.Context, td TrackData, metric float64) {
 	if err != nil {
 		return
 	}
+	if td.extra != nil && td.extra.shadow {
+		event = bridge.ShadowEventKey(event)
+	}
 	b, _ := json.Marshal(td)
 	data := ldvalue.Parse(b)
 	if td.extra != nil {
@@ -127,8 +130,8 @@ func (a execArgs) prepare() (TrackData, HandlerRequest, *trajectory.Recorder) {
 	if a.run.RunID != "" {
 		td.RunID = a.run.RunID
 	}
-	if len(a.run.TrackData) > 0 {
-		td.extra = &extraTrackData{maps.Clone(a.run.TrackData)}
+	if len(a.run.TrackData) > 0 || a.run.ShadowEvents {
+		td.extra = &extraTrackData{fields: maps.Clone(a.run.TrackData), shadow: a.run.ShadowEvents}
 	}
 	rec := trajectory.NewRecorder()
 	exposed := make(map[string]bool, len(a.config.Tools))

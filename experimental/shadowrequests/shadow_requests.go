@@ -35,8 +35,9 @@ import (
 // variation runs exactly as Config runs it. Once it succeeds, each sampled
 // shadow runs on the same input in the background, or is handed to OnTask
 // to run later with RunShadow. A shadow's response is discarded; it is
-// tracked on the normal $ld:ai:* events with isShadow. The shadow's judges
-// score its response first, and their scores are tracked under the shadow.
+// tracked on its own $ld:ai-shadow:* events, never on $ld:ai:*. The
+// shadow's judges score its response first, and their scores are tracked
+// under the shadow.
 //
 //	shadowed, err := shadowrequests.ShadowConfig(
 //		aiserver.ConfigArgs{Key: "my-ai-config", Handlers: handlers}, shadowrequests.ShadowOptions{})
@@ -450,6 +451,7 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 			return withDeadline(h, timeout)
 		},
 		LogJudgeErrors: true,
+		ShadowEvents:   true,
 	}).(*aiserver.AIConfig)
 	vars, _ := deepCopy(map[string]any(task.Variables)).(map[string]any)
 	resp, err := run.Invoke(ctx, task.UserInput, task.UserContext,

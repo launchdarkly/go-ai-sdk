@@ -8,6 +8,7 @@ import (
 	"context"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
@@ -47,6 +48,25 @@ type RunOptions struct {
 	// skipped, and the run still succeeds with the other judges' results. A
 	// panic is still tracked as the judge's failed generation.
 	LogJudgeErrors bool
+	// ShadowEvents true: every event the run sends, its judges' calls and
+	// scores included, goes on the key ShadowEventKey maps it to, and each
+	// judge call's own events also carry TrackData.
+	ShadowEvents bool
+}
+
+// ShadowEventPrefix is the namespace of every event a shadow run sends. It
+// is outside $ld:ai: so that nothing matching on $ld:ai: counts shadow
+// traffic.
+const ShadowEventPrefix = "$ld:ai-shadow:"
+
+// ShadowEventKey maps an event key to its shadow key: $ld:ai:<rest> becomes
+// $ld:ai-shadow:<rest>, a key already under $ld:ai-shadow: is unchanged, and
+// any other key (a custom judge metric) is prefixed with $ld:ai-shadow:.
+func ShadowEventKey(key string) string {
+	if strings.HasPrefix(key, ShadowEventPrefix) {
+		return key
+	}
+	return ShadowEventPrefix + strings.TrimPrefix(key, "$ld:ai:")
 }
 
 // ConversationID returns the conversation id bound on ctx, or "". Set by the
