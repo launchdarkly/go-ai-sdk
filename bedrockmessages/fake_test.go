@@ -19,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/launchdarkly/go-ai-sdk/internal/conndiag"
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
@@ -123,6 +124,7 @@ func newFakeBedrock(t *testing.T, replies ...reply) *fakeBedrock {
 	f := &fakeBedrock{replies: replies}
 	f.srv = httptest.NewTLSServer(f)
 	t.Cleanup(f.srv.Close)
+	conndiag.Install(t, f.srv.Client()) // on failure, logs who closed each connection
 	return f
 }
 
