@@ -34,8 +34,8 @@ func TestRegistry(t *testing.T) {
 	r.Register(RegistryEntries{Handlers: []*ProviderHandler{a2}, Tools: map[string]ToolHandler{"t": ToolFunc(nil)}})
 	r.Register(RegistryEntries{Tools: map[string]ToolHandler{"t": &NativeTool{ToolName: "X"}}})
 	hs := r.Handlers()
-	if len(hs) != 3 || hs[2] != a2 {
-		t.Fatalf("handlers = %v", hs)
+	if len(hs) != 3 || hs[0] != a2 {
+		t.Fatalf("handlers = %v, want a2 in a1's slot", hs)
 	}
 	if _, native := r.Tools()["t"].(*NativeTool); !native {
 		t.Error("duplicate tool did not replace")
@@ -49,8 +49,8 @@ func TestRegistry(t *testing.T) {
 	if len(r.Handlers()) != 3 || c == r {
 		t.Error("compose mutated input")
 	}
-	if got := c.Handlers(); got[len(got)-1] != a1 {
-		t.Error("b did not override a")
+	if got := c.Handlers(); len(got) != 3 || got[0] != a1 {
+		t.Error("b did not override a in place")
 	}
 
 	if resolveHandlers(NewRegistry(RegistryEntries{}), nil) != nil || resolveTools(NewRegistry(RegistryEntries{}), nil) != nil {

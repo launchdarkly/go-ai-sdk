@@ -65,8 +65,8 @@ func init() { handlerkit.RegisterAiSdkPackage(PackageName, PackageVersion) }
 // AI Config, so the model can see config.model.parameters and name.
 type ModelFactory func(cfg aiserver.AiConfig) (llms.Model, error)
 
-// Options configure NewHandler (the model to call plus
-// captureContent).
+// Options configure NewHandler: the model to call, content capture, and
+// an optional provider scope.
 type Options struct {
 	// Model is used for every call when set.
 	Model llms.Model
@@ -77,17 +77,31 @@ type Options struct {
 	// CaptureContent gates prompt, completion, tool and judge-explanation
 	// content on spans. CaptureDefault follows aiserver.Configure, else on.
 	CaptureContent aiserver.ContentCapture
+	// Providers scopes the "*" handler to these config.provider.name values
+	// (see aiserver.ProviderHandler.WithProviders). nil matches any provider.
+	// NewHandler refuses an empty list, a blank name or a padded name.
+	Providers []string
 }
 
 // NewHandler returns the LangChain agent handler
-// (createLangChainAgentsHandler).
-// It returns an error for an invalid option. No current option can be
-// invalid, so the error is nil for now.
+// (createLangChainAgentsHandler). It returns an error for an invalid option
+// (see Options.Providers).
 func NewHandler(opts Options) (*aiserver.ProviderHandler, error) {
 	handlerkit.ReportUsage("langchain-agents.createLangChainAgentsHandler", PackageName, PackageVersion)
-	return newHandler(opts), nil
+	return buildHandler(opts)
 }
 
+// buildHandler builds the handler without reporting usage, scoped to
+// opts.Providers when set.
+func buildHandler(opts Options) (*aiserver.ProviderHandler, error) {
+	ph := newHandler(opts)
+	if opts.Providers == nil {
+		return ph, nil
+	}
+	return ph.WithProviders(opts.Providers...)
+}
+
+// newHandler is the unscoped handler for opts.
 func newHandler(opts Options) *aiserver.ProviderHandler {
 	h := &handler{opts: opts}
 	return sdkapi.CreateHandler(providesFor, h.invoke, h.stream, opts.CaptureContent)
@@ -111,8 +125,12 @@ func LangChainAgents(ctx context.Context, configKey, userInput string, userCtx l
 	if opts == nil {
 		opts = &InvokeOptions{}
 	}
+	h, err := buildHandler(opts.Handler)
+	if err != nil {
+		return aiserver.ProviderResponse{}, err
+	}
 	return sdkapi.Config(aiserver.ConfigArgs{
-		Key: configKey, Handlers: []*aiserver.ProviderHandler{newHandler(opts.Handler)},
+		Key: configKey, Handlers: []*aiserver.ProviderHandler{h},
 		ToolHandlers: opts.ToolHandlers, Registry: opts.Registry, SkipJudges: opts.SkipJudges,
 	}).Invoke(ctx, userInput, userCtx, aiserver.WithVariables(opts.Variables))
 }

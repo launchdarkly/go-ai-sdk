@@ -2,6 +2,8 @@ package aiserver
 
 import (
 	"maps"
+	"slices"
+	"strings"
 	"sync"
 )
 
@@ -23,22 +25,23 @@ func NewRegistry(initial RegistryEntries) *Registry {
 	return r
 }
 
-// Register appends handlers and tools. A duplicate providesFor or tool key
-// logs a warning and the last one wins.
+// Register appends handlers and tools. A handler with the identity of one
+// already registered (ProvidesFor, plus the provider set on a "*" handler)
+// replaces it in its slot, and a duplicate tool key replaces that tool; each
+// logs a warning.
 func (r *Registry) Register(e RegistryEntries) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, h := range e.Handlers {
-		if !h.ProvidesFor.isZero() {
-			kept := r.handlers[:0:0]
-			for _, existing := range r.handlers {
-				if existing.ProvidesFor.Provider == h.ProvidesFor.Provider && handlerMode(existing) == handlerMode(h) {
-					sdkLogger().Warn("multiple handlers registered; the last one will be used", "provider", h.ProvidesFor.Provider, "mode", h.ProvidesFor.Mode)
-					continue
-				}
-				kept = append(kept, existing)
+		if i := r.index(h); i >= 0 {
+			args := []any{"provider", h.ProvidesFor.Provider, "mode", h.ProvidesFor.Mode}
+			if isWildcard(h) && h.Providers != nil {
+				args = append(args, "providers", strings.Join(providerSet(h.Providers), ","))
 			}
-			r.handlers = kept
+			sdkLogger().Warn("multiple handlers registered; the last one will be used", args...)
+			// In place: position breaks ties between wildcards.
+			r.handlers[i] = h
+			continue
 		}
 		r.handlers = append(r.handlers, h)
 	}
@@ -48,6 +51,15 @@ func (r *Registry) Register(e RegistryEntries) {
 		}
 		r.tools[k] = fn
 	}
+}
+
+// index is the slot of the handler with h's identity, or -1. A handler with
+// no ProvidesFor has no identity.
+func (r *Registry) index(h *ProviderHandler) int {
+	if h.ProvidesFor.isZero() {
+		return -1
+	}
+	return slices.IndexFunc(r.handlers, func(e *ProviderHandler) bool { return !e.ProvidesFor.isZero() && sameIdentity(e, h) })
 }
 
 func (r *Registry) Handlers() []*ProviderHandler {

@@ -35,6 +35,7 @@ func init() {
 	bridge.ParseAiConfig = kitParseAiConfig
 	bridge.TrackGraphEvent = kitTrackGraphEvent
 	bridge.SelectHandler = kitSelectHandler
+	bridge.SameHandlerIdentity = sameIdentity
 	bridge.ImageURL = kitImageURL
 	bridge.ContentText = kitContentText
 	bridge.NodeTrackData = (*GraphNode).trackData

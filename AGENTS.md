@@ -37,6 +37,7 @@ type ProviderHandler struct {
 	CaptureContent ContentCapture // CaptureOn / CaptureOff; CaptureDefault follows Configure, else on
 	Invoke         InvokeFunc  // func(ctx, HandlerRequest) (HandlerResult, error)
 	Stream         StreamFunc  // optional: func(ctx, HandlerRequest) iter.Seq2[HandlerStreamEvent, error]
+	Providers      []string    // optional: scopes a "*" handler to these provider names (WithProviders); nil = any
 }
 
 type HandlerRequest struct {
