@@ -77,10 +77,12 @@ while the store reports it has not initialized yet warns without using that up. 
 is added and nothing is logged. These reads report no usage event.
 
 The merge runs once per resolution. The node configs of `aiserver.ResolveGraph` (`GraphNode.Config`)
-include their skills' tools, so native graph adapters use them as they are and do not read the
-skills again. Core marks a config it has merged, so merging that config again changes nothing,
-reads no skill and logs no conflict warning. `aiserver.InspectConfig` returns only the variation's own tools, and judges, shadow
-runs and evaluations never get skill tools.
+include their skills' tools. Core marks a config it has merged, and merging a marked config again
+changes nothing, reads no skill and logs no conflict warning. The native graph adapters
+(`openaiagents`, `claudeagents`, `langchainagents`) always run each node's config through the same
+merge, so a `GraphNode.Config` you replace with an unmerged config still gets its skills' tools,
+and a merged one is offered as it is. `aiserver.InspectConfig` returns only the variation's own
+tools, and judges, shadow runs and evaluations never get skill tools.
 
 A malformed entry (not an object, no string `name`, `type` not `"function"`, no object `parameters`,
 or a repeated `name`) is dropped with one warning per process naming the skill and the tool. A tool

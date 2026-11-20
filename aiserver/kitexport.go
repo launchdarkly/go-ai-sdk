@@ -41,4 +41,5 @@ func init() {
 	bridge.GraphTrackData = func(d *GraphDefinition) TrackData { return d.trackData }
 	bridge.GraphUserContext = func(d *GraphDefinition) ldcontext.Context { return d.userCtx }
 	bridge.TrackNativeTool = (*NativeTool).trackCall
+	bridge.MergeSkillTools = withSkillTools
 }

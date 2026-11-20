@@ -159,6 +159,11 @@ var GraphUserContext any
 // TrackNativeTool is func(*aiserver.NativeTool).
 var TrackNativeTool any
 
+// MergeSkillTools is func(configKey string, cfg aiserver.AiConfig)
+// aiserver.AiConfig: core's skill tool merge, which native graph adapters
+// call on every node config. A config it has merged is returned unchanged.
+var MergeSkillTools any
+
 // SkillTools is func(key string, version int) []aiserver.Tool: the tools of
 // one attached skill, or nil when it cannot be resolved. Set by the skills
 // package at init, so it is nil unless skills is linked in; the core asserts

@@ -61,6 +61,12 @@ var (
 	ParseUsage, _ = bridge.ParseUsage.(func(map[string]any) aiserver.TokenUsage)
 	// NormalizeMode maps a variation mode to a handler mode.
 	NormalizeMode, _ = bridge.NormalizeMode.(func(string) aiserver.Mode)
+	// MergeSkillTools adds the tools of the skills cfg attaches to cfg.Tools.
+	// Native graph adapters call it on every node config and never decide for
+	// themselves whether to merge: a config core has already merged (every
+	// ResolveGraph node) is returned unchanged, reading no skill and logging
+	// nothing, and an unmerged one is merged.
+	MergeSkillTools, _ = bridge.MergeSkillTools.(func(configKey string, cfg aiserver.AiConfig) aiserver.AiConfig)
 	// ParseAiConfig validates and converts a decoded variation.
 	ParseAiConfig, _ = bridge.ParseAiConfig.(func(any) (aiserver.AiConfig, error))
 	// TrackGraphEvent sends a $ld:ai:graph:* event with td merged with extra.
