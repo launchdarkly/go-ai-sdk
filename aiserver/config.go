@@ -176,6 +176,21 @@ func resolveOutputFormat(raw any, outputFormat map[string]any) any {
 	return s // best effort
 }
 
+// wrapHandler applies the run's WrapHandler to h, the handler that runs the
+// config. Judges keep the unwrapped handlers. A non-nil WrapHandler of any
+// other type is an internal programming error, so it panics rather than
+// silently dropping the wrapper (for a shadow, its deadline).
+func (c *AIConfig) wrapHandler(h *ProviderHandler) *ProviderHandler {
+	if c.opts.WrapHandler == nil {
+		return h
+	}
+	wrap, ok := c.opts.WrapHandler.(func(*ProviderHandler) *ProviderHandler)
+	if !ok {
+		panic(fmt.Sprintf("launchdarkly ai: RunOptions.WrapHandler must be func(*aiserver.ProviderHandler) *aiserver.ProviderHandler, got %T", c.opts.WrapHandler))
+	}
+	return wrap(h)
+}
+
 // Invoke runs the config once. variables and history may be nil.
 func (c *AIConfig) Invoke(ctx context.Context, userInput string, userCtx ldcontext.Context, opts ...CallOption) (ProviderResponse, error) {
 	co := NewCallOptions(opts...)
@@ -188,7 +203,7 @@ func (c *AIConfig) Invoke(ctx context.Context, userInput string, userCtx ldconte
 		return ProviderResponse{}, err
 	}
 	res, err := executeAndTrack(ctx, execArgs{
-		configKey: c.args.Key, config: r.cfg, meta: r.meta, value: r.value, userCtx: userCtx, handler: r.handler,
+		configKey: c.args.Key, config: r.cfg, meta: r.meta, value: r.value, userCtx: userCtx, handler: c.wrapHandler(r.handler),
 		userInput: userInput, tools: r.tools, variables: variables, history: history, run: c.opts,
 	})
 	if err != nil {
@@ -197,7 +212,8 @@ func (c *AIConfig) Invoke(ctx context.Context, userInput string, userCtx ldconte
 	parsed := resolveOutputFormat(res.Output, r.cfg.OutputFormat)
 	resp := ProviderResponse{Response: parsed, Usage: res.Usage, TrackData: res.TrackData}
 	ja := judgeArgs{cfg: r.cfg, userCtx: userCtx, handler: r.handler, handlers: r.handlers,
-		userInput: userInput, output: outputString(parsed), parentTD: res.TrackData, trajectory: res.Trajectory}
+		userInput: userInput, output: outputString(parsed), parentTD: res.TrackData, trajectory: res.Trajectory,
+		existingClient: c.opts.ExistingClient, logErrors: c.opts.LogJudgeErrors}
 	if c.args.SkipJudges {
 		resp.JudgeTasks, err = buildJudgeTasks(ctx, ja)
 	} else {
@@ -222,7 +238,7 @@ func (c *AIConfig) Stream(ctx context.Context, userInput string, userCtx ldconte
 		}
 		var done streamDone
 		for ev, err := range executeAndStream(ctx, execArgs{
-			configKey: c.args.Key, config: r.cfg, meta: r.meta, value: r.value, userCtx: userCtx, handler: r.handler,
+			configKey: c.args.Key, config: r.cfg, meta: r.meta, value: r.value, userCtx: userCtx, handler: c.wrapHandler(r.handler),
 			userInput: userInput, tools: r.tools, variables: variables, history: history, run: c.opts,
 		}, &done) {
 			if err != nil {
@@ -236,7 +252,8 @@ func (c *AIConfig) Stream(ctx context.Context, userInput string, userCtx ldconte
 		out := StreamEvent{Type: EventDone, Response: done.response, Usage: done.usage}
 		if !c.args.SkipJudges {
 			jr, err := runJudges(ctx, judgeArgs{cfg: r.cfg, userCtx: userCtx, handler: r.handler, handlers: r.handlers,
-				userInput: userInput, output: done.response, parentTD: done.td, trajectory: done.trajectory})
+				userInput: userInput, output: done.response, parentTD: done.td, trajectory: done.trajectory,
+				existingClient: c.opts.ExistingClient, logErrors: c.opts.LogJudgeErrors})
 			if err != nil {
 				yield(StreamEvent{}, err)
 				return

@@ -13,9 +13,11 @@ Tier 0  aiserver                 core: no provider SDK imports
         internal/{bridge,trajectory,judging}   shared internals
         internal/kitbase     type-free handler-kit helpers (SpanUsage, HandlerSpanOptions, Run, ...); imports nothing from aiserver
         internal/handlerkit  typed access to the handler kit that stays unexported in aiserver; imports aiserver, never imported by it
+        internal/conndiag    test-only: on a failed test, logs who closed each client connection (imported by _test.go files only)
 Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         claudeagents   openaiagents   bedrockagents
         internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers for each provider's messages/agents pair; bedrockwire is also used by llms and langchainwire
+        internal/procgroup  runs a child in its own process group, killed as a group on cancel (Unix; no-op elsewhere)
         internal/langchainwire  LangChain wire helper for langchainmessages/langchainagents; builds the built-in llms models (imports llms and internal/bedrockwire, plus the anthropic/openai option packages and bedrockruntime for retries)
         skills         Agent Skills (core; imports aiserver and golang.org/x/sys, no provider SDK)
         evaluations    Evaluations from Code (core; imports aiserver and golang.org/x/text, no provider SDK)

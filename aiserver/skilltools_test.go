@@ -262,7 +262,7 @@ func TestJudgesDoNotMergeSkillTools(t *testing.T) {
 	judge := enabledConfig("P", "judge", nil)
 	judge["skills"] = skillRefs(s1)
 	withFake(t, map[string]any{"j": judge})
-	cfg, _, _, ok := resolveJudge(context.Background(), "j", userCtx)
+	cfg, _, _, ok := resolveJudge(context.Background(), "j", userCtx, false)
 	if !ok || len(cfg.Tools) != 0 || len(*asked) != 0 {
 		t.Fatalf("judge tools = %v, skills read = %v", cfg.Tools, *asked)
 	}
