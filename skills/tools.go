@@ -2,6 +2,7 @@ package skills
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"sync"
 
@@ -147,7 +148,8 @@ func toolLabel(i int, name string) string {
 	return fmt.Sprintf("tools[%d]", i)
 }
 
-// cloneTools deep-copies tools so no caller shares a schema map with a Skill.
+// cloneTools deep-copies tools so no caller shares a schema map, slice or
+// typed collection with a Skill.
 // It never returns nil.
 func cloneTools(tools []aiserver.Tool) []aiserver.Tool {
 	out := make([]aiserver.Tool, len(tools))
@@ -172,12 +174,53 @@ func deepCloneMap(m map[string]any) map[string]any {
 
 func deepCloneValue(v any) any {
 	switch x := v.(type) {
+	case nil:
+		return nil
 	case map[string]any:
 		return deepCloneMap(x)
 	case []any:
 		out := make([]any, len(x))
 		for i, e := range x {
 			out[i] = deepCloneValue(e)
+		}
+		return out
+	}
+	// A hand-built schema may hold typed collections ([]string,
+	// map[string]string, []map[string]any); copy them keeping their type.
+	return deepCloneReflect(reflect.ValueOf(v)).Interface()
+}
+
+func deepCloneReflect(v reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Interface:
+		if v.IsNil() {
+			return v
+		}
+		out := reflect.New(v.Type()).Elem()
+		out.Set(deepCloneReflect(v.Elem()))
+		return out
+	case reflect.Map:
+		if v.IsNil() {
+			return v
+		}
+		out := reflect.MakeMapWithSize(v.Type(), v.Len())
+		for it := v.MapRange(); it.Next(); {
+			out.SetMapIndex(it.Key(), deepCloneReflect(it.Value()))
+		}
+		return out
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := range v.Len() {
+			out.Index(i).Set(deepCloneReflect(v.Index(i)))
+		}
+		return out
+	case reflect.Array:
+		out := reflect.New(v.Type()).Elem()
+		for i := range v.Len() {
+			out.Index(i).Set(deepCloneReflect(v.Index(i)))
 		}
 		return out
 	}

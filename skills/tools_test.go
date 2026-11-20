@@ -170,6 +170,39 @@ func TestHandBuiltSkillHasNoToolsUnlessGiven(t *testing.T) {
 	}
 }
 
+// A hand-built schema may hold typed collections; neither the constructor's
+// input nor an accessor's result shares them with the Skill.
+func TestHandBuiltSkillSharesNoTypedCollections(t *testing.T) {
+	params := func() map[string]any {
+		return map[string]any{
+			"type":     "object",
+			"required": []string{"city"},
+			"enum":     map[string]string{"a": "b"},
+			"anyOf":    []map[string]any{{"required": []string{"x"}}},
+			"nested":   map[string]map[string]any{"p": {"tags": []any{[]string{"t"}}}},
+		}
+	}
+	mutate := func(p map[string]any) {
+		p["required"].([]string)[0] = "changed"
+		p["enum"].(map[string]string)["a"] = "changed"
+		p["anyOf"].([]map[string]any)[0]["required"].([]string)[0] = "changed"
+		p["nested"].(map[string]map[string]any)["p"]["tags"].([]any)[0].([]string)[0] = "changed"
+	}
+	in := []aiserver.Tool{{Name: "a", Type: "function", Parameters: params(), CustomParameters: params()}}
+	s := NewSkill(SkillFields{Key: "pdf", Version: 1, Content: []byte("x"), ContentHash: sha("x"), Tools: in})
+	mutate(in[0].Parameters)
+	mutate(in[0].CustomParameters)
+	got := s.Tools()
+	if !reflect.DeepEqual(got[0].Parameters, params()) || !reflect.DeepEqual(got[0].CustomParameters, params()) {
+		t.Fatalf("NewSkill shares its input: %#v", got[0])
+	}
+	mutate(got[0].Parameters)
+	mutate(got[0].CustomParameters)
+	if again := s.Tools(); !reflect.DeepEqual(again[0].Parameters, params()) || !reflect.DeepEqual(again[0].CustomParameters, params()) {
+		t.Fatalf("Tools shares its result: %#v", again[0])
+	}
+}
+
 // "Bad tool data drops only that tool"
 
 func TestToolsNotAnArrayDropsEveryTool(t *testing.T) {
