@@ -262,6 +262,60 @@ func TestGraphNodesGetTheirSkillTools(t *testing.T) {
 	}
 }
 
+// RunNode and Route merge the node config they run, so a node whose config
+// the caller replaced with an unmerged one (a mixed-provider native adapter
+// delegates such nodes here) still gets its skills' tools; a ResolveGraph
+// node is already merged and its skills are not read again.
+func TestRunNodeMergesAReplacedNodeConfig(t *testing.T) {
+	for _, route := range []bool{false, true} {
+		for _, replaced := range []bool{false, true} {
+			name := map[bool]string{false: "RunNode", true: "Route"}[route] + map[bool]string{false: "/resolved", true: "/replaced"}[replaced]
+			t.Run(name, func(t *testing.T) {
+				asked := withSkillToolsFake(t, map[skillPin][]Tool{s1: {skillTool("get-weather", "")}})
+				root := nodeCfg("r")
+				root["skills"] = skillRefs(s1)
+				withFake(t, map[string]any{
+					"g": map[string]any{"root": "root", "edges": map[string]any{"root": []any{
+						map[string]any{"key": "a"}, map[string]any{"key": "b"}}}},
+					"root": root, "a": nodeCfg("a"), "b": nodeCfg("b"),
+				})
+				var seen HandlerRequest
+				h := stubHandler("P", ModeAgent, "ok", nil, &seen)
+				def, err := ResolveGraph(bg, "g", userCtx, GraphOptions{Handlers: []*ProviderHandler{h}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if replaced {
+					cfg, err := kitParseAiConfig(def.Root.Config.Raw)
+					if err != nil {
+						t.Fatal(err)
+					}
+					def.Root.Config = cfg
+				}
+				*asked = nil
+				opts := RunNodeOptions{ToolHandlers: map[string]ToolHandler{"get-weather": okTool()}}
+				if route {
+					_, err = def.Route(bg, def.Root, "q", opts)
+				} else {
+					_, err = def.RunNode(bg, def.Root, "q", opts)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, ok := seen.Config.Tools["get-weather"]; !ok {
+					t.Errorf("config tools = %v", keys(seen.Config.Tools))
+				}
+				if _, ok := seen.ToolHandlers["get-weather"]; !ok {
+					t.Errorf("the skill tool handler did not reach the handler")
+				}
+				if want := map[bool]int{false: 0, true: 1}[replaced]; len(*asked) != want {
+					t.Errorf("skills read %d times, want %d", len(*asked), want)
+				}
+			})
+		}
+	}
+}
+
 // A tool key from the wire is quoted in a warning only when it is log-safe.
 func TestConflictWarningDoesNotQuoteAnUnsafeToolKey(t *testing.T) {
 	logs := captureLogs(t)
