@@ -81,15 +81,18 @@ func (f *shadowLD) TrackMetric(event string, _ ldcontext.Context, m float64, dat
 func (f *shadowLD) Flush()       {}
 func (f *shadowLD) Close() error { return nil }
 
+// events returns the shadow's events ($ld:ai-shadow:*) or the served call's
+// ($ld:ai:*, usage events aside).
 func (f *shadowLD) events(shadow bool) []trackedEvent {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	prefix := "$ld:ai:"
+	if shadow {
+		prefix = "$ld:ai-shadow:"
+	}
 	var out []trackedEvent
 	for _, t := range f.tracks {
-		if !strings.HasPrefix(t.event, "$ld:ai:") || strings.HasPrefix(t.event, "$ld:ai:sdk:") {
-			continue
-		}
-		if (t.data["isShadow"] == true) == shadow {
+		if strings.HasPrefix(t.event, prefix) && !strings.HasPrefix(t.event, "$ld:ai:sdk:") {
 			out = append(out, t)
 		}
 	}
@@ -282,7 +285,7 @@ func withoutRunID(events []trackedEvent) []trackedEvent {
 			}
 		}
 		m := e.metric
-		if e.event == "$ld:ai:duration:total" {
+		if e.event == "$ld:ai:duration:total" || e.event == "$ld:ai-shadow:duration:total" {
 			m = 0
 		}
 		out[i] = trackedEvent{e.event, m, d}
@@ -683,7 +686,7 @@ func TestFailingOrTimedOutShadowNeverReachesTheCaller(t *testing.T) {
 			if resp.Response != "served" || len(f.events(false)) != 5 {
 				t.Fatalf("response %v, served events %v", resp.Response, f.events(false))
 			}
-			if errs := eventsNamed(f.events(true), "$ld:ai:generation:error"); len(errs) != 1 {
+			if errs := eventsNamed(f.events(true), "$ld:ai-shadow:generation:error"); len(errs) != 1 {
 				t.Fatalf("shadow error events %d", len(errs))
 			}
 		})
@@ -729,8 +732,8 @@ func TestTimeoutIsTrackedOnce(t *testing.T) {
 	res := RunShadow(context.Background(), task, p.handlers())
 	time.Sleep(50 * time.Millisecond)
 	ev := f.events(true)
-	if res.Error != "timeout" || len(eventsNamed(ev, "$ld:ai:duration:total")) != 1 ||
-		len(eventsNamed(ev, "$ld:ai:generation:error")) != 1 || len(ev) != 2 {
+	if res.Error != "timeout" || len(eventsNamed(ev, "$ld:ai-shadow:duration:total")) != 1 ||
+		len(eventsNamed(ev, "$ld:ai-shadow:generation:error")) != 1 || len(ev) != 2 {
 		t.Fatalf("result %+v, events %v", res, ev)
 	}
 }
@@ -753,7 +756,7 @@ func TestHandlerTimeoutErrorIsAnOrdinaryFailure(t *testing.T) {
 	p.b.err = context.DeadlineExceeded
 	f, task := deferredTask(t, p, ShadowOptions{})
 	res := RunShadow(context.Background(), task, p.handlers())
-	if res.Error != context.DeadlineExceeded.Error() || len(eventsNamed(f.events(true), "$ld:ai:generation:error")) != 1 {
+	if res.Error != context.DeadlineExceeded.Error() || len(eventsNamed(f.events(true), "$ld:ai-shadow:generation:error")) != 1 {
 		t.Fatalf("result %+v", res)
 	}
 }

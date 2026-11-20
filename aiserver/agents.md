@@ -99,6 +99,11 @@ ConversationIDSpanProcessor, Track, PackageName, PackageVersion
    `RunOptions.LogJudgeErrors` logs a judge that fails or panics and runs the
    rest instead of returning the error. A judge's panic is still tracked by
    `trackPanic`; without `LogJudgeErrors` it propagates as before.
+   `RunOptions.ShadowEvents` marks the run's `TrackData`, and `track` sends
+   every event with marked data on `bridge.ShadowEventKey(event)`: the run's
+   events and its judges' scores. Each judge's own call runs with
+   `judgeRun()` (the run's `TrackData` and `ShadowEvents`), so it is marked
+   too; without `ShadowEvents` a judge call gets zero `RunOptions`.
 4. Tracked execution: mint `TrackData`, wrap tools (trajectory recorder inside
    the `$ld:ai:tool_call` wrapper), inject `variables.ldContext` and `__ld`,
    call the handler, track duration, success/error and tokens. A handler
