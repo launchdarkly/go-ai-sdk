@@ -98,7 +98,9 @@ ConversationIDSpanProcessor, Track, PackageName, PackageVersion
    panic is tracked as an error and re-raised; a panic from the stream
    consumer's loop body is not tracked (it is abandonment).
 5. Parse JSON output when `outputFormat` is set (best effort).
-6. Run judges inline, or build `JudgeTasks` when `SkipJudges`.
+6. Run judges inline, or build `JudgeTasks` when `SkipJudges`. A judge's own
+   `outputFormat` is dropped (warned once at resolution; `RunJudge` also drops it
+   from older tasks), since the verdict is always `{score, reasoning}`.
 
 ### Content capture
 

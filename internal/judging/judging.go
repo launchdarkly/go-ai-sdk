@@ -85,7 +85,8 @@ func NumericScore(score any) (float64, bool) {
 }
 
 // reasonText stringifies a reasoning value: "empty" is judged after
-// stringifying, so a number or object still counts as reasoning.
+// stringifying, so a number or object still counts as reasoning, but an
+// empty list or object does not.
 func reasonText(v any) string {
 	switch t := v.(type) {
 	case nil:
@@ -97,6 +98,16 @@ func reasonText(v any) string {
 		if err != nil {
 			return fmt.Sprint(t)
 		}
-		return string(b)
+		if s := string(b); s != "[]" && s != "{}" {
+			return s
+		}
+		return ""
 	}
+}
+
+// HasOutputFormat reports whether a judge config carries its own
+// outputFormat, either parsed or only in the raw variation.
+func HasOutputFormat(outputFormat, raw map[string]any) bool {
+	_, inRaw := raw["outputFormat"]
+	return outputFormat != nil || inRaw
 }

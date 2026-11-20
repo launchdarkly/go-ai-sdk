@@ -48,6 +48,12 @@ func TestParseVerdictStringifiesReasoning(t *testing.T) {
 		`{"score":0.5,"reasoning":{"why":"ok"}}`:       `{"why":"ok"}`,
 		`{"score":0.5,"reasoning":null,"reason":true}`: "true",
 		`{"score":0.5,"reasoning":""}`:                 "",
+		// An empty list or object is empty, so the reason alias is used.
+		`{"score":0.5,"reasoning":[],"reason":"fallback"}`: "fallback",
+		`{"score":0.5,"reasoning":{},"reason":"fallback"}`: "fallback",
+		`{"score":0.5,"reasoning":[]}`:                     "",
+		`{"score":0.5,"reasoning":"r","reason":[]}`:        "r",
+		`{"score":0.5,"reasoning":["a"]}`:                  `["a"]`,
 	} {
 		if _, r, err := ParseVerdict(in); err != nil || r != want {
 			t.Errorf("%s: %q %v", in, r, err)

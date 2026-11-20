@@ -218,7 +218,9 @@ response as text whether it is a string or parsed structured output.
 `SkipJudges`, `Invoke` returns `JudgeTasks` (JSON-serialisable) instead of
 `JudgeResults`. A judge whose own AI Config cannot be resolved (missing, or
 turned off) is skipped and logged, so it never fails a call whose answer is
-already produced; a judge's provider failure is returned.
+already produced; a judge's provider failure is returned. A judge always
+returns `{score, reasoning}`, so a judge config's own `outputFormat` is
+dropped with a warning.
 
 ## Development
 
