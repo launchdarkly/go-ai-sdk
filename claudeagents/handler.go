@@ -162,12 +162,16 @@ type localTool struct {
 	name  string
 	param anthropic.ToolUnionParam
 	fn    aiserver.ToolFunc
+	// soft turns fn's errors into is_error results, as for the host
+	// built-ins, instead of failing the run.
+	soft bool
 }
 
 // toolset is everything offered to the model for one run.
 type toolset struct {
 	params  []anthropic.ToolUnionParam
 	local   map[string]aiserver.ToolFunc
+	soft    map[string]bool                 // local tools whose errors are is_error results
 	natives map[string]*aiserver.NativeTool // by server-tool name
 	host    map[string]*aiserver.NativeTool // by Claude Code tool name
 	ws      *workspace                      // set when host is non-empty
@@ -176,9 +180,10 @@ type toolset struct {
 // buildTools offers config tools that have a handler: a ToolFunc as a
 // custom tool, a NativeTool as its Anthropic server tool or as a
 // host-executed function tool under its Claude Code name. Extra tools (graph
-// sub-agents) are appended. The caller closes ts.ws.
+// sub-agents, the Skill tool) are appended; one whose name a config tool
+// already uses fails the run. The caller closes ts.ws.
 func buildTools(cfg aiserver.AiConfig, handlers map[string]aiserver.ToolHandler, extra []localTool, workDir string) (toolset, error) {
-	ts := toolset{local: map[string]aiserver.ToolFunc{}, natives: map[string]*aiserver.NativeTool{}, host: map[string]*aiserver.NativeTool{}}
+	ts := toolset{local: map[string]aiserver.ToolFunc{}, soft: map[string]bool{}, natives: map[string]*aiserver.NativeTool{}, host: map[string]*aiserver.NativeTool{}}
 	for _, key := range slices.Sorted(maps.Keys(cfg.Tools)) {
 		t := cfg.Tools[key]
 		switch h := handlers[key].(type) {
@@ -204,8 +209,12 @@ func buildTools(cfg aiserver.AiConfig, handlers map[string]aiserver.ToolHandler,
 		}
 	}
 	for _, x := range extra {
+		if ts.local[x.name] != nil || ts.host[x.name] != nil {
+			return toolset{}, fmt.Errorf("claudeagents: tool name %q is used by both a config tool and a handler tool", x.name)
+		}
 		ts.params = append(ts.params, x.param)
 		ts.local[x.name] = x.fn
+		ts.soft[x.name] = x.soft
 	}
 	for name := range ts.host {
 		if ts.local[name] != nil {
@@ -364,13 +373,16 @@ func (a *agent) run(ctx context.Context, req aiserver.HandlerRequest, extra []lo
 				var args map[string]any
 				_ = json.Unmarshal(b.Input, &args)
 				out, ferr := fn(trace.ContextWithSpan(r.Context(), span), args)
-				if ferr != nil {
+				if ferr != nil && !ts.soft[b.Name] {
 					r.Fail(ferr)
 					return res, ferr // tool errors propagate
 				}
+				if ferr != nil {
+					out = ferr.Error()
+				}
 				r.ToolResult(span, out)
-				r.EndTool(span, nil)
-				results = append(results, anthropic.NewToolResultBlock(b.ID, aiserver.ToolResultString(out), false))
+				r.EndTool(span, ferr)
+				results = append(results, anthropic.NewToolResultBlock(b.ID, aiserver.ToolResultString(out), ferr != nil))
 			}
 		}
 		switch {
@@ -419,7 +431,11 @@ func (a *agent) turn(ctx context.Context, params anthropic.MessageNewParams, req
 }
 
 func (a *agent) invoke(ctx context.Context, req aiserver.HandlerRequest) (aiserver.HandlerResult, error) {
-	res, err := a.run(ctx, req, nil, false, nil)
+	return a.invokeWith(ctx, req, nil)
+}
+
+func (a *agent) invokeWith(ctx context.Context, req aiserver.HandlerRequest, extra []localTool) (aiserver.HandlerResult, error) {
+	res, err := a.run(ctx, req, extra, false, nil)
 	if err != nil {
 		return aiserver.HandlerResult{}, err
 	}
@@ -427,17 +443,19 @@ func (a *agent) invoke(ctx context.Context, req aiserver.HandlerRequest) (aiserv
 }
 
 func (a *agent) stream(ctx context.Context, req aiserver.HandlerRequest) iter.Seq2[aiserver.HandlerStreamEvent, error] {
-	return func(yield func(aiserver.HandlerStreamEvent, error) bool) {
-		res, err := a.run(ctx, req, nil, false, func(t string) bool {
-			return yield(aiserver.HandlerStreamEvent{Type: aiserver.EventChunk, Text: t}, nil)
-		})
-		if res.abandoned {
-			return
-		}
-		if err != nil {
-			yield(aiserver.HandlerStreamEvent{}, err)
-			return
-		}
-		yield(aiserver.HandlerStreamEvent{Type: aiserver.EventDone, Output: &res.all, Usage: res.usage.Raw()}, nil)
+	return func(yield func(aiserver.HandlerStreamEvent, error) bool) { a.streamWith(ctx, req, nil, yield) }
+}
+
+func (a *agent) streamWith(ctx context.Context, req aiserver.HandlerRequest, extra []localTool, yield func(aiserver.HandlerStreamEvent, error) bool) {
+	res, err := a.run(ctx, req, extra, false, func(t string) bool {
+		return yield(aiserver.HandlerStreamEvent{Type: aiserver.EventChunk, Text: t}, nil)
+	})
+	if res.abandoned {
+		return
 	}
+	if err != nil {
+		yield(aiserver.HandlerStreamEvent{}, err)
+		return
+	}
+	yield(aiserver.HandlerStreamEvent{Type: aiserver.EventDone, Output: &res.all, Usage: res.usage.Raw()}, nil)
 }

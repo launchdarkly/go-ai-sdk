@@ -34,6 +34,7 @@ helpers, the watcher's reconciles, `SetSkillStore` and the constructors.
 | `telemetry.go` | The only place signals and integrity log records are built (three signals, ten reason codes). |
 | `verify.go` | `verifyRawSkill` (shape → size → encoding → hash), `resolveFromStore` (the one retrieval path: key check, then version check), `newestByKey`. |
 | `accessors.go`, `memstore.go` | `SkillRefs`, `GetSkill*`, `AllSkills`; `InMemorySkillStore` and the shared `objectSet`. |
+| `handler_bridge.go` | Sets `bridge.WriteConfigSkills` for the Claude Agents skills handler: `skillRefs` + `writeSkills` with pruning off, reporting no `client.*` usage; each reference resolved once, and a resolution failure writes nothing. |
 | `writeskills.go` | Options, the availability gate, request resolution (`"*"` enumerates raw objects; never `AllSkills`). |
 | `materialize_unix.go` | Root validation, manifest load/rewrite, write/adopt/update, prune. `materialize_other.go` refuses non-POSIX. |
 | `safefs_unix.go` | Descriptor-pinned primitives on `golang.org/x/sys/unix` and the `fsOps` interception hooks. |

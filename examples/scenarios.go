@@ -9,11 +9,13 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/claudeagents"
 	"github.com/launchdarkly/go-ai-sdk/langchainagents"
 	"github.com/launchdarkly/go-ai-sdk/openaiagents"
+	"github.com/launchdarkly/go-ai-sdk/skills"
 )
 
 func registryConfig(key string, skipJudges bool) *aiserver.AIConfig {
@@ -190,6 +192,36 @@ func nativeGraph(ctx context.Context, key, input string) error {
 		return err
 	}
 	resp, err := runner.Invoke(ctx, input, aiserver.WithVariables(map[string]any{"user_id": "user-123"}))
+	if err != nil {
+		return err
+	}
+	printJSON(resp)
+	return writeOutput(resp)
+}
+
+// claudeSkills runs a Claude agent config whose variation references skills
+// through claudeagents.NewSkillsHandler: the skills are delivered by a
+// LaunchDarklySkillStore, written to a private directory for the invoke, and
+// offered to the model as the Skill tool.
+func claudeSkills(ctx context.Context, key, input string) error {
+	store, err := skills.NewLaunchDarklySkillStore(os.Getenv("LD_SDK_KEY"), nil)
+	if err != nil {
+		return err
+	}
+	if err := store.Start(); err != nil {
+		return err
+	}
+	defer store.Close()
+	if !store.WaitForSkills(10 * time.Second) {
+		return fmt.Errorf("no skill payload yet: %s", store.Failed())
+	}
+	skills.SetSkillStore(store)
+	h, err := claudeagents.NewSkillsHandler(claudeagents.SkillsHandlerOptions{})
+	if err != nil {
+		return err
+	}
+	resp, err := aiserver.Config(aiserver.ConfigArgs{Key: key, Handlers: []*aiserver.ProviderHandler{h}, ToolHandlers: exampleTools}).
+		Invoke(ctx, input, newContext())
 	if err != nil {
 		return err
 	}

@@ -26,6 +26,7 @@ var scenarios = map[string]scenario{
 	"graph-streaming":        graphStreaming,
 	"graph-history":          graphHistory,
 	"native-graph":           nativeGraph,
+	"claude-skills":          claudeSkills,
 	"native-graph-langchain": nativeGraphLangChain,
 	"judge":                  judge,
 }

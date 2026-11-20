@@ -145,6 +145,59 @@ errors fail the run before the first provider call: a `NativeTool` with any othe
 (`ErrUnsupportedNativeTool`), a `WorkDir` that cannot be opened, or a function tool whose key
 equals a built-in's name.
 
+## Skills
+
+`NewSkillsHandler` is the handler for variations that have
+[skills](../skills) attached. Configure a skill store first with `skills.SetSkillStore`
+(a `skills.LaunchDarklySkillStore` in production):
+
+```go
+store, err := skills.NewLaunchDarklySkillStore(os.Getenv("LD_SDK_KEY"), nil)
+if err != nil {
+	log.Fatal(err)
+}
+if err := store.Start(); err != nil {
+	log.Fatal(err)
+}
+defer store.Close()
+store.WaitForSkills(10 * time.Second)
+skills.SetSkillStore(store)
+
+h, err := claudeagents.NewSkillsHandler(claudeagents.SkillsHandlerOptions{
+	SkillsTempDir: "", // parent of each invoke's directory; "" → os.TempDir()
+})
+```
+
+On each invoke with skills, the handler:
+
+1. creates a private `ld-skills-*` directory under `SkillsTempDir` (resolved to its real path
+   first) and writes each skill the variation references, at its pinned version, to
+   `<dir>/launchdarkly/skills/<key>/SKILL.md`;
+2. offers the model a `Skill` tool, after the config's tools. Its input is
+   `{"skill": "launchdarkly:<key>"}` (required), and its description lists each skill as
+   `launchdarkly:<key>` with the skill's description. A call returns that skill's `SKILL.md`
+   and gets an `execute_tool Skill` span. It sends no `$ld:ai:tool_call`, because `Skill`
+   is not an AI Config tool. Any other name is an `is_error` tool result with no file content.
+   A config function tool named `Skill` fails the run before any model request;
+3. removes the directory when the run ends, on every path: success, error, a broken-off
+   stream, the step limit or a cancelled context. A directory that cannot be removed is
+   logged at warning level, and the run's own result or error is still returned.
+
+If any skill cannot be written (no store, a store with no data yet, a skill withheld by
+integrity verification, a pinned version the store does not hold), the invoke fails before
+the model is called. The error names the skills, and the directory is removed. Through
+`aiserver.Config` this is an ordinary generation error. Nothing is pruned or watched: a skill
+detached from the variation is simply not written on the next invoke.
+
+A variation with no skills runs exactly as `NewHandler`'s would: no `Skill` tool, nothing
+written, no store needed. `ClaudeAgents`, `ClaudeGraph` and `ToClaudeAgents` build the plain
+handler, so they never write skills or offer `Skill`, even for a variation that has them.
+
+Not Claude Code parity: the `Skill` tool is this package's own, on the Messages API. Host
+settings sources, plugins and Claude Code's own skill loading are not available. Writing
+skills needs a unix platform; elsewhere a variation with skills fails closed with an error
+wrapping `skills.ErrUnsupportedPlatform`.
+
 ## Environment variables
 
 | Variable | Required | Description |
@@ -174,6 +227,12 @@ type Options struct {
 	WorkDir        string            // host built-ins run in and are confined to it; "" → process working directory at construction
 }
 func NewHandler(Options) (*aiserver.ProviderHandler, error)
+
+type SkillsHandlerOptions struct {
+	Options
+	SkillsTempDir string // parent of each invoke's skills directory; "" → os.TempDir()
+}
+func NewSkillsHandler(SkillsHandlerOptions) (*aiserver.ProviderHandler, error)
 
 type InvokeOptions struct {
 	ToolHandlers map[string]aiserver.ToolHandler
