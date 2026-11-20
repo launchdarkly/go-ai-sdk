@@ -87,7 +87,7 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
 - **Tracking (ToLangGraph, only with `NativeGraphOptions.Context`)** — per first node visit
   `$ld:ai:graph:node {nodeKey, index}`; per node run `$ld:ai:duration:total`,
   `$ld:ai:generation:success` (or `:error`), `$ld:ai:tokens:{total,input,output}` when > 0;
-  `$ld:ai:tool_call` through `handlerkit.WrapToolHandlers` (NativeTools via `handlerkit.TrackNativeTool`);
+  `$ld:ai:tool_call` through `handlerkit.WrapToolHandlers` (a `NativeTool` is never offered to the model: it is skipped, with one warning per tool key per process);
   for every hop into a node (a handoff or the single static edge), after that node has run,
   `$ld:ai:graph:handoff_success {sourceKey, targetKey}` or `:handoff_failure` when it failed;
   `$ld:ai:graph:duration:total` on every path; on success `$ld:ai:graph:total_tokens` (when > 0)
@@ -98,7 +98,7 @@ func (g *LangGraph) Invoke(ctx, input string, opts ...aiserver.CallOption) (aise
   `chat <model>` / `execute_tool <name>` children. ToLangGraph: `launchdarkly.graph` with
   `launchdarkly.graph.key`, LD association attributes and the context identity, usage,
   `launchdarkly.graph.path`; ended on every path. A node run opens no root span: its `chat` /
-  `execute_tool` spans (handoff and NativeTool calls included) are children of the graph span.
+  `execute_tool` spans (handoff calls included) are children of the graph span.
 - **Streaming** — `llms.WithStreamingFunc` deltas are `chunk` events; `done.output` joins every
   turn's text. Node functions run on the caller's goroutine, one at a time, so
   `yield` is never called concurrently.

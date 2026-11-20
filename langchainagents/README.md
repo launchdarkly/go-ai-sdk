@@ -142,6 +142,8 @@ default), `ErrNoToolHandler`, `ErrEmptyResponse`, `ErrNoRoot`, `ErrNilGraph`,
 `ErrNodeName` (a node key that, with characters outside `[a-zA-Z0-9_-]` replaced by `_`, is
 `END` or another node's name), and `aiserver.ErrGraphDisabled` from `ToLangGraph` on a disabled graph.
 
+A `NativeTool` in `ToolHandlers` is not offered to the model by `ToLangGraph` nodes: the node skips it and logs one `WARN` per tool key per process.
+
 ## Model selection
 
 | Source | Model used |
