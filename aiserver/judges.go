@@ -2,6 +2,7 @@ package aiserver
 
 import (
 	"context"
+	"fmt"
 	"math/rand/v2"
 	"strings"
 
@@ -25,6 +26,12 @@ type judgeArgs struct {
 	parentTD   TrackData
 	graphKey   string
 	trajectory string
+	// existingClient resolves judges on the initialized client, never
+	// starting one.
+	existingClient bool
+	// logErrors logs a failed judge and runs the rest instead of returning
+	// the failure.
+	logErrors bool
 }
 
 func collapseMessages(cfg AiConfig) AiConfig {
@@ -90,8 +97,8 @@ func activeJudges(cfg AiConfig) []JudgeRef {
 // already produced and paid for, so a judge that cannot be resolved (most
 // often one toggled off in LaunchDarkly) is logged and skipped rather than
 // failing the call, as in the JavaScript SDK.
-func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context) (AiConfig, VariationMeta, ldvalue.Value, bool) {
-	cfg, meta, value, err := extractVariation(ctx, key, userCtx, nil, false)
+func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context, existingClient bool) (AiConfig, VariationMeta, ldvalue.Value, bool) {
+	cfg, meta, value, err := extractVariation(ctx, key, userCtx, nil, existingClient)
 	if err != nil {
 		sdkLogger().Error("judge skipped: its config could not be resolved", "judge", key, "error", err)
 		return AiConfig{}, VariationMeta{}, ldvalue.Null(), false
@@ -105,54 +112,84 @@ func resolveJudge(ctx context.Context, key string, userCtx ldcontext.Context) (A
 func runJudges(ctx context.Context, a judgeArgs) (map[string]JudgeResult, error) {
 	results := map[string]JudgeResult{}
 	for _, j := range activeJudges(a.cfg) {
-		jcfg, jmeta, jvalue, ok := resolveJudge(ctx, j.Key, a.userCtx)
-		if !ok {
-			continue
-		}
-		h, collapse, ok := pickJudgeHandler(a.handler, a.handlers, jcfg.Provider.Name, kitNormalizeMode(jmeta.Mode))
-		if !ok {
-			continue
-		}
-		effective := jcfg
-		if collapse {
-			effective = collapseMessages(jcfg)
-		}
-		history := judging.BuildMessageHistory(a.userInput, a.trajectory, a.output)
-		err := withJudgeEvaluation(ctx, j.Key, a.parentTD, func(ctx context.Context, record func(float64, string)) error {
-			res, err := executeAndTrack(ctx, execArgs{
-				configKey: j.Key, config: effective, meta: jmeta, value: jvalue, userCtx: a.userCtx, handler: h,
-				userInput: a.output, graphKey: a.graphKey,
-				// input is always sent ("" when there is none), so a rubric's {{input}}
-				// never renders as the literal placeholder.
-				variables: map[string]any{"message_history": history, "response_to_evaluate": a.output, "input": a.userInput},
-			})
-			if err != nil {
-				return err
-			}
-			rawScore, reasoning, perr := judging.ParseVerdict(res.Output)
-			score, numeric := judging.NumericScore(rawScore)
-			if perr != nil || !numeric {
-				sdkLogger().Error("judge returned invalid output", "judge", j.Key)
-				return nil
-			}
-			results[j.Key] = JudgeResult{Score: score, Response: reasoning, Usage: res.Usage}
-			explanation := ""
-			if h.CaptureContent.enabled() {
-				explanation = reasoning
-			}
-			record(score, explanation)
-			if jcfg.EvaluationMetricKey != "" {
-				td := a.parentTD
-				td.JudgeConfigKey = j.Key
-				track(jcfg.EvaluationMetricKey, a.userCtx, td, score)
-			}
-			return nil
+		err := recoverJudgePanic(a.logErrors, func() error {
+			return runJudge(ctx, a, j, results)
 		})
+		if err != nil && a.logErrors {
+			sdkLogger().Error("judge failed", "judge", j.Key, "error", err)
+			continue
+		}
 		if err != nil {
 			return results, err
 		}
 	}
 	return results, nil
+}
+
+// runJudge is one judge's whole step: resolve its config, pick its handler,
+// build its input, run it, and record a numeric verdict in results. A judge
+// that cannot be resolved or has no handler is skipped with a nil error.
+func runJudge(ctx context.Context, a judgeArgs, j JudgeRef, results map[string]JudgeResult) error {
+	jcfg, jmeta, jvalue, ok := resolveJudge(ctx, j.Key, a.userCtx, a.existingClient)
+	if !ok {
+		return nil
+	}
+	h, collapse, ok := pickJudgeHandler(a.handler, a.handlers, jcfg.Provider.Name, kitNormalizeMode(jmeta.Mode))
+	if !ok {
+		return nil
+	}
+	effective := jcfg
+	if collapse {
+		effective = collapseMessages(jcfg)
+	}
+	history := judging.BuildMessageHistory(a.userInput, a.trajectory, a.output)
+	return withJudgeEvaluation(ctx, j.Key, a.parentTD, func(ctx context.Context, record func(float64, string)) error {
+		res, err := executeAndTrack(ctx, execArgs{
+			configKey: j.Key, config: effective, meta: jmeta, value: jvalue, userCtx: a.userCtx, handler: h,
+			userInput: a.output, graphKey: a.graphKey,
+			// input is always sent ("" when there is none), so a rubric's {{input}}
+			// never renders as the literal placeholder.
+			variables: map[string]any{"message_history": history, "response_to_evaluate": a.output, "input": a.userInput},
+		})
+		if err != nil {
+			return err
+		}
+		rawScore, reasoning, perr := judging.ParseVerdict(res.Output)
+		score, numeric := judging.NumericScore(rawScore)
+		if perr != nil || !numeric {
+			sdkLogger().Error("judge returned invalid output", "judge", j.Key)
+			return nil
+		}
+		results[j.Key] = JudgeResult{Score: score, Response: reasoning, Usage: res.Usage}
+		explanation := ""
+		if h.CaptureContent.enabled() {
+			explanation = reasoning
+		}
+		record(score, explanation)
+		if jcfg.EvaluationMetricKey != "" {
+			td := a.parentTD
+			td.JudgeConfigKey = j.Key
+			track(jcfg.EvaluationMetricKey, a.userCtx, td, score)
+		}
+		return nil
+	})
+}
+
+// recoverJudgePanic runs one judge's whole step. With recoverIt, a panic
+// anywhere in it (resolving the judge, picking its handler, building its
+// input, or the run) becomes that judge's error, so the caller logs it and
+// runs the other judges, as JS and Python do. A panic in the run was already
+// tracked as a failed generation by trackPanic before it reached here.
+// Without recoverIt, the panic propagates as before.
+func recoverJudgePanic(recoverIt bool, run func() error) (err error) {
+	if recoverIt {
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("judge panicked: %v", r)
+			}
+		}()
+	}
+	return run()
 }
 
 // buildJudgeTasksArgs are the inputs to buildJudgeTasksFromArgs: the parent
@@ -181,7 +218,7 @@ func buildJudgeTasksFromArgs(ctx context.Context, args buildJudgeTasksArgs) ([]J
 func buildJudgeTasks(ctx context.Context, a judgeArgs) ([]JudgeTask, error) {
 	tasks := []JudgeTask{}
 	for _, j := range activeJudges(a.cfg) {
-		jcfg, jmeta, jvalue, ok := resolveJudge(ctx, j.Key, a.userCtx)
+		jcfg, jmeta, jvalue, ok := resolveJudge(ctx, j.Key, a.userCtx, a.existingClient)
 		if !ok {
 			continue
 		}

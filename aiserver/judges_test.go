@@ -15,6 +15,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
 	"github.com/launchdarkly/go-ai-sdk/internal/judging"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
@@ -322,4 +323,93 @@ func TestJudgesAlwaysReceiveInput(t *testing.T) {
 			}
 		}
 	}
+}
+
+// panicJudgeHandlers are a served handler on provider P and a judge handler
+// on provider J that panics.
+func panicJudgeHandlers() []*ProviderHandler {
+	return []*ProviderHandler{
+		stubHandler("P", ModeMessages, "answer", nil, nil),
+		createHandler(ProvidesFor{"J", ModeMessages}, func(context.Context, HandlerRequest) (HandlerResult, error) {
+			panic("judge exploded")
+		}, nil, CaptureDefault),
+	}
+}
+
+func TestAPanickingJudgeStillPanicsOnTheServedPath(t *testing.T) {
+	f := withFake(t, map[string]any{
+		"cfg":   enabledConfig("P", "", judgedConfig(nil)),
+		"judge": enabledConfig("J", "judge", nil),
+	})
+	defer func() {
+		if r := recover(); r != "judge exploded" {
+			t.Fatalf("recovered %v", r)
+		}
+		if n := len(f.events("$ld:ai:generation:error")); n != 1 {
+			t.Fatalf("generation errors %d, want the judge's", n)
+		}
+	}()
+	_, _ = Config(ConfigArgs{Key: "cfg", Handlers: panicJudgeHandlers()}).Invoke(bg, "q", userCtx)
+	t.Fatal("Invoke returned")
+}
+
+func TestLogJudgeErrorsRecoversAPanickingJudge(t *testing.T) {
+	f := withFake(t, map[string]any{
+		"cfg":   enabledConfig("P", "", judgedConfig(nil)),
+		"judge": enabledConfig("J", "judge", nil),
+	})
+	run := bridge.ConfigWithOptions(ConfigArgs{Key: "cfg", Handlers: panicJudgeHandlers()},
+		bridge.RunOptions{LogJudgeErrors: true}).(*AIConfig)
+	resp, err := run.Invoke(bg, "q", userCtx)
+	if err != nil || resp.Response != "answer" || len(resp.JudgeResults) != 0 {
+		t.Fatalf("resp %+v, err %v", resp, err)
+	}
+	if n := len(f.events("$ld:ai:generation:error")); n != 1 {
+		t.Fatalf("generation errors %d, want the judge's panic tracked once", n)
+	}
+}
+
+// A panic before the judge's run, here in pickJudgeHandler on a nil handler
+// entry, is recovered for that judge alone: the judge after it still scores.
+// Without LogJudgeErrors the same panic reaches the caller.
+func TestLogJudgeErrorsRecoversAPanicBeforeTheJudgeRuns(t *testing.T) {
+	cfgs := map[string]any{
+		"cfg": enabledConfig("P", "", map[string]any{"judgeConfiguration": map[string]any{"judges": []any{
+			map[string]any{"key": "broken", "samplingRate": 1.0},
+			map[string]any{"key": "good", "samplingRate": 1.0},
+		}}}),
+		"broken": enabledConfig("X", "judge", nil),
+		"good":   enabledConfig("J", "judge", nil),
+	}
+	// P serves the call and J the good judge; the broken judge's provider X
+	// matches neither, so its lookup reaches the nil entry.
+	handlers := []*ProviderHandler{
+		stubHandler("P", ModeMessages, "answer", nil, nil),
+		stubHandler("J", ModeMessages, `{"score":0.5,"reasoning":"ok"}`, nil, nil),
+		nil,
+	}
+
+	t.Run("LogJudgeErrors", func(t *testing.T) {
+		withFake(t, cfgs)
+		run := bridge.ConfigWithOptions(ConfigArgs{Key: "cfg", Handlers: handlers},
+			bridge.RunOptions{LogJudgeErrors: true}).(*AIConfig)
+		resp, err := run.Invoke(bg, "q", userCtx)
+		if err != nil || resp.Response != "answer" {
+			t.Fatalf("resp %+v, err %v", resp, err)
+		}
+		if len(resp.JudgeResults) != 1 || resp.JudgeResults["good"].Score != 0.5 {
+			t.Fatalf("judge results %+v, want only the good judge", resp.JudgeResults)
+		}
+	})
+
+	t.Run("without LogJudgeErrors", func(t *testing.T) {
+		withFake(t, cfgs)
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("the pre-run panic was swallowed")
+			}
+		}()
+		_, _ = Config(ConfigArgs{Key: "cfg", Handlers: handlers}).Invoke(bg, "q", userCtx)
+		t.Fatal("Invoke returned")
+	})
 }

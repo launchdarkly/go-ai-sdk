@@ -39,16 +39,20 @@ type trackedEvent struct {
 type shadowLD struct {
 	mu             sync.Mutex
 	value          any
+	values         map[string]any // per flag key, ahead of value
 	reason         ldreason.EvaluationReason
 	variationCalls int
 	detailCalls    int
 	tracks         []trackedEvent
 }
 
-func (f *shadowLD) JSONVariation(_ string, _ ldcontext.Context, def ldvalue.Value) (ldvalue.Value, error) {
+func (f *shadowLD) JSONVariation(key string, _ ldcontext.Context, def ldvalue.Value) (ldvalue.Value, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.variationCalls++
+	if v, ok := f.values[key]; ok {
+		return ldvalue.FromJSONMarshal(v), nil
+	}
 	if f.value == nil {
 		return def, nil
 	}
@@ -132,7 +136,7 @@ func candidate() map[string]any {
 		"provider":           map[string]any{"name": "Anthropic"},
 		"instructions":       "candidate",
 		"tools":              map[string]any{"search": map[string]any{"name": "search", "type": "function", "parameters": map[string]any{}}},
-		"judgeConfiguration": map[string]any{"judges": []any{map[string]any{"key": "judge", "samplingRate": 1.0}}},
+		"judgeConfiguration": map[string]any{"judges": []any{map[string]any{"key": "judge", "samplingRate": 0.0}}},
 	}
 }
 
@@ -163,6 +167,8 @@ type stub struct {
 	delay   time.Duration
 	panics  bool
 	span    bool
+	// before, when set, runs at the start of each Invoke call.
+	before func()
 }
 
 func (s *stub) handler(provider string) *aiserver.ProviderHandler {
@@ -172,6 +178,9 @@ func (s *stub) handler(provider string) *aiserver.ProviderHandler {
 			s.mu.Lock()
 			s.calls = append(s.calls, req)
 			s.mu.Unlock()
+			if s.before != nil {
+				s.before()
+			}
 			if s.span {
 				run := handlerkit.StartHandlerRun(ctx, kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/test", Name: "test.run", System: "test"}, req, handlerkit.ComposePrompt(req, aiserver.ModeMessages))
 				defer run.Finish("", s.out)
@@ -631,10 +640,13 @@ func TestShadowGetsTheSameInputOnTheStrippedConfig(t *testing.T) {
 	if b.UserInput != "hello" || !reflect.DeepEqual(b.History, history) || b.Variables["topic"] != "flags" {
 		t.Fatalf("shadow request %+v", b)
 	}
-	if b.Config.Model.Name != "claude" || len(b.Config.Tools) != 0 || b.Config.JudgeConfiguration != nil || len(b.ToolHandlers) != 0 {
+	if b.Config.Model.Name != "claude" || len(b.Config.Tools) != 0 || b.Config.JudgeConfiguration == nil || len(b.ToolHandlers) != 0 {
 		t.Fatalf("shadow config %+v, tools %v", b.Config, b.ToolHandlers)
 	}
-	for _, k := range []string{"tools", "judgeConfiguration", "shadowConfiguration"} {
+	if _, ok := b.Config.Raw["judgeConfiguration"]; !ok {
+		t.Error("judgeConfiguration did not reach the shadow, as A's reaches A")
+	}
+	for _, k := range []string{"tools", "shadowConfiguration"} {
 		if _, ok := b.Config.Raw[k]; ok {
 			t.Errorf("%s reached the shadow", k)
 		}
@@ -1231,10 +1243,13 @@ func TestDeferredTaskKeepsUnmodeledVariationFields(t *testing.T) {
 	if raw["customField"] != "kept" {
 		t.Fatalf("raw after a JSON round trip %v", raw)
 	}
-	for _, k := range []string{"tools", "judgeConfiguration", "shadowConfiguration"} {
+	for _, k := range []string{"tools", "shadowConfiguration"} {
 		if _, ok := raw[k]; ok {
 			t.Fatalf("raw kept %s", k)
 		}
+	}
+	if _, ok := raw["judgeConfiguration"]; !ok {
+		t.Fatal("raw lost judgeConfiguration in a JSON round trip")
 	}
 }
 

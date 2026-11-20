@@ -2,6 +2,7 @@ package aiserver
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
@@ -75,4 +76,43 @@ func TestRunOptionsReplaceTheVariationAndExtendTracking(t *testing.T) {
 	if !found {
 		t.Fatal("span attribute missing from the root span")
 	}
+}
+
+func TestWrapHandlerWrapsTheConfigHandlerInInvokeAndStream(t *testing.T) {
+	withFake(t, map[string]any{"cfg": enabledConfig("openai", "completion", nil)})
+	h := stubHandler("openai", ModeMessages, "ok", nil, nil)
+	var wrapped []*ProviderHandler
+	run := bridge.ConfigWithOptions(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}, bridge.RunOptions{
+		WrapHandler: func(inner *ProviderHandler) *ProviderHandler {
+			wrapped = append(wrapped, inner)
+			return inner
+		},
+	}).(*AIConfig)
+	if _, err := run.Invoke(context.Background(), "hi", userCtx); err != nil {
+		t.Fatal(err)
+	}
+	for _, err := range run.Stream(context.Background(), "hi", userCtx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(wrapped) != 2 || wrapped[0] != h || wrapped[1] != h {
+		t.Fatalf("wrapped %d handlers, want the config's handler once per call", len(wrapped))
+	}
+}
+
+func TestWrapHandlerOfTheWrongTypePanics(t *testing.T) {
+	withFake(t, map[string]any{"cfg": enabledConfig("openai", "completion", nil)})
+	h := stubHandler("openai", ModeMessages, "ok", nil, nil)
+	run := bridge.ConfigWithOptions(ConfigArgs{Key: "cfg", Handlers: []*ProviderHandler{h}}, bridge.RunOptions{
+		WrapHandler: func(h *ProviderHandler) {},
+	}).(*AIConfig)
+	defer func() {
+		r := recover()
+		if s, _ := r.(string); !strings.Contains(s, "WrapHandler must be") {
+			t.Fatalf("recovered %v", r)
+		}
+	}()
+	_, _ = run.Invoke(context.Background(), "hi", userCtx)
+	t.Fatal("Invoke returned")
 }
