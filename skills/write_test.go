@@ -690,3 +690,26 @@ func TestBytesHashedAreBytesWritten(t *testing.T) {
 	}
 	_ = bytes.MinRead
 }
+
+func TestWriteAllSkillsListingErrorDeletesNothing(t *testing.T) {
+	_, _ = setup(t)
+	root := t.TempDir()
+	mustWrite(t, []Skill{skillOf("a", 1, "a")}, root, nil)
+	SetSkillStore(&funcStore{all: func(string) (map[string]any, error) { return nil, errStoreDown }})
+	r, err := WriteAllSkills(root, nil)
+	if err != nil || r.OK() || !slices.Equal(actionKinds(r), []string{"=error"}) || !strings.Contains(r.Errors()[0].ErrorMessage(), errStoreDown.Error()) {
+		t.Fatalf("keep: %v %v %v", err, actionKinds(r), r.Errors())
+	}
+	if readFile(t, filepath.Join(root, "a", "SKILL.md")) != "a" {
+		t.Fatal("a listing error read as every skill revoked")
+	}
+	if _, listed := manifestEntries(t, root)["a/SKILL.md"]; !listed {
+		t.Fatal("manifest entry dropped")
+	}
+	if _, err := WriteAllSkills(root, &WriteSkillsOptions{OnUnavailable: OnUnavailableRaise}); !errors.Is(err, ErrSkillsUnavailable) {
+		t.Fatalf("raise: %v", err)
+	}
+	if readFile(t, filepath.Join(root, "a", "SKILL.md")) != "a" {
+		t.Fatal("deleted under raise")
+	}
+}

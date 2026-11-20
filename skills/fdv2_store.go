@@ -12,6 +12,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -61,10 +62,17 @@ const (
 type LaunchDarklySkillStoreOptions struct {
 	// BaseURI is the origin for GET /sdk/poll (default
 	// https://sdk.launchdarkly.com). Given without StreamURI it serves both
-	// endpoints, for a relay or private instance. Must be https.
+	// endpoints, for a relay or private instance. Must be https, except plain
+	// http to localhost, 127.0.0.1 or ::1 for a local test double. Surrounding
+	// whitespace is trimmed, so a blank value is unset.
+	//
+	// With neither BaseURI nor StreamURI set, NewLaunchDarklySkillStore reads
+	// LD_BASE_URI and LD_STREAM_URI in their place, once, under the same
+	// rules (LD_BASE_URI alone moves both endpoints; a blank or
+	// whitespace-only value is unset).
 	BaseURI string
 	// StreamURI is the origin for GET /sdk/stream (default
-	// https://stream.launchdarkly.com). Must be https.
+	// https://stream.launchdarkly.com). The same scheme rule as BaseURI.
 	StreamURI string
 	// Mode is LaunchDarklySkillStoreModeStream (default) or LaunchDarklySkillStoreModePoll.
 	Mode LaunchDarklySkillStoreMode
@@ -151,9 +159,16 @@ func NewLaunchDarklySkillStore(sdkKey string, opts *LaunchDarklySkillStoreOption
 	case !strings.HasPrefix(key, "sdk-"):
 		currentLogger().Warn("the credential given to LaunchDarklySkillStore does not look like a LaunchDarkly server-side SDK key (sdk-...)")
 	}
-	base, stream := opts.BaseURI, opts.StreamURI
+	base, stream := strings.TrimSpace(opts.BaseURI), strings.TrimSpace(opts.StreamURI)
+	baseName, streamName := "BaseURI", "StreamURI"
+	if base == "" && stream == "" {
+		// Options win as a set: the environment is read only when neither is
+		// given, and a blank variable counts as unset.
+		base, stream = strings.TrimSpace(os.Getenv("LD_BASE_URI")), strings.TrimSpace(os.Getenv("LD_STREAM_URI"))
+		baseName, streamName = "LD_BASE_URI", "LD_STREAM_URI"
+	}
 	if stream == "" {
-		stream = base
+		stream, streamName = base, baseName
 		if stream == "" {
 			stream = fdv2DefaultStreamURI
 		}
@@ -161,10 +176,10 @@ func NewLaunchDarklySkillStore(sdkKey string, opts *LaunchDarklySkillStoreOption
 	if base == "" {
 		base = fdv2DefaultBaseURI
 	}
-	for _, u := range []struct{ name, value string }{{"BaseURI", base}, {"StreamURI", stream}} {
-		parsed, err := url.Parse(u.value)
-		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-			return nil, invalidArg("LaunchDarklySkillStore refuses %s %q: an https:// URI with a host is required, so the SDK key is never sent in cleartext", u.name, u.value)
+	for _, u := range []struct{ name, value string }{{baseName, base}, {streamName, stream}} {
+		if !allowedOrigin(u.value) {
+			return nil, invalidArg("LaunchDarklySkillStore refuses %s %q: an https:// URI with a host is required (plain http:// only to "+
+				"localhost, 127.0.0.1 or ::1), so the SDK key is never sent in cleartext", u.name, u.value)
 		}
 	}
 	mode := opts.Mode
@@ -214,6 +229,23 @@ func NewLaunchDarklySkillStore(sdkKey string, opts *LaunchDarklySkillStoreOption
 		released: make(chan struct{}),
 	}
 	return s, nil
+}
+
+// allowedOrigin reports whether uri may receive the SDK key: https to any
+// host, or plain http to a loopback host, for a local test double.
+func allowedOrigin(uri string) bool {
+	parsed, err := url.Parse(uri)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	switch parsed.Scheme {
+	case "https":
+		return true
+	case "http":
+		h := strings.ToLower(parsed.Hostname())
+		return h == "localhost" || h == "127.0.0.1" || h == "::1"
+	}
+	return false
 }
 
 // Start begins delivery on a background goroutine. It is a no-op while delivery runs. A store that gave up on a
@@ -384,6 +416,12 @@ func classifyStatus(status int, header http.Header) error {
 		return &fatalError{fmt.Sprintf("LaunchDarkly returned HTTP %d, which retrying will not fix. %s", status, requestAdvice)}
 	case http.StatusBadRequest:
 		return &recoverableError{msg: "LaunchDarkly returned HTTP 400. " + requestAdvice, stale: true}
+	}
+	if status >= 300 && status < 400 && status != http.StatusNotModified {
+		// Following a redirect would forward the SDK key to whatever host
+		// Location names, so it is never followed and never retried.
+		return &fatalError{fmt.Sprintf("LaunchDarkly returned HTTP %d, a redirect, which the store never follows: following it would "+
+			"send the SDK key to another host. Check the base URI; point it at the host the redirect names if you trust it", status)}
 	}
 	d, ok := retryAfter(header)
 	return &recoverableError{msg: fmt.Sprintf("LaunchDarkly returned HTTP %d", status), retryAfter: d, hasRetry: ok}

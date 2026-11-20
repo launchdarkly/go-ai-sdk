@@ -299,12 +299,9 @@ func (r *fdv2Reader) deleteObject(obj map[string]json.RawMessage) transferOutcom
 	if v, ok := versionOf(version); ok {
 		ts.version = v
 	}
-	held := t.get(key, 0) != nil
+	// Not counted here: ObjectsRevoked moves at the commit, so a delete in a
+	// transfer that is abandoned or declined counts nothing.
 	t.remove(ts)
-	// Counted per key: only a key that is now gone was revoked.
-	if held && t.get(key, 0) == nil {
-		r.diag.ObjectsRevoked++
-	}
 	r.skillsInPayload++
 	r.changes = append(r.changes, tombstoneChange(ts))
 	return transferOutcome{}
@@ -338,12 +335,15 @@ func (r *fdv2Reader) payloadTransferred(obj map[string]json.RawMessage) transfer
 		r.diag.PayloadsIgnored++
 		r.changes = nil
 	case r.pending != nil:
+		// Diff before the swap. Counted per key: only a key the commit leaves
+		// with no version at all was revoked.
+		revoked, keysGone := revocationsBetween(r.committed, r.pending)
 		if r.intent == intentTransferFull {
-			// A full transfer revokes by omission: diff before the swap.
-			revoked, keysGone := revocationsBetween(r.committed, r.pending)
+			// A full transfer revokes by omission; a changes transfer already
+			// published its tombstones as they arrived.
 			r.changes = append(r.changes, revoked...)
-			r.diag.ObjectsRevoked += keysGone
 		}
+		r.diag.ObjectsRevoked += keysGone
 		*r.committed = *r.pending
 		if r.skillsInPayload > 0 && payloadID != "" {
 			r.skillPayloadID = payloadID
