@@ -18,7 +18,15 @@ import (
 // the variation's definition, and a key two skills define differently keeps
 // the first skill's, each with a warning. A skill that cannot be read, or no
 // skills package or store, adds nothing.
+//
+// The config it returns is marked as merged, and a marked config is returned
+// unchanged, reading no skill and logging nothing: merging again would find
+// each skill tool already in cfg.Tools and warn as for a variation conflict.
 func withSkillTools(configKey string, cfg AiConfig) AiConfig {
+	if cfg.skillToolsMerged {
+		return cfg
+	}
+	cfg.skillToolsMerged = true
 	refs, _ := cfg.Raw["skills"].([]any)
 	resolve, _ := bridge.SkillTools.(func(string, int) []Tool)
 	if len(refs) == 0 || resolve == nil {

@@ -78,7 +78,8 @@ is added and nothing is logged. These reads report no usage event.
 
 The merge runs once per resolution. The node configs of `aiserver.ResolveGraph` (`GraphNode.Config`)
 include their skills' tools, so native graph adapters use them as they are and do not read the
-skills again. `aiserver.InspectConfig` returns only the variation's own tools, and judges, shadow
+skills again. Core marks a config it has merged, so merging that config again changes nothing,
+reads no skill and logs no conflict warning. `aiserver.InspectConfig` returns only the variation's own tools, and judges, shadow
 runs and evaluations never get skill tools.
 
 A malformed entry (not an object, no string `name`, `type` not `"function"`, no object `parameters`,

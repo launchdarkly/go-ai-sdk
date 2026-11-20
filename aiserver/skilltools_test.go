@@ -147,6 +147,23 @@ func TestVariationAndSkillWithAnIdenticalToolStillWarn(t *testing.T) {
 	}
 }
 
+// A merged config is marked, so merging it again reads no skill and does not
+// warn as for a variation conflict, even for the skill's own tool.
+func TestMergingAMergedConfigReturnsItUnchanged(t *testing.T) {
+	logs := captureLogs(t)
+	asked := withSkillToolsFake(t, map[skillPin][]Tool{s1: {skillTool("t", "")}})
+	once := withSkillTools("cfg", parsedWithSkills(t, ownTools("own"), s1))
+	resetSkillToolWarnings()
+	*asked = nil
+	twice := withSkillTools("cfg", once)
+	if !reflect.DeepEqual(twice, once) || !slices.Equal(keys(twice.Tools), []string{"own", "t"}) {
+		t.Fatalf("second merge changed the config: %+v", twice.Tools)
+	}
+	if len(*asked) != 0 || logs.Len() != 0 {
+		t.Fatalf("second merge read skills %v, logged %q", *asked, logs)
+	}
+}
+
 func TestTwoSkillsDefineAToolDifferentlyFirstWins(t *testing.T) {
 	logs := captureLogs(t)
 	withSkillToolsFake(t, map[skillPin][]Tool{s1: {skillTool("t", "v1")}, s2: {skillTool("t", "v2")}})
