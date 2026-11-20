@@ -371,8 +371,9 @@ func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.Too
 	var defs []llms.Tool
 	fns := map[string]aiserver.ToolFunc{}
 	natives := map[string]*aiserver.NativeTool{}
-	keys := make([]string, 0, len(n.Config.Tools))
-	for k := range n.Config.Tools {
+	offered := handlerkit.MergeSkillTools(n.Key, n.Config).Tools
+	keys := make([]string, 0, len(offered))
+	for k := range offered {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -385,7 +386,7 @@ func (r *graphRun) tools(n *aiserver.GraphNode, handlers map[string]aiserver.Too
 		default:
 			continue // a tool without a handler is not offered
 		}
-		t := n.Config.Tools[k]
+		t := offered[k]
 		defs = append(defs, langchainwire.FunctionTool(k, t.Description, t.Parameters))
 	}
 	handoffs := map[string]string{} // tool name → target node key

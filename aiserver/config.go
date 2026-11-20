@@ -155,6 +155,9 @@ func (c *AIConfig) resolve(ctx context.Context, userCtx ldcontext.Context) (reso
 	if err != nil {
 		return resolved{}, err
 	}
+	if !c.opts.NoSkillTools {
+		cfg = withSkillTools(c.args.Key, cfg)
+	}
 	h, err := selectHandler(cfg, meta, handlers)
 	if err != nil {
 		return resolved{}, err

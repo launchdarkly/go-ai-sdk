@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
-	"time"
 	"unicode/utf8"
 
 	"golang.org/x/sys/unix"
@@ -358,7 +357,7 @@ func updateEntry(entries map[string]any, relative string, skill Skill, hash stri
 	entry["version"] = skill.version
 	entry["sha256"] = hash
 	if _, has := entry["writtenAt"]; touch || !has {
-		entry["writtenAt"] = time.Now().UTC().Format("2006-01-02T15:04:05Z")
+		entry["writtenAt"] = now().UTC().Format("2006-01-02T15:04:05Z")
 	}
 	entries[relative] = entry
 }

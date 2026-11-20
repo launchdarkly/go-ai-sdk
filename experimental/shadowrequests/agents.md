@@ -18,7 +18,7 @@ value, `RunOptions.WrapHandler` for the deadline, `RunOptions.LogJudgeErrors` an
 
 Rules that are easy to break: shadows start only after A succeeds (after `Invoke` returns, or at
 the stream's `done` event); preparing them never fails A (panics are recovered and logged); B
-never gets tools or `shadowConfiguration`; B keeps its `judgeConfiguration`, and core `Invoke` runs
+never gets tools (including its skills' tools: `RunOptions.NoSkillTools`) or `shadowConfiguration`; B keeps its `judgeConfiguration`, and core `Invoke` runs
 those judges on B's response with B's track data as the base, on the caller's full handler list and
 unwrapped handler, so the deadline never covers a judge and a judge failure or panic never fails B; the deadline
 wraps only B's handler, so a timeout is tracked once; nothing is added to A's events; `aiserver.Shutdown` cancels background shadows through

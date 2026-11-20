@@ -79,7 +79,7 @@ func (g *NativeGraph) buildAgents(ctx context.Context, variables map[string]any,
 			handlers = handlerkit.WrapToolHandlers(handlers, g.opts.Context, handlerkit.NodeTrackData(n, g.def.Key, runID))
 		}
 		system := handlerkit.ComposePrompt(aiserver.HandlerRequest{Config: n.Config, Variables: variables}, aiserver.ModeAgent).System
-		a := newAgent(sanitizeName(n.Key), system, n.Config, handlers)
+		a := newAgent(sanitizeName(n.Key), system, handlerkit.MergeSkillTools(n.Key, n.Config), handlers)
 		a.key = n.Key
 		agents[n.Key] = a
 		order = append(order, n)

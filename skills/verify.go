@@ -82,7 +82,9 @@ func verifyRawSkill(raw any) *Skill {
 	}
 	name, _ := obj["name"].(string)
 	description, _ := obj["description"].(string)
-	return &Skill{key: key, version: version, content: v.bytes, contentHash: v.hash, name: name, description: description}
+	rawTools, hasTools := obj["tools"]
+	tools := decodeSkillTools(key, version, rawTools, hasTools)
+	return &Skill{key: key, version: version, content: v.bytes, contentHash: v.hash, name: name, description: description, tools: tools}
 }
 
 // resolution is one key resolved against a store: the skill, or why not.

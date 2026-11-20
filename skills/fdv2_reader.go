@@ -46,7 +46,7 @@ const (
 
 // envelopeFields are copied verbatim, never coerced or defaulted: filling in
 // a missing field would forge what verification checks.
-var envelopeFields = []string{"contentType", "content", "contentHash", "name", "description"}
+var envelopeFields = []string{"contentType", "content", "contentHash", "name", "description", "tools"}
 
 var payloadSelectorRE = regexp.MustCompile(`\(p:([^:()]+):\d+\)`)
 

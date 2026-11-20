@@ -37,6 +37,7 @@ type RunOptions struct {
 	ExistingClient bool                 // true: use the initialized client and never start one
 	NoFlagEvent    bool                 // true: no feature_flag event on the handler's root span
 	NoUsage        bool                 // true: no $ld:ai:sdk:usage for the call (SDK packages report their own)
+	NoSkillTools   bool                 // true: the variation's skills are not read for their tools (shadow runs)
 	// WrapHandler, when set, wraps the handler that runs the config, in both
 	// Invoke and Stream. It must be
 	// func(*aiserver.ProviderHandler) *aiserver.ProviderHandler; any other
@@ -157,3 +158,14 @@ var GraphUserContext any
 
 // TrackNativeTool is func(*aiserver.NativeTool).
 var TrackNativeTool any
+
+// MergeSkillTools is func(configKey string, cfg aiserver.AiConfig)
+// aiserver.AiConfig: core's skill tool merge, which native graph adapters
+// call on every node config. A config it has merged is returned unchanged.
+var MergeSkillTools any
+
+// SkillTools is func(key string, version int) []aiserver.Tool: the tools of
+// one attached skill, or nil when it cannot be resolved. Set by the skills
+// package at init, so it is nil unless skills is linked in; the core asserts
+// it at call time.
+var SkillTools any

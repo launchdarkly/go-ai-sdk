@@ -278,7 +278,7 @@ func (r *graphRun) runNode(ctx context.Context, sa *subAgent, input string, hist
 	}
 	start := time.Now()
 	res, err := r.agent.run(ctx, aiserver.HandlerRequest{
-		Config: n.Config, UserInput: input, Variables: vars, History: history, ToolHandlers: tools,
+		Config: handlerkit.MergeSkillTools(n.Key, n.Config), UserInput: input, Variables: vars, History: history, ToolHandlers: tools,
 	}, sa.tools, true, nil)
 	r.nodeEvent("$ld:ai:duration:total", td, float64(time.Since(start).Milliseconds()))
 	if err != nil {

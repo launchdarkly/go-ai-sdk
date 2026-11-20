@@ -191,6 +191,7 @@ func Shutdown(ctx context.Context) error {
 	resetReports()
 	stateMu.Unlock()
 	resetOptions()
+	resetSkillToolWarnings()
 	for _, hook := range bridge.ShutdownHooks() {
 		runShutdownHook(ctx, hook)
 	}

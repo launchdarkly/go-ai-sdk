@@ -25,6 +25,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
+	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
 	"github.com/launchdarkly/go-ai-sdk/internal/handlerkit"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
@@ -1302,5 +1303,30 @@ func TestShadowWithMalformedToolsStillRuns(t *testing.T) {
 	}
 	if _, ok := p.b.last().Config.Raw["tools"]; ok {
 		t.Fatal("the shadow kept tools")
+	}
+}
+
+// §3.21a "Shadow runs, judges and evaluations get no skill tools": a shadow
+// variation that attaches a skill with tools reaches its handler with none,
+// and its skills are never read.
+func TestShadowGetsNoSkillTools(t *testing.T) {
+	payload := fallthroughPayload()
+	variation := payload["shadowConfiguration"].(map[string]any)["variations"].(map[string]any)["claude-candidate"].(map[string]any)
+	variation["skills"] = []any{map[string]any{"key": "weather", "version": 1}}
+	read := 0
+	prev := bridge.SkillTools
+	bridge.SkillTools = func(string, int) []aiserver.Tool {
+		read++
+		return []aiserver.Tool{{Name: "get-weather", Type: "function", Parameters: map[string]any{}}}
+	}
+	t.Cleanup(func() { bridge.SkillTools = prev })
+	install(t, payload, ldreason.NewEvalReasonFallthrough())
+	p := newPair()
+	invokeAndWait(t, mustShadow(t, p.handlers(), ShadowOptions{}))
+	if b := p.b.last(); p.b.count() != 1 || len(b.Config.Tools) != 0 || len(b.ToolHandlers) != 0 {
+		t.Fatalf("shadow calls %d, tools %v", p.b.count(), b.Config.Tools)
+	}
+	if read != 0 {
+		t.Fatalf("the shadow's skills were read %d times", read)
 	}
 }

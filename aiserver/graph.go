@@ -348,10 +348,10 @@ type handoffRouting struct {
 	chosen string
 }
 
-func (d *GraphDefinition) buildRouting(n *GraphNode, outgoing []GraphEdge) *handoffRouting {
+func (d *GraphDefinition) buildRouting(cfg AiConfig, outgoing []GraphEdge) *handoffRouting {
 	r := &handoffRouting{tools: map[string]ToolHandler{}}
 	tools := map[string]Tool{}
-	for k, t := range n.Config.Tools {
+	for k, t := range cfg.Tools {
 		tools[k] = t
 	}
 	for _, e := range outgoing {
@@ -378,8 +378,8 @@ func (d *GraphDefinition) buildRouting(n *GraphNode, outgoing []GraphEdge) *hand
 			return handoffResult(target), nil
 		})
 	}
-	r.config = n.Config
-	r.config.Instructions = n.Config.Instructions + routingSuffix
+	r.config = cfg
+	r.config.Instructions = cfg.Instructions + routingSuffix
 	r.config.Tools = tools
 	return r
 }
@@ -433,10 +433,12 @@ func (d *GraphDefinition) streamRoute(ctx context.Context, n *GraphNode, input s
 	}
 	tools := d.tools(o.ToolHandlers)
 	outgoing := d.EdgesFrom(n.Key)
-	cfg := n.Config
+	// A ResolveGraph node is already merged, so this reads no skill; a node
+	// config the caller replaced with an unmerged one gets its skills' tools.
+	cfg := withSkillTools(n.Key, n.Config)
 	var routing *handoffRouting
 	if route && len(outgoing) > 1 {
-		routing = d.buildRouting(n, outgoing)
+		routing = d.buildRouting(cfg, outgoing)
 		cfg = routing.config
 		merged := map[string]ToolHandler{}
 		for k, v := range tools {
@@ -590,6 +592,7 @@ func resolveDefinition(ctx context.Context, key string, userCtx ldcontext.Contex
 		if err != nil {
 			return off(), fmt.Errorf("graph %q node %q: %w", key, k, err)
 		}
+		cfg = withSkillTools(k, cfg)
 		def.nodes[k] = &GraphNode{Key: k, Config: cfg, Meta: nmeta, value: nvalue}
 	}
 	for _, n := range def.nodes {
