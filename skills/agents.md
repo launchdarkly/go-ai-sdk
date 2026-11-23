@@ -32,6 +32,7 @@ helpers, the watcher's reconciles, `SetSkillStore` and the constructors.
 | `types.go` | Immutable value types (unexported fields + getters), closed sets, on-disk constants. |
 | `store.go` | `SkillStore` seam and optional halves, `Listener`, module state, `SetSkillStore`, `clearState` (registered with `bridge.OnShutdown`), readiness probe. |
 | `telemetry.go` | The only place signals and integrity log records are built (three signals, ten reason codes). |
+| `tools.go` | Skill tools: `decodeSkillTools` (drops bad entries with a once-per-process warning, never an integrity signal), deep copies, and `skillTools`, registered as `bridge.SkillTools` so core can add an attached skill's tools to the handler's `Config.Tools` without importing this package. |
 | `verify.go` | `verifyRawSkill` (shape → size → encoding → hash), `resolveFromStore` (the one retrieval path: key check, then version check), `newestByKey`. |
 | `accessors.go`, `memstore.go` | `SkillRefs`, `GetSkill*`, `AllSkills`; `InMemorySkillStore` and the shared `objectSet`. |
 | `writeskills.go` | Options, the availability gate, request resolution (`"*"` enumerates raw objects; never `AllSkills`). |
@@ -77,7 +78,22 @@ keys and hashes are shape-checked and redacted before reaching any signal or rec
 | `golang.org/x/sys/unix` | `Openat`, `Mkdirat`, `Renameat`, `Unlinkat`, `Fstatat`, `Fchmod`, `Mkfifo` (tests). Already in `go.mod`. |
 | standard library | Everything else, including the FDv2 transport. |
 
+**Skill tools.** `verifyRawSkill` decodes `tools` after verification; `contentHash` does not cover
+them (known v1 limit, transport-protected). `skillTools` reads through `resolveFromStore`, so a run
+reports no `client.getSkill*` usage, and returns nil silently when no store is set. The FDv2 reader
+copies `tools` verbatim (`envelopeFields`); dropping bad entries is the decoder's job. A wrongly
+typed `description` or `customParameters` is dropped from the tool with a warning; a missing
+`description` and `""` are indistinguishable in `aiserver.Tool`. A variation tool with the same key
+as a skill tool always warns, identical or not (the server forbids the overlap). `now` in
+`writeskills.go` is the manifest clock seam for tests. Warnings name a tool by position and quote
+its name only when it matches `[A-Za-z0-9._-]{1,256}` (`toolLabel`). An unreadable-skill warning
+before the store initializes (`storeIsInitialized`) does not use up its once-per-process slot.
+`GraphNode.Config` includes skill tools (Go's choice; TypeScript does the same, Python does not).
+
 **Common pitfalls.**
+
+- A skill's tools reach a handler only when this package is imported (its `init` sets
+  `bridge.SkillTools`) and a store is set. `aiserver` alone never offers skill tools.
 
 - Calling `WriteAllSkills` before `WaitForSkills` returns true does not prune (it reports
   unavailable) — but a hand-written store without `IsInitialized` is treated as ready, so its empty

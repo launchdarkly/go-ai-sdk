@@ -27,6 +27,9 @@ type WriteSkillsOptions struct {
 	OnUnavailable OnUnavailable
 }
 
+// now is the manifest clock; tests replace it to compare writtenAt.
+var now = time.Now
+
 // writeConfig is a validated WriteSkillsOptions with the clock started.
 type writeConfig struct {
 	prune         bool

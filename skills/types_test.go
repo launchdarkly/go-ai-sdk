@@ -53,7 +53,7 @@ func TestSkillHasNoContentReader(t *testing.T) {
 	for i := range rt.NumMethod() {
 		names = append(names, rt.Method(i).Name)
 	}
-	want := []string{"Content", "ContentHash", "Description", "Key", "Name", "Version"}
+	want := []string{"Content", "ContentHash", "Description", "Key", "Name", "Tools", "Version"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("Skill methods = %v, want exactly %v", names, want)
 	}

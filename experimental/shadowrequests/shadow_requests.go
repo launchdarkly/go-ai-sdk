@@ -446,6 +446,7 @@ func runShadow(ctx context.Context, task ShadowTask, handlers []*aiserver.Provid
 		ExistingClient: true,
 		NoUsage:        true,
 		NoFlagEvent:    true,
+		NoSkillTools:   true, // a shadow gets no tools, including its skills' tools
 		WrapHandler: func(h *aiserver.ProviderHandler) *aiserver.ProviderHandler {
 			return withDeadline(h, timeout)
 		},

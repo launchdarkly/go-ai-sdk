@@ -15,6 +15,7 @@ func TestEveryKitFunctionIsRegistered(t *testing.T) {
 		"TrackGraphEvent": TrackGraphEvent, "SelectHandler": SelectHandler, "ImageURL": ImageURL,
 		"ContentText": ContentText, "NodeTrackData": NodeTrackData, "GraphTrackData": GraphTrackData,
 		"GraphUserContext": GraphUserContext, "TrackNativeTool": TrackNativeTool,
+		"MergeSkillTools": MergeSkillTools,
 	} {
 		if reflect.ValueOf(f).IsNil() {
 			t.Errorf("handlerkit.%s is nil: aiserver/kitexport.go does not register it with this type", name)

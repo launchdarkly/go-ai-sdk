@@ -118,6 +118,10 @@ type AiConfig struct {
 	EvaluationMetricKey string              `json:"evaluationMetricKey,omitempty"`
 	OutputFormat        map[string]any      `json:"outputFormat,omitempty"`
 	Raw                 map[string]any      `json:"-"`
+
+	// skillToolsMerged is set by withSkillTools on the config it returns, so
+	// a second merge returns the config unchanged. Not public, not on the wire.
+	skillToolsMerged bool
 }
 
 // VariationMeta is the variation's `_ldMeta`.

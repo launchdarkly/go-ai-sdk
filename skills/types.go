@@ -1,6 +1,10 @@
 package skills
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/launchdarkly/go-ai-sdk/aiserver"
+)
 
 // SkillFilename is the single file each skill materializes to, under
 // <root>/<key>/.
@@ -72,6 +76,8 @@ type SkillFields struct {
 	ContentHash string
 	Name        string
 	Description string
+	// Tools are the tool definitions the skill pins, in order; nil means none.
+	Tools []aiserver.Tool
 }
 
 // Skill is one verified SKILL.md document. It is immutable: Content returns a
@@ -84,6 +90,7 @@ type Skill struct {
 	contentHash string
 	name        string
 	description string
+	tools       []aiserver.Tool
 }
 
 // NewSkill builds a Skill from caller-supplied content (bring your own
@@ -97,6 +104,7 @@ func NewSkill(f SkillFields) Skill {
 		contentHash: f.ContentHash,
 		name:        f.Name,
 		description: f.Description,
+		tools:       cloneTools(f.Tools),
 	}
 }
 
@@ -118,6 +126,12 @@ func (s Skill) Name() string { return s.name }
 
 // Description is the description from LaunchDarkly metadata, or "".
 func (s Skill) Description() string { return s.description }
+
+// Tools returns a deep copy of the tool definitions the skill pins, in the
+// order the author set, and an empty slice, never nil, when it has none. They
+// are held in memory only: WriteSkills does not write them to disk or to the
+// manifest, and ContentHash does not cover them.
+func (s Skill) Tools() []aiserver.Tool { return cloneTools(s.tools) }
 
 func (Skill) isSkillInput() {}
 
