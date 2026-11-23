@@ -5,8 +5,8 @@
 Tier 1 handler package. `providesFor` is `{Provider: "Anthropic", Mode: "agent"}`. It runs an
 agent loop on the Anthropic Messages API (`client.Messages.New` / `NewStreaming`) from
 `github.com/anthropics/anthropic-sdk-go`, because Go has no Claude Agent SDK. It also exports the
-`claudeGraph` wrapper, the `toClaudeAgents` native adapter and the Claude Code
-built-in `NativeTool` sentinels.
+`claudeGraph` wrapper, the `toClaudeAgents` native adapter, the Claude Code
+built-in `NativeTool` sentinels and the skills handler (`NewSkillsHandler`).
 
 ## File map
 
@@ -16,12 +16,14 @@ built-in `NativeTool` sentinels.
 | `graph.go` | `ClaudeGraph`: `internal/sdkapi.Graph` with exactly this package's handler. |
 | `native.go` | `ToClaudeAgents`: sub-agent tools built in `ReverseTraverse`, graph span and graph events. |
 | `params.go` | `model.parameters` → Messages API (`thinking`, `output_config.effort` / `.format`, `anthropic-beta`, `fallbackModel`); the JS `FORWARDED_QUERY_OPTION_KEYS` allowlist. |
+| `skills.go` | `NewSkillsHandler`: per-invoke skills directory, the `Skill` tool, removal. |
 | `builtins.go` | The ten Claude Code built-in `NativeTool` sentinels. |
 | `hosttools.go` | The eight host-executed built-ins: schemas, `workspace` (WorkDir confinement via `os.Root`, todo list), executors. Bash runs in its own process group (`internal/procgroup`), killed as a group on timeout on Unix. |
 | `hosttools_test.go` | Per-tool tests, confinement abuse matrix, Bash timeout/cap, handler and `ToClaudeAgents` wiring. |
 | `fake_test.go` | `httptest` Anthropic server, fake LaunchDarkly client, span exporter setup. |
 | `handler_test.go` | Handler tests (prompt, tools, loop, telemetry, streaming, history). |
 | `native_test.go` | `ClaudeGraph`, `ToClaudeAgents` and conversation-id graph tests. |
+| `skills_test.go`, `skills_other_test.go` | Skills handler tests (unix; fail closed elsewhere). |
 | `misc_test.go` | Built-in sentinels, convenience wrapper, usage events. |
 | `README.md` | User-facing install, examples, environment, and API reference. |
 | `agents.md` | This file. |
@@ -36,6 +38,8 @@ const PackageName, PackageVersion, SpanName, DefaultMaxSteps
 var ErrToolNotFound, ErrUnsupportedNativeTool, ErrMaxSteps error
 type Options struct{ Client *anthropic.Client; APIKey string; CaptureContent aiserver.ContentCapture; MaxSteps int; WorkDir string }
 func NewHandler(Options) (*aiserver.ProviderHandler, error)
+type SkillsHandlerOptions struct{ Options; SkillsTempDir string }
+func NewSkillsHandler(SkillsHandlerOptions) (*aiserver.ProviderHandler, error)
 type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handler Options }
 func ClaudeAgents(ctx, configKey, userInput string, userCtx ldcontext.Context, *InvokeOptions) (aiserver.ProviderResponse, error)
 type GraphOptions struct{ ToolHandlers; GraphJudge; Registry }
@@ -113,6 +117,20 @@ event identifies it. A non-Anthropic node runs through `GraphDefinition.RunNode`
 sub-agent tools. The `launchdarkly.graph` span carries `launchdarkly.graph.key`, `launchdarkly.graph.path` and
 the summed usage and is ended on every path; the result is the root's final text.
 
+Skills handler (`skills.go`): `NewSkillsHandler` reports `claude-agents.createClaudeAgentsSkillsHandler`
+once and nothing else. A config with no `skills` field (or `[]`) goes straight to the core
+`invoke` / `stream`. Otherwise, per run: `filepath.EvalSymlinks(SkillsTempDir or os.TempDir())`,
+`os.MkdirTemp(real, "ld-skills-")`, `mkdir <dir>/launchdarkly`, then
+`bridge.WriteConfigSkills` (set by `skills` at init: the non-reporting `skillRefs` + `writeSkills`
+with pruning off; each reference resolved once, so the tool lists the written version's
+description; any resolution failure stops before a write). Any failure returns an error naming
+the keys and the skills package's action texts, before any model request. The `Skill` tool is
+an extra `localTool` with `soft: true` (its errors are `is_error` results, not run failures),
+appended after the config tools (a config tool of the same name fails the run in `buildTools`); it reads only `<key>/SKILL.md` for a listed
+`launchdarkly:<key>` through an `os.Root` on `<dir>/launchdarkly/skills`. `os.RemoveAll` runs
+in a `defer` (inside the iterator on the stream path); a failure is a `Warn` on the SDK logger.
+The wrappers and `ToClaudeAgents` use `newHandler`, so they never write skills.
+
 ## OTel setup
 
 Handler packages emit spans through the global tracer provider and do not configure OTel. The
@@ -135,6 +153,7 @@ runtimes), or call it at startup to pre-warm the connection.
 | Dependency | Why |
 | --- | --- |
 | `github.com/launchdarkly/go-ai-sdk/aiserver` | Handler contract, prompt composition, span kit, graph definition, tracking, usage reporting. |
+| `github.com/launchdarkly/go-ai-sdk/skills`, `internal/bridge` | The skills handler: `skills.SkillFilename`, and the non-reporting skills writer through `bridge.WriteConfigSkills` (the import also installs it). |
 | `github.com/launchdarkly/go-ai-sdk/internal/anthropicwire` | Anthropic wire mapping shared with `claudemessages`. |
 | `github.com/anthropics/anthropic-sdk-go` | Messages API client, server-tool params, streaming accumulator. |
 | `github.com/launchdarkly/go-sdk-common/v3` | `ldcontext.Context` for the wrapper and graph tracking. |

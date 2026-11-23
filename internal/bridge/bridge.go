@@ -157,3 +157,18 @@ var GraphUserContext any
 
 // TrackNativeTool is func(*aiserver.NativeTool).
 var TrackNativeTool any
+
+// SkillFailure is one skill the Claude Agents skills handler could not write:
+// its key ("" when the failure is not one skill's) and the reconcile
+// action's error text.
+type SkillFailure struct{ Key, Message string }
+
+// WrittenSkill is one skill the Claude Agents skills handler wrote.
+type WrittenSkill struct{ Key, Description string }
+
+// WriteConfigSkills writes the skills that config (an *aiserver.AiConfig)
+// references into root, without pruning and without reporting usage. err is
+// a caller error (a malformed skills field, an unusable root, an unsupported
+// platform); otherwise either every skill was written or failures says which
+// were not. Set by the skills package at init.
+var WriteConfigSkills func(config any, root string) (written []WrittenSkill, failures []SkillFailure, err error)
