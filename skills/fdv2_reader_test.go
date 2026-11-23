@@ -414,3 +414,33 @@ func TestWireKindConstants(t *testing.T) {
 		})
 	}
 }
+
+func TestReaderRevocationsCountOnlyAtTheCommit(t *testing.T) {
+	_, _ = setup(t)
+	endings := map[string]func(h *readerHarness){
+		"error":   func(h *readerHarness) { h.feed("error", []byte(`{"reason":"x"}`)) },
+		"goodbye": func(h *readerHarness) { h.feed("goodbye", []byte(`{"reason":"bye"}`)) },
+		// A dropped or malformed stream fails the connection, which abandons the transfer.
+		"dropped": func(h *readerHarness) { h.r.abandon() },
+	}
+	for name, end := range endings {
+		h := newHarness(t)
+		h.commitFull("skills", put("a:1", "a"))
+		h.feed("server-intent", intent("xfer-changes", "skills"))
+		h.feed("delete-object", del("a:1"))
+		end(h)
+		if h.r.diag.ObjectsRevoked != 0 || !slices.Equal(h.keys(), []string{"a:1"}) {
+			t.Fatalf("%s: abandoned delete counted: revoked=%d keys=%v", name, h.r.diag.ObjectsRevoked, h.keys())
+		}
+	}
+	h := newHarness(t)
+	h.commitFull("skills", put("a:1", "a"))
+	h.feed("server-intent", intent("xfer-changes", "flags"))
+	h.feed("delete-object", del("a:1"))
+	if out := h.feed("payload-transferred", transferred("(p:flags:2)")); out.committed {
+		t.Fatal("a foreign transfer committed")
+	}
+	if h.r.diag.ObjectsRevoked != 0 || !slices.Equal(h.keys(), []string{"a:1"}) {
+		t.Fatalf("declined delete counted: revoked=%d keys=%v", h.r.diag.ObjectsRevoked, h.keys())
+	}
+}
