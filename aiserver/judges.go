@@ -9,6 +9,7 @@ import (
 	"github.com/launchdarkly/go-sdk-common/v3/ldcontext"
 	"github.com/launchdarkly/go-sdk-common/v3/ldvalue"
 
+	"github.com/launchdarkly/go-ai-sdk/internal/bridge"
 	"github.com/launchdarkly/go-ai-sdk/internal/judging"
 	"github.com/launchdarkly/go-ai-sdk/internal/kitbase"
 )
@@ -32,6 +33,9 @@ type judgeArgs struct {
 	// logErrors logs a failed judge and runs the rest instead of returning
 	// the failure.
 	logErrors bool
+	// run is the run options of each judge's own call: zero, except on a
+	// shadow run (see judgeRun).
+	run bridge.RunOptions
 }
 
 func collapseMessages(cfg AiConfig) AiConfig {
@@ -146,7 +150,7 @@ func runJudge(ctx context.Context, a judgeArgs, j JudgeRef, results map[string]J
 	return withJudgeEvaluation(ctx, j.Key, a.parentTD, func(ctx context.Context, record func(float64, string)) error {
 		res, err := executeAndTrack(ctx, execArgs{
 			configKey: j.Key, config: effective, meta: jmeta, value: jvalue, userCtx: a.userCtx, handler: h,
-			userInput: a.output, graphKey: a.graphKey,
+			userInput: a.output, graphKey: a.graphKey, run: a.run,
 			// input is always sent ("" when there is none), so a rubric's {{input}}
 			// never renders as the literal placeholder.
 			variables: map[string]any{"message_history": history, "response_to_evaluate": a.output, "input": a.userInput},

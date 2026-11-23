@@ -188,6 +188,16 @@ func (c *AIConfig) wrapHandler(h *ProviderHandler) *ProviderHandler {
 	return wrap(h)
 }
 
+// judgeRun returns the run options of each judge's own call. A judge call
+// keeps its own run id and track data; on a shadow run it also goes on the
+// shadow keys and carries the run's TrackData (the shadow fields).
+func (c *AIConfig) judgeRun() bridge.RunOptions {
+	if !c.opts.ShadowEvents {
+		return bridge.RunOptions{}
+	}
+	return bridge.RunOptions{TrackData: c.opts.TrackData, ShadowEvents: true}
+}
+
 // Invoke runs the config once. variables and history may be nil.
 func (c *AIConfig) Invoke(ctx context.Context, userInput string, userCtx ldcontext.Context, opts ...CallOption) (ProviderResponse, error) {
 	co := NewCallOptions(opts...)
@@ -210,7 +220,7 @@ func (c *AIConfig) Invoke(ctx context.Context, userInput string, userCtx ldconte
 	resp := ProviderResponse{Response: parsed, Usage: res.Usage, TrackData: res.TrackData}
 	ja := judgeArgs{cfg: r.cfg, userCtx: userCtx, handler: r.handler, handlers: r.handlers,
 		userInput: userInput, output: outputString(parsed), parentTD: res.TrackData, trajectory: res.Trajectory,
-		existingClient: c.opts.ExistingClient, logErrors: c.opts.LogJudgeErrors}
+		existingClient: c.opts.ExistingClient, logErrors: c.opts.LogJudgeErrors, run: c.judgeRun()}
 	if c.args.SkipJudges {
 		resp.JudgeTasks, err = buildJudgeTasks(ctx, ja)
 	} else {
@@ -250,7 +260,7 @@ func (c *AIConfig) Stream(ctx context.Context, userInput string, userCtx ldconte
 		if !c.args.SkipJudges {
 			jr, err := runJudges(ctx, judgeArgs{cfg: r.cfg, userCtx: userCtx, handler: r.handler, handlers: r.handlers,
 				userInput: userInput, output: done.response, parentTD: done.td, trajectory: done.trajectory,
-				existingClient: c.opts.ExistingClient, logErrors: c.opts.LogJudgeErrors})
+				existingClient: c.opts.ExistingClient, logErrors: c.opts.LogJudgeErrors, run: c.judgeRun()})
 			if err != nil {
 				yield(StreamEvent{}, err)
 				return

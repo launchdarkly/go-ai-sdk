@@ -12,10 +12,22 @@ A shadow request runs a candidate variation on real traffic without serving it. 
 same `aiserver.ConfigArgs` plus `ShadowOptions`, and its `Invoke` and `Stream` return exactly what
 `Config`'s return. When the context matches a targeting rule or the fallthrough that has shadows
 attached, each sampled shadow runs the same input on its own variation once the served call
-succeeds. Its response is discarded. Its events are the normal `$ld:ai:*` events for that
-variation, with the served call's `runId` and `isShadow: true`, so you can compare the two on the
-usual AI metrics. A shadow never delays or changes the served response, and its failures are only
-tracked.
+succeeds. Its response is discarded. A shadow sends the same events a plain `Invoke` of that
+variation sends, but on `$ld:ai-shadow:*` keys instead of `$ld:ai:*`, so nothing that reads AI
+events counts shadow traffic unless it reads those keys on purpose. The events carry the served
+call's `runId` and `isShadow: true`, so you can compare the two runs on the same input. A shadow
+never delays or changes the served response, and its failures are only tracked.
+
+| Event the served call sends | The same event from a shadow |
+| --- | --- |
+| `$ld:ai:<rest>`, for example `$ld:ai:tokens:input` or `$ld:ai:judge:relevance` | `$ld:ai-shadow:<rest>` |
+| Any other key, such as a judge's custom metric key `my-relevance` | `$ld:ai-shadow:my-relevance` |
+| A key already under `$ld:ai-shadow:` | Unchanged |
+
+This covers the shadow's generation, duration and token events, each of its judges' own model
+calls, and their scores, on the background path and through `RunShadow`, including a timeout or
+a failed handler. The served call's events, its judges' events, and the `experimental.shadowConfig`
+and `experimental.runShadow` usage events keep their usual keys.
 
 ```go
 shadowed, err := shadowrequests.ShadowConfig(
@@ -52,8 +64,10 @@ every provider your shadow variations use, since a shadow with no matching handl
 
 When a shadow variation has judges attached, they score the shadow's response after it succeeds,
 the same way they score the served variation's, with each judge's own sampling rate. Their metric
-events carry the shadow's track data (its `variationKey`, `isShadow` and `shadowRequestId`), so the
-scores show under the shadow variation and never mix into the served variation's results. The
+events are on the judge's key mapped into `$ld:ai-shadow:` and carry the shadow's track data (its
+`variationKey`, `isShadow` and `shadowRequestId`), so the scores show under the shadow variation
+and never mix into the served variation's results. Each judge's own model call is tracked on
+`$ld:ai-shadow:*` keys too, with the judge config's track data plus the shadow fields. The
 scores are also on `ShadowResult.JudgeResults`, which is nil unless at least one judge scored. The
 shadow's timeout covers only its own handler, a judge that fails or panics is logged and skipped
 without setting `Error` or affecting the other judges, and `SkipJudges` applies only to the served
