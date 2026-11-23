@@ -12,7 +12,7 @@ require (
 	github.com/aws/smithy-go v1.28.9
 	github.com/google/uuid v1.6.0
 	github.com/launchdarkly/go-sdk-common/v3 v3.6.0
-	github.com/launchdarkly/go-server-sdk/v7 v7.21.2
+	github.com/launchdarkly/go-server-sdk/v7 v7.22.0
 	github.com/openai/openai-go/v3 v3.96.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.47.0
