@@ -72,7 +72,7 @@ if !res.Passed { os.Exit(1) }
 
 | Argument | Meaning |
 | --- | --- |
-| `Key` | Stable offline-evaluation key: `^[a-z0-9][a-z0-9._-]*$`, at most 128 characters, checked before any network I/O. `Run` GETs `…/offline-evaluations/{key}`, POSTs (`key` and `name`) when the evaluation is missing, or PATCHes a full config snapshot when it exists, then creates a new run. PATCH omits `name`. The result `URL` stays the run link. Requires the offline-evaluations API. |
+| `Key` | Stable offline-evaluation key: `^[a-z0-9][a-z0-9._-]*$`, at most 128 characters, checked before any network I/O. `Run` GETs `…/offline-evaluations/{key}`, POSTs (`key` and `name`) when the evaluation is missing, or PATCHes a full config snapshot when it exists, then creates a new run. PATCH omits `name`. The PATCH, like the row-upload and cancel POSTs, is retried on 429, 5xx and transport failures, up to `MaxAttempts` attempts; the create POST is retried on 429 only. The result `URL` stays the run link. Requires the offline-evaluations API and go-ai-sdk 1.1.0 or later. |
 | `Dataset` | `DatasetKey("...")` for a hosted dataset, or `InlineRows{...}` (`map[string]any` values with `input`, `expectedOutput`, `variables`, `metadata`, optional `rowIdx`; a `DatasetRow` is rejected). |
 | `Handler` / `Handlers` | Exactly one. Each config (generation and every judge) picks its handler by provider and mode; an exact provider beats `*`; there is no mode fallback. |
 | `Generation` / `AIConfig` | Exactly one. `AIConfig: &AIConfigRef{Key, Variation}` reads the latest variation version; `Overrides` replace single fields. |
