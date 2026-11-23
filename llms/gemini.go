@@ -361,9 +361,6 @@ func geminiResponse(resp *genai.GenerateContentResponse) (*ContentResponse, erro
 		}
 	}
 	choice.Content = text.String()
-	if len(choice.ToolCalls) > 0 {
-		choice.StopReason = "tool_calls" // Gemini reports STOP on a turn that calls tools
-	}
 	if len(choice.Parts) == 0 {
 		return nil, ErrEmptyResponse
 	}

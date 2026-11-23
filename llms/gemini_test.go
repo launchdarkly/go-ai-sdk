@@ -104,7 +104,7 @@ func TestGeminiResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := resp.Choices[0]
-	if c.Content != "Let me look." || c.StopReason != "tool_calls" || len(c.ToolCalls) != 1 {
+	if c.Content != "Let me look." || c.StopReason != "STOP" || len(c.ToolCalls) != 1 {
 		t.Fatalf("choice = %+v", c)
 	}
 	tc := c.ToolCalls[0]
@@ -218,7 +218,7 @@ func TestGeminiStreamingKeepsToolCallSignature(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := resp.Choices[0]
-	if len(c.ToolCalls) != 1 || c.ToolCalls[0].ID != "c1" || !reflect.DeepEqual(c.ToolCalls[0].Signature, geminiSignature) || c.StopReason != "tool_calls" {
+	if len(c.ToolCalls) != 1 || c.ToolCalls[0].ID != "c1" || !reflect.DeepEqual(c.ToolCalls[0].Signature, geminiSignature) || c.StopReason != "STOP" {
 		t.Errorf("streamed choice = %+v (the next turn needs the signature)", c)
 	}
 	if len(c.Parts) != 2 {
