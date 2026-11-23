@@ -20,7 +20,7 @@ Tier 1 handler package. The handler's `ProvidesFor` field is `{Provider: "Bedroc
 ```go
 const (
 	PackageName    = "github.com/launchdarkly/go-ai-sdk/bedrockmessages"
-	PackageVersion = "0.1.0"
+	PackageVersion = "1.0.0" // x-release-please-version
 	SpanName       = "invoke_agent"
 	GenAISystem    = "aws.bedrock"
 )

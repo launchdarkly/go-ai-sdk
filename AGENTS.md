@@ -241,3 +241,20 @@ PRs are squash-merged and the title becomes the commit, which release-please tur
 - The scope names the package or area (`graph`, `lifecycle`, `evaluations`). Never put a ticket key in the PR title, commit scope or PR body. The branch name carries it (`user/TICKET/description`).
 - `shadow-requests` routes `feat`/`fix`/`perf` to **Experimental**. It must be exactly that, lowercase, and the only scope.
 - Wrong title after merge? Add a `BEGIN_COMMIT_OVERRIDE` / `END_COMMIT_OVERRIDE` block to the PR body before the release PR merges.
+
+## Releases
+
+release-please bumps every line marked `// x-release-please-version` in the
+files listed under `extra-files` in `release-please-config.json`. That covers
+the `PackageVersion` constants and the `PackageVersion` snippets in package
+`README.md` and `agents.md` files. A new file that shows the version needs the
+marker and an `extra-files` entry.
+
+Text the markers do not reach drifts, so check it by hand. The release PR does
+not merge until the root `README.md`, every package `README.md`, `AGENTS.md`
+and `agents.md`, the examples, the `go get` lines and any maturity banner
+(early-development or experimental notes) match the version being released.
+Paste the grep that shows it in the release PR, for example
+`grep -rnE '0\.[0-9]+\.[0-9]+|0\.x|early development|experimental' --include='*.md' . | grep -v CHANGELOG`,
+and explain each remaining hit (shadow requests is the one experimental
+package).

@@ -9,13 +9,22 @@
       "include-v-in-tag": true,
       "extra-files": [
         "aiserver/lifecycle.go",
+        "bedrockagents/README.md",
+        "bedrockagents/agents.md",
         "bedrockagents/handler.go",
+        "bedrockmessages/README.md",
+        "bedrockmessages/agents.md",
         "bedrockmessages/handler.go",
+        "claudeagents/README.md",
         "claudeagents/handler.go",
+        "claudemessages/README.md",
         "claudemessages/handler.go",
         "langchainagents/handler.go",
+        "langchainmessages/README.md",
         "langchainmessages/handler.go",
+        "openaiagents/README.md",
         "openaiagents/handler.go",
+        "openaimessages/README.md",
         "openaimessages/handler.go"
       ],
       "exclude-paths": [

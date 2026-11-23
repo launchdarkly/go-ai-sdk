@@ -25,7 +25,7 @@ callback, client escape hatch, native message input, tools, streaming and span t
 ```go
 const (
 	PackageName     = "github.com/launchdarkly/go-ai-sdk/bedrockagents"
-	PackageVersion  = "0.1.0"
+	PackageVersion  = "1.0.0" // x-release-please-version
 	SpanName        = "invoke_agent"
 	GenAISystem     = "aws.bedrock"
 	DefaultMaxSteps = 10
