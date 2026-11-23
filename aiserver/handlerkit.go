@@ -2,6 +2,7 @@ package aiserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -217,7 +218,7 @@ func (r *kitHandlerRun) StartTool(name, callID string) trace.Span {
 }
 
 // EndTool ends a tool span; a non-nil err marks it ERROR with error.type
-// tool_error.
+// tool_error, unless err is context.Canceled (ERROR only).
 func (r *kitHandlerRun) EndTool(s trace.Span, err error) { r.end(s, err) }
 
 // ToolArguments records a tool call's arguments on its execute_tool span,
@@ -240,8 +241,9 @@ func (r *kitHandlerRun) end(s trace.Span, err error) {
 	tool := r.tools[s]
 	delete(r.tools, s)
 	if err != nil {
-		if tool {
-			// Any failed tool span, the call's own error or a run failing around it.
+		if tool && !errors.Is(err, context.Canceled) {
+			// Any failed tool span, the call's own error or a run failing around it;
+			// a cancelled run is not a tool failure, so it gets no label.
 			s.SetAttributes(attribute.String("error.type", "tool_error"))
 		}
 		s.RecordError(err)

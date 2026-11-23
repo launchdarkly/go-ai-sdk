@@ -3,6 +3,7 @@ package aiserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -325,6 +326,40 @@ func TestHandlerRunToolErrorType(t *testing.T) {
 	r.Fail(errors.New("late"))
 	if code, got, has := errorType("execute_tool open"); code != codes.Unset || has {
 		t.Errorf("abandoned tool: status=%v error.type=%q, want UNSET and none", code, got)
+	}
+}
+
+// A cancelled run is not a tool failure: the tool span still ends ERROR but
+// carries no error.type, wrapped or not. Other errors, DeadlineExceeded
+// included, still get tool_error.
+func TestHandlerRunToolCancelNoErrorType(t *testing.T) {
+	exp := withSpans(t)
+	opts := kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/t", Name: "root", System: "s", RequestModel: "m"}
+	r := kitStartHandlerRun(bg, opts, HandlerRequest{}, prompt{})
+	r.EndTool(r.StartTool("wrapped", "c1"), fmt.Errorf("tool: %w", context.Canceled))
+	r.StartTool("open", "c2")
+	r.Fail(context.Canceled)
+	r.EndTool(r.StartTool("plain", "c3"), errors.New("boom"))
+	for name, want := range map[string]string{"execute_tool wrapped": "", "execute_tool open": "", "execute_tool plain": "tool_error"} {
+		found := false
+		for _, s := range exp.GetSpans() {
+			if s.Name != name {
+				continue
+			}
+			found = true
+			got := ""
+			for _, a := range s.Attributes {
+				if a.Key == "error.type" {
+					got = a.Value.Emit()
+				}
+			}
+			if s.Status.Code != codes.Error || got != want {
+				t.Errorf("%s: status=%v error.type=%q, want ERROR %q", name, s.Status.Code, got, want)
+			}
+		}
+		if !found {
+			t.Errorf("no span %q", name)
+		}
 	}
 }
 

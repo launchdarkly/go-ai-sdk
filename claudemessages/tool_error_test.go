@@ -78,3 +78,42 @@ func checkToolErrorSpans(t *testing.T, spans []sdktrace.ReadOnlySpan, okName, ba
 		t.Errorf("%s: no exception event", badName)
 	}
 }
+
+// Cancelling the context while a tool blocks ends the tool span ERROR with no
+// error.type: a cancelled run is not a tool failure.
+func TestToolCancelNoErrorType(t *testing.T) {
+	h, _, exp := setup(t, toolResp("a", `{}`))
+	ctx, cancel := context.WithCancel(bg)
+	defer cancel()
+	started := make(chan struct{})
+	c := cfg(func(c *aiserver.AiConfig) {
+		c.Instructions = "x"
+		c.Tools = map[string]aiserver.Tool{"a": {Name: "a", Type: "function", Parameters: map[string]any{}}}
+	})
+	tools := map[string]aiserver.ToolHandler{
+		"a": aiserver.ToolFunc(func(ctx context.Context, _ map[string]any) (any, error) {
+			close(started)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}),
+	}
+	go func() { <-started; cancel() }()
+	if _, err := h.Invoke(ctx, aiserver.HandlerRequest{Config: c, UserInput: "q", ToolHandlers: tools}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	for _, s := range exp.GetSpans().Snapshots() {
+		if s.Name() != "execute_tool a" {
+			continue
+		}
+		for _, a := range s.Attributes() {
+			if string(a.Key) == "error.type" {
+				t.Errorf("cancelled tool span has error.type=%q", a.Value.Emit())
+			}
+		}
+		if s.Status().Code != codes.Error {
+			t.Errorf("status=%v, want ERROR", s.Status().Code)
+		}
+		return
+	}
+	t.Fatal("no execute_tool a span")
+}
