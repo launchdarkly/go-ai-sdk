@@ -140,7 +140,8 @@ Put a sentinel in `ToolHandlers` under a config tool key. Each model call of the
 Confinement: a file path may be relative to `WorkDir` or absolute inside it; `..` is rejected,
 and every file operation goes through `os.Root`, so a symlink that points outside `WorkDir` (file
 or parent directory) is refused. Any tool failure, including a refused path, goes back to the
-model as an `is_error` tool result and marks the span ERROR; it does not fail the run. Config
+model as an `is_error` tool result and marks the span ERROR with `error.type` `tool_error`
+(the error text is not written as the span's result); it does not fail the run. Config
 errors fail the run before the first provider call: a `NativeTool` with any other `ToolName`
 (`ErrUnsupportedNativeTool`), a `WorkDir` that cannot be opened, or a function tool whose key
 equals a built-in's name.

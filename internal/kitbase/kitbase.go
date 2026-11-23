@@ -145,7 +145,8 @@ type Run interface {
 	EndChat(s trace.Span, responseModel string, u SpanUsage, finishReason string)
 	// StartTool opens an `execute_tool <name>` span, a sibling of the chat spans.
 	StartTool(name, callID string) trace.Span
-	// EndTool ends a tool span; a non-nil err marks it ERROR.
+	// EndTool ends a tool span; a non-nil err marks it ERROR and, unless err
+	// is context.Canceled, sets error.type tool_error.
 	EndTool(s trace.Span, err error)
 	// ToolArguments records a tool call's arguments, subject to the content gate.
 	ToolArguments(s trace.Span, arguments any)
