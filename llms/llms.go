@@ -3,7 +3,8 @@
 // the Model a handler calls. Its names follow the subset of
 // github.com/tmc/langchaingo/llms those handlers used, so a langchaingo
 // model ports with a small adapter. The built-in models for OpenAI,
-// Anthropic and Bedrock are in this package too (see New).
+// Anthropic, Bedrock and Gemini are in this package too (NewOpenAI,
+// NewAnthropic, NewBedrock, NewGemini).
 package llms
 
 import (
@@ -56,11 +57,15 @@ type BinaryContent struct {
 	Data     []byte
 }
 
-// ToolCall is a tool call the model made, on an AI message.
+// ToolCall is a tool call the model made, on an AI message. Signature is
+// an opaque provider value returned with the call that the next turn must
+// send back unchanged (Gemini's thought signature); other models leave it
+// nil.
 type ToolCall struct {
 	ID           string
 	Type         string
 	FunctionCall *FunctionCall
+	Signature    []byte
 }
 
 // FunctionCall names the function and carries its JSON arguments.

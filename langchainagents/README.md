@@ -79,7 +79,7 @@ claude, err := claudeagents.NewHandler(claudeagents.Options{}) // Anthropic/agen
 if err != nil {
 	return err
 }
-lc, err := langchainagents.NewHandler(langchainagents.Options{}) // */agent: OpenAI, Bedrock, ...
+lc, err := langchainagents.NewHandler(langchainagents.Options{}) // */agent: OpenAI, Bedrock, Gemini, ...
 if err != nil {
 	return err
 }
@@ -148,7 +148,7 @@ default), `ErrNoToolHandler`, `ErrEmptyResponse`, `ErrNoRoot`, `ErrNilGraph`,
 |---|---|
 | `Options.Model` / `NativeGraphOptions.ModelFactory` | the model you supply |
 | `Options.ModelFactory` | `ModelFactory(config)` per call |
-| neither | built from lowercased `provider.name`: `anthropic` → `llms.NewAnthropic` (Messages API), `bedrock` → `llms.NewBedrock` (Converse API; model id prefixed with `model.region`), anything else → `llms.NewOpenAI` (Chat Completions, so any OpenAI-compatible endpoint works through `OPENAI_BASE_URL`) |
+| neither | built from lowercased `provider.name`: `anthropic` → `llms.NewAnthropic` (Messages API), `bedrock` → `llms.NewBedrock` (Converse API; model id prefixed with `model.region`), `gemini` → `llms.NewGemini` (Gemini API `generateContent`), anything else → `llms.NewOpenAI` (Chat Completions, so any OpenAI-compatible endpoint works through `OPENAI_BASE_URL`) |
 
 `config.model.parameters` maps to `llms` call options (`max_tokens`, `temperature`,
 `top_p`, `top_k`, `seed`, `frequency_penalty`, `presence_penalty`, `stop`). An explicit `0`
@@ -167,6 +167,8 @@ opens no root span of its own: its `chat` and `execute_tool` spans are children 
 |---|---|---|
 | `LD_SDK_KEY` | `aiserver` lazy init | Required unless you call `aiserver.InitWithClient` |
 | `OPENAI_API_KEY` | built-in OpenAI model | Required for OpenAI / fallback providers without an injected model |
+| `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) | built-in Gemini model | Required for `provider.name = Gemini` without an injected model |
+| `GOOGLE_GEMINI_BASE_URL` | built-in Gemini model | Optional: Gemini API endpoint |
 | `ANTHROPIC_API_KEY` | built-in Anthropic model | Required for `provider.name = Anthropic` without an injected model |
 | `OPENAI_BASE_URL` (or `OPENAI_API_BASE`) / `OPENAI_ORGANIZATION` / `OPENAI_MODEL` | built-in OpenAI model | Optional |
 | AWS credential chain (`AWS_REGION`, `AWS_PROFILE`, `AWS_BEARER_TOKEN_BEDROCK`, ...) | built-in Bedrock model | Required for `provider.name = Bedrock` without an injected model |

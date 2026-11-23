@@ -734,6 +734,58 @@ func TestDefaultModelRouting(t *testing.T) {
 	}
 }
 
+// Gemini route: the built-in model runs the tool loop on the Gemini API and
+// sends the thought signature back with the function call on the next turn.
+func TestDefaultModelGeminiRoute(t *testing.T) {
+	var bodies []map[string]any
+	replies := []string{
+		`{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"lookup","args":{"q":"x"}},"thoughtSignature":"c2lnLTE="}]},"finishReason":"STOP"}],
+"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":2}}`,
+		`{"candidates":[{"content":{"role":"model","parts":[{"text":"found it"}]},"finishReason":"STOP"}],
+"usageMetadata":{"promptTokenCount":9,"candidatesTokenCount":3,"cachedContentTokenCount":4}}`,
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var m map[string]any
+		_ = json.Unmarshal(b, &m)
+		bodies = append(bodies, m)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, replies[min(len(bodies)-1, len(replies)-1)])
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("GOOGLE_GEMINI_BASE_URL", srv.URL)
+	t.Setenv("GOOGLE_API_KEY", "test")
+	exp := withTracer(t)
+	c := instr("base")
+	c.Provider.Name = "Gemini"
+	c.Model.Name = "gemini-3.1-pro-preview"
+	c.Tools = map[string]aiserver.Tool{"lookup": {Name: "lookup", Type: "function", Parameters: map[string]any{"type": "object"}}}
+	tools := map[string]aiserver.ToolHandler{"lookup": aiserver.ToolFunc(func(context.Context, map[string]any) (any, error) { return "result", nil })}
+	res, err := must(newHandler(Options{})).Invoke(bg, aiserver.HandlerRequest{Config: c, UserInput: "q", ToolHandlers: tools})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bodies) != 2 {
+		t.Fatalf("requests = %d, want 2", len(bodies))
+	}
+	contents := bodies[1]["contents"].([]any)
+	call := contents[1].(map[string]any)["parts"].([]any)[0].(map[string]any)
+	resp := contents[2].(map[string]any)["parts"].([]any)[0].(map[string]any)["functionResponse"].(map[string]any)
+	if call["thoughtSignature"] != "c2lnLTE=" || resp["name"] != "lookup" || !reflect.DeepEqual(resp["response"], map[string]any{"output": "result"}) {
+		t.Errorf("second request contents = %v", contents)
+	}
+	if res.Output != "found it" {
+		t.Errorf("output = %#v", res.Output)
+	}
+	chat := spansByName(exp)["chat gemini-3.1-pro-preview"]
+	if len(chat) != 2 {
+		t.Fatalf("chat spans = %d, want 2", len(chat))
+	}
+	if a := spanAttrs(chat[1]); a["gen_ai.provider.name"] != "gemini" || a["gen_ai.usage.cache_read.input_tokens"] != "4" {
+		t.Errorf("gemini chat span = %v", a)
+	}
+}
+
 // the wrapper passes userInput, context and variables
 // to Config(...).Invoke; ldContext reaches only the root span.
 func TestLangChainMessagesWrapper(t *testing.T) {

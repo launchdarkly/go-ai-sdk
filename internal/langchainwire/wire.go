@@ -17,6 +17,7 @@ import (
 	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	openaioption "github.com/openai/openai-go/v3/option"
+	"google.golang.org/genai"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/bedrockwire"
@@ -88,9 +89,10 @@ func ResolveModel(ctx context.Context, model llms.Model, factory func(aiserver.A
 }
 
 // DefaultModel builds a model from config.provider.name: "anthropic",
-// "bedrock", or OpenAI Chat Completions for anything else (also any
+// "bedrock", "gemini", or OpenAI Chat Completions for anything else (also any
 // OpenAI-compatible endpoint, through OPENAI_BASE_URL). A non-nil schema binds
-// OpenAI's json_schema response format, sent verbatim. A non-nil maxRetries
+// OpenAI's json_schema response format, sent verbatim, or Gemini's JSON
+// response schema. A non-nil maxRetries
 // is the retry count on the client the model builds: option.WithMaxRetries for
 // OpenAI and Anthropic, and maxRetries+1 attempts on the AWS client for Bedrock
 // (never 0 attempts, which the AWS SDK reads as its default).
@@ -115,6 +117,13 @@ func DefaultModel(_ context.Context, cfg aiserver.AiConfig, schema map[string]an
 			}
 		}
 		m, err = llms.NewBedrock(o)
+	case "gemini":
+		o := llms.GeminiOptions{Model: cfg.Model.Name, JSONSchema: schema}
+		if maxRetries != nil {
+			attempts := int32(*maxRetries + 1)
+			o.HTTPOptions.RetryOptions = &genai.HTTPRetryOptions{Attempts: &attempts}
+		}
+		m, err = llms.NewGemini(o)
 	default:
 		o := llms.OpenAIOptions{Model: cfg.Model.Name, JSONSchema: schema}
 		if maxRetries != nil {
@@ -317,6 +326,7 @@ func ResponseToolCalls(resp *llms.ContentResponse) []llms.ToolCall {
 var finishReasons = map[string]string{
 	"end_turn": "stop", "stop_sequence": "stop", "max_tokens": "length", "tool_use": "tool_calls",
 	"refusal": "content_filter", "guardrail_intervened": "content_filter", "content_filtered": "content_filter",
+	"safety": "content_filter", "prohibited_content": "content_filter", "blocklist": "content_filter", "spii": "content_filter",
 }
 
 // FinishReason is the first choice's stop reason in OpenAI vocabulary.

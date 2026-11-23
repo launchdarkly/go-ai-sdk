@@ -4,7 +4,7 @@
 
 Tier 1 handler package. The handler's `ProvidesFor` field is `{"*", "messages"}`: the wildcard fallback for any
 messages-mode variation. Built on the SDK's own [`llms`](../llms) package (model interface plus
-built-in OpenAI Chat Completions, Anthropic Messages and Bedrock Converse models). LangChain has
+built-in OpenAI Chat Completions, Anthropic Messages, Bedrock Converse and Gemini models). LangChain has
 no official Go SDK, and the community ports were removed.
 
 ## File map
@@ -30,7 +30,7 @@ type InvokeOptions struct{ ToolHandlers; Registry; SkipJudges; Variables; Handle
 func LangChainMessages(ctx, configKey, userInput string, userCtx ldcontext.Context, opts *InvokeOptions) (aiserver.ProviderResponse, error)
 ```
 
-`Options.MaxRetries` is the retry count on the built-in model the handler builds: `option.WithMaxRetries` through `RequestOptions` for OpenAI and Anthropic, and `MaxRetries+1` attempts on the AWS client for Bedrock (never 0, which the AWS SDK reads as its default). nil keeps each SDK's default. `NewHandler` and `LangChainMessages` refuse a negative count, or `MaxRetries` with `Model` or `ModelFactory`, with an error naming `MaxRetries`.
+`Options.MaxRetries` is the retry count on the built-in model the handler builds: `option.WithMaxRetries` through `RequestOptions` for OpenAI and Anthropic, `MaxRetries+1` attempts on the AWS client for Bedrock (never 0, which the AWS SDK reads as its default), and `MaxRetries+1` `HTTPRetryOptions.Attempts` for Gemini. nil keeps each SDK's default. `NewHandler` and `LangChainMessages` refuse a negative count, or `MaxRetries` with `Model` or `ModelFactory`, with an error naming `MaxRetries`.
 
 `Options.CaptureContent` gates prompt, completion, tool and judge-explanation content on spans:
 `aiserver.CaptureDefault` (the zero value) follows `aiserver.Configure`, else on;
