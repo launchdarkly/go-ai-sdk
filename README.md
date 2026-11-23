@@ -36,6 +36,16 @@ and state-graph runner, with no community port. `claudeagents` runs the
 Claude Code built-in tools on the host itself (see its README's security note). Each
 package README lists what its Go version does differently.
 
+<!-- experimental-features:start (generated; do not edit by hand) -->
+## Experimental features
+
+These features are experimental. Their names and behavior may change in a minor release, and every change is listed under **Experimental** in the changelog.
+
+| Feature | What it does | Import from | Changelog scope |
+| --- | --- | --- | --- |
+| [Shadow requests](experimental/shadowrequests/README.md) | Run another AI Config variation in the background on the same input and report it as its own metrics, without changing the response. | `github.com/launchdarkly/go-ai-sdk/experimental/shadowrequests` | `shadow-requests` |
+<!-- experimental-features:end -->
+
 ## Quick start
 
 ```go
