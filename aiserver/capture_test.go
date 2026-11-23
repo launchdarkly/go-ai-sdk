@@ -2,6 +2,7 @@ package aiserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"iter"
 	"testing"
@@ -264,6 +265,33 @@ func TestToolCallSettersSkipNil(t *testing.T) {
 	}
 	if s := ToolResultString(nil); s != "" {
 		t.Errorf("ToolResultString(nil) = %q, want empty", s)
+	}
+}
+
+func TestToolCallSettersSkipJSONNull(t *testing.T) {
+	freshOptions(t)
+	exp := contentSpans(t)
+	_, span := tracerFor(kitbase.TracerPrefix+"/test").Start(bg, "execute_tool json null")
+	telemetry.SetToolCallArguments(bg, span, json.RawMessage("null"))
+	telemetry.SetToolCallResult(bg, span, json.RawMessage("null"))
+	span.End()
+	got := presentContent(exp)
+	for _, k := range []string{"gen_ai.tool.call.arguments", "gen_ai.tool.call.result"} {
+		if got[k] {
+			t.Errorf("%s must not be written for a JSON null", k)
+		}
+	}
+	_, span = tracerFor(kitbase.TracerPrefix+"/test").Start(bg, "execute_tool string null")
+	telemetry.SetToolCallResult(bg, span, "null")
+	span.End()
+	written := false
+	for _, a := range exp.GetSpans().Snapshots()[1].Attributes() {
+		if a.Key == "gen_ai.tool.call.result" {
+			written = a.Value.AsString() == "null"
+		}
+	}
+	if !written {
+		t.Error(`a string "null" result must be written as "null"`)
 	}
 }
 
