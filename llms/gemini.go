@@ -361,7 +361,8 @@ func geminiResponse(resp *genai.GenerateContentResponse) (*ContentResponse, erro
 		}
 	}
 	choice.Content = text.String()
-	if len(choice.Parts) == 0 {
+	// A blocked or truncated reply has no parts but still carries its finish reason.
+	if len(choice.Parts) == 0 && (cand.FinishReason == "" || cand.FinishReason == genai.FinishReasonUnspecified || cand.FinishReason == genai.FinishReasonStop) {
 		return nil, ErrEmptyResponse
 	}
 	return &ContentResponse{Choices: []*ContentChoice{choice}}, nil

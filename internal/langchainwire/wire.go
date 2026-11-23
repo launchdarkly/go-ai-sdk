@@ -325,6 +325,7 @@ func ResponseToolCalls(resp *llms.ContentResponse) []llms.ToolCall {
 
 var finishReasons = map[string]string{
 	"end_turn": "stop", "stop_sequence": "stop", "max_tokens": "length", "tool_use": "tool_calls",
+	"stop": "stop", "length": "length", "tool_calls": "tool_calls", "function_call": "tool_calls", "content_filter": "content_filter",
 	"refusal": "content_filter", "guardrail_intervened": "content_filter", "content_filtered": "content_filter",
 	"safety": "content_filter", "recitation": "content_filter", "blocklist": "content_filter", "prohibited_content": "content_filter",
 	"spii": "content_filter", "image_safety": "content_filter",

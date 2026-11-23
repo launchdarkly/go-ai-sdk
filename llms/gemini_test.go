@@ -120,6 +120,25 @@ func TestGeminiResponse(t *testing.T) {
 	}
 }
 
+// A blocked or truncated candidate has no parts, but its finish reason still
+// reaches the chat span; a plain empty STOP is still an empty response.
+func TestGeminiResponseWithoutParts(t *testing.T) {
+	for _, finish := range []string{"SAFETY", "MAX_TOKENS"} {
+		_, url := newFake(t, "application/json", geminiReply(``, finish))
+		resp, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")})
+		if err != nil {
+			t.Fatalf("%s: %v", finish, err)
+		}
+		if c := resp.Choices[0]; c.StopReason != finish || c.Content != "" || len(c.Parts) != 0 {
+			t.Errorf("%s: choice = %+v", finish, c)
+		}
+	}
+	_, url := newFake(t, "application/json", geminiReply(``, "STOP"))
+	if _, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")}); !errors.Is(err, ErrEmptyResponse) {
+		t.Fatalf("err = %v, want ErrEmptyResponse", err)
+	}
+}
+
 func TestGeminiJSONSchema(t *testing.T) {
 	schema := map[string]any{"type": "object", "properties": map[string]any{"a": map[string]any{"type": "string"}}}
 	f, url := newFake(t, "application/json", geminiReply(`{"text":"{}"}`, "STOP"))

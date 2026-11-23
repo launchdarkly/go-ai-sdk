@@ -55,3 +55,16 @@ func TestSpanProviderName(t *testing.T) {
 		}
 	}
 }
+
+// Gemini shouts its enum, so STOP must land on the same value as Anthropic's end_turn.
+func TestFinishReason(t *testing.T) {
+	for raw, want := range map[string]string{
+		"STOP": "stop", "end_turn": "stop", "stop": "stop", "MAX_TOKENS": "length", "length": "length",
+		"tool_use": "tool_calls", "tool_calls": "tool_calls", "SAFETY": "content_filter", "pause_turn": "pause_turn",
+	} {
+		resp := &llms.ContentResponse{Choices: []*llms.ContentChoice{{StopReason: raw}}}
+		if got := FinishReason(resp); got != want {
+			t.Errorf("FinishReason(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
