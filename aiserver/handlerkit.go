@@ -112,6 +112,7 @@ type kitHandlerRun struct {
 	Root    trace.Span
 	tracer  trace.Tracer
 	open    map[trace.Span]bool
+	tools   map[trace.Span]bool // the execute_tool spans in open
 	usage   kitbase.SpanUsage
 	usageOK bool
 	model   string      // last response model a chat turn reported
@@ -135,7 +136,7 @@ func kitStartHandlerRun(ctx context.Context, opts kitbase.HandlerSpanOptions, re
 		rctx, rawRoot = tracer.Start(ctx, opts.Name)
 	}
 	root := trackSpan(rawRoot)
-	r := &kitHandlerRun{opts: opts, ctx: rctx, Root: root, tracer: tracer, open: map[trace.Span]bool{root: true}, judge: judgeScopeFrom(ctx)}
+	r := &kitHandlerRun{opts: opts, ctx: rctx, Root: root, tracer: tracer, open: map[trace.Span]bool{root: true}, tools: map[trace.Span]bool{}, judge: judgeScopeFrom(ctx)}
 	root.SetAttributes(attribute.String("gen_ai.operation.name", opts.Operation))
 	root.SetAttributes(r.identity()...)
 	setLDSpanAttributesFromVars(root, req.Variables)
@@ -211,10 +212,12 @@ func (r *kitHandlerRun) StartTool(name, callID string) trace.Span {
 	s.SetAttributes(attribute.String("gen_ai.operation.name", "execute_tool"),
 		attribute.String("gen_ai.tool.name", name), attribute.String("gen_ai.tool.call.id", callID))
 	r.open[s] = true
+	r.tools[s] = true
 	return s
 }
 
-// EndTool ends a tool span; a non-nil err marks it ERROR.
+// EndTool ends a tool span; a non-nil err marks it ERROR with error.type
+// tool_error.
 func (r *kitHandlerRun) EndTool(s trace.Span, err error) { r.end(s, err) }
 
 // ToolArguments records a tool call's arguments on its execute_tool span,
@@ -234,7 +237,13 @@ func (r *kitHandlerRun) end(s trace.Span, err error) {
 		return
 	}
 	delete(r.open, s)
+	tool := r.tools[s]
+	delete(r.tools, s)
 	if err != nil {
+		if tool {
+			// Any failed tool span, the call's own error or a run failing around it.
+			s.SetAttributes(attribute.String("error.type", "tool_error"))
+		}
 		s.RecordError(err)
 		s.SetStatus(codes.Error, err.Error())
 	} else {
@@ -324,6 +333,7 @@ func (r *kitHandlerRun) Abandon() {
 		s.End()
 	}
 	clear(r.open)
+	clear(r.tools)
 }
 
 // ToolResultString renders a tool result for the provider: strings pass

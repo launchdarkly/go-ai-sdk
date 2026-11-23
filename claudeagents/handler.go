@@ -232,7 +232,9 @@ func (r *toolset) runHost(ctx context.Context, run kitbase.Run, b anthropic.Cont
 	if err != nil && out == "" {
 		out = err.Error()
 	}
-	run.ToolResult(span, out)
+	if err == nil {
+		run.ToolResult(span, out) // a failed call's text goes to the model, not the span
+	}
 	run.EndTool(span, err)
 	return anthropic.NewToolResultBlock(b.ID, out, err != nil)
 }

@@ -77,7 +77,7 @@ run ends) only when one is enabled. `workspace.rel` rejects `..` components and 
 outside `WorkDir` (or its symlink-resolved form); all file I/O then goes through the `os.Root`,
 which refuses symlinks leaving it. Directory walks use `root.FS()` with `fs.WalkDir` (no
 symlinked-directory traversal). Executor errors become `is_error` tool results and mark the
-`execute_tool` span ERROR; they never fail the run (unlike `ToolFunc` errors), so the
+`execute_tool` span ERROR with `error.type` `tool_error` and no `gen_ai.tool.call.result`; they never fail the run (unlike `ToolFunc` errors), so the
 model can recover as it does in Claude Code. The tool span's message is a short status (e.g.
 `bash: exit code 3`), not the command output.
 

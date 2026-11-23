@@ -278,6 +278,56 @@ func TestHandlerRunResponseModelOnFailAndAbandon(t *testing.T) {
 	}
 }
 
+// A tool span that ends in error carries error.type tool_error, whether its
+// own call failed or the run failed while it was open. OK tool spans, chat
+// spans, the root and abandoned (UNSET) tool spans carry none.
+func TestHandlerRunToolErrorType(t *testing.T) {
+	exp := withSpans(t)
+	opts := kitbase.HandlerSpanOptions{Tracer: kitbase.TracerPrefix + "/t", Name: "root", System: "s", RequestModel: "m"}
+	errorType := func(name string) (codes.Code, string, bool) {
+		for _, s := range exp.GetSpans() {
+			if s.Name == name {
+				for _, a := range s.Attributes {
+					if a.Key == "error.type" {
+						return s.Status.Code, a.Value.Emit(), true
+					}
+				}
+				return s.Status.Code, "", false
+			}
+		}
+		t.Fatalf("no span %q", name)
+		return 0, "", false
+	}
+
+	r := kitStartHandlerRun(bg, opts, HandlerRequest{}, prompt{})
+	r.EndTool(r.StartTool("ok", "c1"), nil)
+	r.EndTool(r.StartTool("bad", "c2"), errors.New("boom"))
+	r.StartChat("m")
+	r.StartTool("open", "c3")
+	r.Fail(errors.New("provider down"))
+	for name, want := range map[string]string{"execute_tool bad": "tool_error", "execute_tool open": "tool_error"} {
+		if code, got, _ := errorType(name); code != codes.Error || got != want {
+			t.Errorf("%s: status=%v error.type=%q, want ERROR %q", name, code, got, want)
+		}
+	}
+	for _, name := range []string{"execute_tool ok", "chat m", "root"} {
+		if _, got, has := errorType(name); has {
+			t.Errorf("%s: error.type=%q, want none", name, got)
+		}
+	}
+
+	// Abandonment ends the open tool span UNSET with no error.type, and a
+	// later Fail cannot add one.
+	exp.Reset()
+	r = kitStartHandlerRun(bg, opts, HandlerRequest{}, prompt{})
+	r.StartTool("open", "c4")
+	r.Abandon()
+	r.Fail(errors.New("late"))
+	if code, got, has := errorType("execute_tool open"); code != codes.Unset || has {
+		t.Errorf("abandoned tool: status=%v error.type=%q, want UNSET and none", code, got)
+	}
+}
+
 // EndOnPanic ends every open span ERROR and lets the panic continue.
 func TestHandlerRunEndOnPanic(t *testing.T) {
 	exp := withSpans(t)
