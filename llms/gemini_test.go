@@ -206,3 +206,22 @@ func TestGeminiRejectsImageURL(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+func TestGeminiStreamingKeepsToolCallSignature(t *testing.T) {
+	sig := base64.StdEncoding.EncodeToString(geminiSignature)
+	body := "data: " + `{"candidates":[{"content":{"role":"model","parts":[{"text":"Let me look."}]}}]}` + "\n\n" +
+		"data: " + `{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"id":"c1","name":"lookup","args":{"q":"x"}},"thoughtSignature":"` + sig + `"}]},"finishReason":"STOP"}]}` + "\n\n"
+	_, url := newFake(t, "text/event-stream", body)
+	resp, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")},
+		WithStreamingFunc(func(context.Context, []byte) error { return nil }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := resp.Choices[0]
+	if len(c.ToolCalls) != 1 || c.ToolCalls[0].ID != "c1" || !reflect.DeepEqual(c.ToolCalls[0].Signature, geminiSignature) || c.StopReason != "tool_calls" {
+		t.Errorf("streamed choice = %+v (the next turn needs the signature)", c)
+	}
+	if len(c.Parts) != 2 {
+		t.Errorf("parts = %+v, want the text then the tool call", c.Parts)
+	}
+}
