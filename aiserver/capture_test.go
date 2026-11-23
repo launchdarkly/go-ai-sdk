@@ -245,6 +245,28 @@ func TestContentGateOnHandlerAndHelperSpans(t *testing.T) {
 	}
 }
 
+func TestToolCallSettersSkipNil(t *testing.T) {
+	freshOptions(t)
+	exp := contentSpans(t)
+	_, span := tracerFor(kitbase.TracerPrefix+"/test").Start(bg, "execute_tool nil")
+	telemetry.SetToolCallArguments(bg, span, nil)
+	telemetry.SetToolCallResult(bg, span, nil)
+	span.End()
+	_, span = tracerFor(kitbase.TracerPrefix+"/test").Start(bg, "execute_tool typed nil")
+	telemetry.SetToolCallArguments(bg, span, map[string]any(nil))
+	telemetry.SetToolCallResult(bg, span, map[string]any(nil))
+	span.End()
+	got := presentContent(exp)
+	for _, k := range []string{"gen_ai.tool.call.arguments", "gen_ai.tool.call.result"} {
+		if got[k] {
+			t.Errorf("%s must not be written for nil or a typed nil", k)
+		}
+	}
+	if s := ToolResultString(nil); s != "" {
+		t.Errorf("ToolResultString(nil) = %q, want empty", s)
+	}
+}
+
 func TestChatContentShape(t *testing.T) {
 	freshOptions(t)
 	exp := contentSpans(t)

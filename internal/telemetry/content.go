@@ -3,7 +3,9 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -90,20 +92,40 @@ type ToolDefinition struct {
 }
 
 // ValueString renders a tool argument, result or output for a span: a string
-// as is, nil as "", anything else as JSON (fmt.Sprint if it cannot be
-// marshalled).
+// as is, nil (or a typed nil) as "", anything else as compact JSON without
+// HTML escaping. A value JSON cannot encode falls back to fmt.Sprint, or to
+// its type name when it holds a map or slice cycle, which fmt.Sprint would
+// follow forever.
 func ValueString(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
-	if v == nil {
+	if isNil(v) {
 		return ""
 	}
-	b, err := json.Marshal(v)
-	if err != nil {
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		var uv *json.UnsupportedValueError
+		if errors.As(err, &uv) && (uv.Value.Kind() == reflect.Map || uv.Value.Kind() == reflect.Slice) {
+			return fmt.Sprintf("%T", v)
+		}
 		return fmt.Sprint(v)
 	}
-	return string(b)
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// isNil reports a nil interface or a nil map, slice, pointer, chan or func.
+func isNil(v any) bool {
+	if v == nil {
+		return true
+	}
+	switch rv := reflect.ValueOf(v); rv.Kind() {
+	case reflect.Map, reflect.Slice, reflect.Pointer, reflect.Chan, reflect.Func:
+		return rv.IsNil()
+	}
+	return false
 }
 
 // ChatContent is the content of one chat call. Empty fields are not written.
@@ -189,17 +211,17 @@ func openLLMetry(prefix string, msgs []ChatMessage) []attribute.KeyValue {
 }
 
 // SetToolCallArguments writes gen_ai.tool.call.arguments (a string as is,
-// anything else as JSON), only when Enabled(ctx).
+// anything else as JSON), only when Enabled(ctx) and arguments is not nil.
 func SetToolCallArguments(ctx context.Context, span trace.Span, arguments any) {
-	if Enabled(ctx) {
+	if Enabled(ctx) && !isNil(arguments) {
 		span.SetAttributes(attribute.String("gen_ai.tool.call.arguments", ValueString(arguments)))
 	}
 }
 
 // SetToolCallResult writes gen_ai.tool.call.result (a string as is,
-// anything else as JSON), only when Enabled(ctx).
+// anything else as JSON), only when Enabled(ctx) and result is not nil.
 func SetToolCallResult(ctx context.Context, span trace.Span, result any) {
-	if Enabled(ctx) {
+	if Enabled(ctx) && !isNil(result) {
 		span.SetAttributes(attribute.String("gen_ai.tool.call.result", ValueString(result)))
 	}
 }
