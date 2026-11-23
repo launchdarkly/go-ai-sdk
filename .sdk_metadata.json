@@ -207,6 +207,28 @@
           "introduced": "0.1"
         }
       }
+    },
+    "go-ai-opencode-agents": {
+      "name": "Go AI SDK for OpenCode Agents",
+      "type": "ai-provider",
+      "path": "opencodeagents",
+      "languages": [
+        "Go"
+      ],
+      "aiSdkNames": [
+        "github.com/launchdarkly/go-ai-sdk/opencodeagents"
+      ],
+      "releases": {
+        "tag-prefix": "v"
+      },
+      "features": {
+        "aiAgentConfig": {
+          "introduced": "1.1"
+        },
+        "aiTrackMetrics": {
+          "introduced": "1.1"
+        }
+      }
     }
   }
 }

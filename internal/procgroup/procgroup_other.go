@@ -11,3 +11,12 @@ import "os/exec"
 // before Start or Run, as on Unix, where it overwrites cmd.SysProcAttr and
 // cmd.Cancel.
 func KillOnCancel(*exec.Cmd) {}
+
+// Isolate is a no-op where process groups are unavailable.
+func Isolate(*exec.Cmd) {}
+
+// Terminate kills the command itself: there is no group, and no SIGTERM.
+func Terminate(cmd *exec.Cmd) error { return cmd.Process.Kill() }
+
+// Kill kills the command itself.
+func Kill(cmd *exec.Cmd) error { return cmd.Process.Kill() }

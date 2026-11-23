@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"math"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/launchdarkly/go-ai-sdk/claudeagents"
 	"github.com/launchdarkly/go-ai-sdk/langchainagents"
 	"github.com/launchdarkly/go-ai-sdk/openaiagents"
+	"github.com/launchdarkly/go-ai-sdk/opencodeagents"
 )
 
 func registryConfig(key string, skipJudges bool) *aiserver.AIConfig {
@@ -270,4 +272,40 @@ func judge(ctx context.Context, key, input string) error {
 		return errors.New("judge verification failed")
 	}
 	return nil
+}
+
+// opencodeAgents demonstrates opencodeagents.OpenCodeAgents: each call runs
+// its own `opencode serve` child. It needs `opencode` on PATH and an OpenCode
+// config file (OPENCODE_CONFIG_PATH, default ./opencode.json). The child
+// gets only the environment listed here, not this process's.
+func opencodeAgents(ctx context.Context, key, input string) error {
+	if _, err := exec.LookPath("opencode"); err != nil {
+		return errors.New("opencode-agents needs the opencode CLI on PATH (npm install -g opencode-ai)")
+	}
+	cfgPath := os.Getenv("OPENCODE_CONFIG_PATH")
+	if cfgPath == "" {
+		cfgPath = "opencode.json"
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	env := []string{}
+	for _, k := range []string{"PATH", "HOME", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "AWS_REGION", "AWS_PROFILE", "AWS_BEARER_TOKEN_BEDROCK"} {
+		if v, ok := os.LookupEnv(k); ok {
+			env = append(env, k+"="+v)
+		}
+	}
+	resp, err := opencodeagents.OpenCodeAgents(ctx, key, input, newContext(), &opencodeagents.InvokeOptions{
+		Handler: opencodeagents.Options{WorkDir: dir, ConfigPath: cfgPath, Env: env},
+		ToolHandlers: map[string]aiserver.ToolHandler{
+			"search-ld-documentation": aiserver.ToolFunc(searchLDDocumentation), // served over the per-call MCP bridge
+			"read":                    opencodeagents.OpenCodeRead,              // an OpenCode built-in
+		},
+	})
+	if err != nil {
+		return err
+	}
+	printJSON(resp)
+	return writeOutput(resp)
 }
