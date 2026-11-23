@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
@@ -37,6 +38,20 @@ func TestAssistantMessage(t *testing.T) {
 		got := AssistantMessage(c.resp)
 		if got.Role != llms.ChatMessageTypeAI || !reflect.DeepEqual(got.Parts, c.want) {
 			t.Errorf("%s: AssistantMessage = %+v, want parts %+v", name, got, c.want)
+		}
+	}
+}
+
+func TestSpanProviderName(t *testing.T) {
+	for configured, want := range map[string]string{
+		"Anthropic": "anthropic", "OpenAI": "openai", "": "openai",
+		"Bedrock": "aws.bedrock", "bedrock": "aws.bedrock",
+		"Gemini": "gcp.gemini", "gemini": "gcp.gemini",
+	} {
+		var cfg aiserver.AiConfig
+		cfg.Provider.Name = configured
+		if got := SpanProviderName(cfg); got != want {
+			t.Errorf("SpanProviderName(%q) = %q, want %q", configured, got, want)
 		}
 	}
 }

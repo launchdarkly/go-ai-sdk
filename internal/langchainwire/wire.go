@@ -50,8 +50,8 @@ func ProviderName(cfg aiserver.AiConfig) string {
 	return strings.ToLower(cfg.Provider.Name)
 }
 
-// SpanProviderName is gen_ai.provider.name: ProviderName, except the Bedrock
-// route, which is "aws.bedrock" as on the Bedrock handlers' spans.
+// SpanProviderName is gen_ai.provider.name: ProviderName, in its semconv
+// spelling ("aws.bedrock" for Bedrock, "gcp.gemini" for Gemini).
 func SpanProviderName(cfg aiserver.AiConfig) string {
 	return telemetry.ProviderName(ProviderName(cfg))
 }

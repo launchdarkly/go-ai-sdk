@@ -781,7 +781,7 @@ func TestDefaultModelGeminiRoute(t *testing.T) {
 	if len(chat) != 2 {
 		t.Fatalf("chat spans = %d, want 2", len(chat))
 	}
-	if a := spanAttrs(chat[1]); a["gen_ai.provider.name"] != "gemini" || a["gen_ai.usage.cache_read.input_tokens"] != "4" {
+	if a := spanAttrs(chat[1]); a["gen_ai.provider.name"] != "gcp.gemini" || a["gen_ai.usage.cache_read.input_tokens"] != "4" {
 		t.Errorf("gemini chat span = %v", a)
 	}
 }
