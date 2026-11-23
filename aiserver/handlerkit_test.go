@@ -340,7 +340,8 @@ func TestHandlerRunToolCancelNoErrorType(t *testing.T) {
 	r.StartTool("open", "c2")
 	r.Fail(context.Canceled)
 	r.EndTool(r.StartTool("plain", "c3"), errors.New("boom"))
-	for name, want := range map[string]string{"execute_tool wrapped": "", "execute_tool open": "", "execute_tool plain": "tool_error"} {
+	r.EndTool(r.StartTool("deadline", "c4"), fmt.Errorf("x: %w", context.DeadlineExceeded))
+	for name, want := range map[string]string{"execute_tool wrapped": "", "execute_tool open": "", "execute_tool plain": "tool_error", "execute_tool deadline": "tool_error"} {
 		found := false
 		for _, s := range exp.GetSpans() {
 			if s.Name != name {
