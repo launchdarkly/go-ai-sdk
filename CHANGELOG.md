@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.0](https://github.com/launchdarkly/go-ai-sdk/compare/v1.0.0...v1.1.0) (2026-11-23)
+
+
+### Features
+
+* **evaluations:** reconcile offline evaluations by key ([#74](https://github.com/launchdarkly/go-ai-sdk/issues/74)) ([eadad57](https://github.com/launchdarkly/go-ai-sdk/commit/eadad57b9759ff8d5a43f2057afd75da9ff5f2c9))
+
+
+### Experimental
+
+* **shadow-requests:** run judges on shadow responses ([#82](https://github.com/launchdarkly/go-ai-sdk/issues/82)) ([089ae1b](https://github.com/launchdarkly/go-ai-sdk/commit/089ae1bf1bec96acc32b544542dd3aeca0dc6f1e))
+
+
+### Bug Fixes
+
+* **evaluations:** retry the reconcile PATCH on transient failures ([#88](https://github.com/launchdarkly/go-ai-sdk/issues/88)) ([3a53260](https://github.com/launchdarkly/go-ai-sdk/commit/3a532604e3c75c681399d0fe9df33e55fdcf519e))
+
 ## [1.0.0](https://github.com/launchdarkly/go-ai-sdk/compare/v0.1.0...v1.0.0) (2026-11-13)
 
 
