@@ -193,7 +193,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 		r.Fail(err)
 		return res, err
 	}
-	opts := langchainwire.CallOptions(cfg.Model.Parameters)
+	opts := langchainwire.ModelCallOptions(cfg)
 	if len(tools) > 0 {
 		opts = append(opts, llms.WithTools(tools))
 	}

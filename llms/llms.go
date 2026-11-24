@@ -136,6 +136,13 @@ type CallOptions struct {
 	FrequencyPenalty *float64
 	PresencePenalty  *float64
 	StopWords        []string
+	// ThinkingBudget, ThinkingLevel and MediaResolution are read by Gemini
+	// only. ThinkingBudget is a token count (-1 dynamic, 0 off), ThinkingLevel
+	// is MINIMAL, LOW, MEDIUM, HIGH or XHIGH, and MediaResolution is
+	// MEDIA_RESOLUTION_LOW, _MEDIUM or _HIGH.
+	ThinkingBudget  *int
+	ThinkingLevel   string
+	MediaResolution string
 	// JSONMode asks for a JSON object reply where the provider supports it.
 	JSONMode bool
 	Tools    []Tool
@@ -172,7 +179,16 @@ func WithPresencePenalty(p float64) CallOption {
 }
 func WithStopWords(words []string) CallOption { return func(o *CallOptions) { o.StopWords = words } }
 func WithJSONMode() CallOption                { return func(o *CallOptions) { o.JSONMode = true } }
-func WithTools(tools []Tool) CallOption       { return func(o *CallOptions) { o.Tools = tools } }
+func WithThinkingBudget(n int) CallOption {
+	return func(o *CallOptions) { o.ThinkingBudget = &n }
+}
+func WithThinkingLevel(level string) CallOption {
+	return func(o *CallOptions) { o.ThinkingLevel = level }
+}
+func WithMediaResolution(r string) CallOption {
+	return func(o *CallOptions) { o.MediaResolution = r }
+}
+func WithTools(tools []Tool) CallOption { return func(o *CallOptions) { o.Tools = tools } }
 func WithStreamingFunc(f func(ctx context.Context, chunk []byte) error) CallOption {
 	return func(o *CallOptions) { o.StreamingFunc = f }
 }

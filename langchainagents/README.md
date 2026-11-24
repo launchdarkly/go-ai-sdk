@@ -154,6 +154,12 @@ default), `ErrNoToolHandler`, `ErrEmptyResponse`, `ErrNoRoot`, `ErrNilGraph`,
 `top_p`, `top_k`, `seed`, `frequency_penalty`, `presence_penalty`, `stop`). An explicit `0`
 is sent; an unset value is left to the provider's default. `config.model.custom` is never read.
 
+The Gemini route also reads `max_output_tokens` (it wins over `max_tokens`), `thinking_level`
+(`minimal`, `low`, `medium`, `high` or `xhigh`, any case, sent upper case; it wins over
+`thinking_budget`), `thinking_budget` (a whole number: `-1` dynamic, `0` off) and `media_resolution`
+(`MEDIA_RESOLUTION_LOW`, `_MEDIUM` or `_HIGH`). A value outside a key's set is dropped, and a nested
+`thinking_config` or `include_thoughts` is never read. The other routes ignore these keys.
+
 ## Telemetry
 
 The handler's root span is `invoke_agent` (blocking and streaming), with `chat <model>` and

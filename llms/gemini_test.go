@@ -50,8 +50,9 @@ func TestGeminiRequest(t *testing.T) {
 		t.Errorf("path %q key %q", f.paths[0], f.headers[0].Get("X-Goog-Api-Key"))
 	}
 	b := f.bodies[0]
-	if sys, _ := json.Marshal(b["systemInstruction"]); !strings.Contains(string(sys), `"text":"be brief"`) {
-		t.Errorf("systemInstruction = %s", sys)
+	// Each system text part is its own instruction part, never joined.
+	if sys, _ := json.Marshal(b["systemInstruction"].(map[string]any)["parts"]); string(sys) != `[{"text":"be "},{"text":"brief"}]` {
+		t.Errorf("systemInstruction parts = %s", sys)
 	}
 	gc, _ := b["generationConfig"].(map[string]any)
 	// An explicit zero temperature is sent; unset top_p is not.
@@ -333,5 +334,60 @@ func TestGeminiUsage(t *testing.T) {
 				t.Errorf("usage = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestGeminiThinkingAndMediaResolution(t *testing.T) {
+	for name, tc := range map[string]struct {
+		opts []CallOption
+		want string
+	}{
+		"level":            {[]CallOption{WithThinkingLevel("low")}, `{"thinkingLevel":"LOW"}`},
+		"budget":           {[]CallOption{WithThinkingBudget(-1)}, `{"thinkingBudget":-1}`},
+		"budget off":       {[]CallOption{WithThinkingBudget(0)}, `{"thinkingBudget":0}`},
+		"level wins":       {[]CallOption{WithThinkingBudget(512), WithThinkingLevel("HIGH")}, `{"thinkingLevel":"HIGH"}`},
+		"neither is unset": {nil, `null`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, url := newFake(t, "application/json", geminiReply(`{"text":"ok"}`, "STOP"))
+			if _, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")}, tc.opts...); err != nil {
+				t.Fatal(err)
+			}
+			gc, _ := f.bodies[0]["generationConfig"].(map[string]any)
+			if got, _ := json.Marshal(gc["thinkingConfig"]); string(got) != tc.want {
+				t.Errorf("thinkingConfig = %s, want %s (never includeThoughts)", got, tc.want)
+			}
+		})
+	}
+	f, url := newFake(t, "application/json", geminiReply(`{"text":"ok"}`, "STOP"))
+	if _, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")}, WithMediaResolution("media_resolution_low")); err != nil {
+		t.Fatal(err)
+	}
+	if gc, _ := f.bodies[0]["generationConfig"].(map[string]any); gc["mediaResolution"] != "MEDIA_RESOLUTION_LOW" {
+		t.Errorf("mediaResolution = %v", gc["mediaResolution"])
+	}
+}
+
+// Gemini streams a running usage total on each chunk, so the stream reads the
+// last one: a streamed turn reports the same usage as the same turn through
+// invoke, thinking tokens included.
+func TestGeminiStreamedUsageMatchesInvoke(t *testing.T) {
+	usage := `{"promptTokenCount":10,"candidatesTokenCount":5,"thoughtsTokenCount":3}`
+	_, url := newFake(t, "application/json", `{"candidates":[{"content":{"role":"model","parts":[{"text":"Hello"}]},"finishReason":"STOP"}],"usageMetadata":`+usage+`}`)
+	invoked, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := "data: " + `{"candidates":[{"content":{"role":"model","parts":[{"text":"Hel"}]}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":2,"thoughtsTokenCount":3}}` + "\n\n" +
+		"data: " + `{"candidates":[{"content":{"role":"model","parts":[{"text":"lo"}]},"finishReason":"STOP"}],"usageMetadata":` + usage + `}` + "\n\n"
+	_, url = newFake(t, "text/event-stream", body)
+	streamed, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")},
+		WithStreamingFunc(func(context.Context, []byte) error { return nil }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"PromptTokens": 10, "CompletionTokens": 8, "PromptCachedTokens": 0}
+	if !reflect.DeepEqual(invoked.Choices[0].GenerationInfo, want) || !reflect.DeepEqual(streamed.Choices[0].GenerationInfo, want) {
+		t.Errorf("invoke usage %v, stream usage %v, want %v", invoked.Choices[0].GenerationInfo, streamed.Choices[0].GenerationInfo, want)
 	}
 }

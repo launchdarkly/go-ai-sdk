@@ -107,7 +107,7 @@ func (m *Gemini) GenerateContent(ctx context.Context, messages []MessageContent,
 
 func (m *Gemini) request(messages []MessageContent, o CallOptions) ([]*genai.Content, *genai.GenerateContentConfig, error) {
 	cfg := &genai.GenerateContentConfig{}
-	var system strings.Builder
+	var system []*genai.Part
 	var contents []*genai.Content
 	for _, msg := range messages {
 		switch msg.Role {
@@ -117,7 +117,9 @@ func (m *Gemini) request(messages []MessageContent, o CallOptions) ([]*genai.Con
 				if !ok {
 					return nil, nil, fmt.Errorf("llms: gemini: system message part %T is not text", part)
 				}
-				system.WriteString(t.Text)
+				if t.Text != "" {
+					system = append(system, &genai.Part{Text: t.Text})
+				}
 			}
 		case ChatMessageTypeHuman, ChatMessageTypeTool:
 			parts, err := geminiUserParts(msg.Parts)
@@ -135,8 +137,10 @@ func (m *Gemini) request(messages []MessageContent, o CallOptions) ([]*genai.Con
 			return nil, nil, fmt.Errorf("llms: gemini: role %q not supported", msg.Role)
 		}
 	}
-	if strings.TrimSpace(system.String()) != "" {
-		cfg.SystemInstruction = &genai.Content{Parts: []*genai.Part{{Text: system.String()}}}
+	// Each system text part is its own part of the instruction, as the
+	// LangChain classes send a system message with several parts.
+	if len(system) > 0 {
+		cfg.SystemInstruction = &genai.Content{Parts: system}
 	}
 	if o.MaxTokens > 0 {
 		cfg.MaxOutputTokens = int32(o.MaxTokens)
@@ -161,6 +165,16 @@ func (m *Gemini) request(messages []MessageContent, o CallOptions) ([]*genai.Con
 	}
 	if len(o.StopWords) > 0 {
 		cfg.StopSequences = o.StopWords
+	}
+	// The API rejects a request that sets both thinking settings, so the
+	// level wins.
+	if o.ThinkingLevel != "" {
+		cfg.ThinkingConfig = &genai.ThinkingConfig{ThinkingLevel: genai.ThinkingLevel(strings.ToUpper(o.ThinkingLevel))}
+	} else if o.ThinkingBudget != nil {
+		cfg.ThinkingConfig = &genai.ThinkingConfig{ThinkingBudget: genai.Ptr(int32(*o.ThinkingBudget))}
+	}
+	if o.MediaResolution != "" {
+		cfg.MediaResolution = genai.MediaResolution(strings.ToUpper(o.MediaResolution))
 	}
 	if m.schema != nil {
 		cfg.ResponseMIMEType = "application/json"

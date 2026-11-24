@@ -123,6 +123,12 @@ wrapped in a short adapter that converts the messages and options.
 value is left to the provider's default. Bedrock sends `top_k` to Anthropic models only, as
 an additional model request field. `config.model.custom` is never read.
 
+The Gemini route also reads `max_output_tokens` (it wins over `max_tokens`), `thinking_level`
+(`minimal`, `low`, `medium`, `high` or `xhigh`, any case, sent upper case; it wins over
+`thinking_budget`), `thinking_budget` (a whole number: `-1` dynamic, `0` off) and `media_resolution`
+(`MEDIA_RESOLUTION_LOW`, `_MEDIUM` or `_HIGH`). A value outside a key's set is dropped, and a nested
+`thinking_config` or `include_thoughts` is never read. The other routes ignore these keys.
+
 ## Environment variables
 
 | Variable | Read by | Required |

@@ -360,7 +360,7 @@ func (r *graphRun) agent(ctx context.Context, n *aiserver.GraphNode, cfg aiserve
 	tools, exec := r.tools(n, handlers, span)
 	return &reactAgent{
 		model: model, tools: tools, exec: exec, system: system, run: span,
-		opts: langchainwire.CallOptions(cfg.Model.Parameters), modelName: cfg.Model.Name,
+		opts: langchainwire.ModelCallOptions(cfg), modelName: cfg.Model.Name,
 	}, nil
 }
 

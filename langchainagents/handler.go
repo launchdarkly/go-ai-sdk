@@ -155,7 +155,7 @@ func (h *handler) run(ctx context.Context, req aiserver.HandlerRequest, onText f
 	}
 	tools, fns := langchainwire.BuildTools(cfg, req.ToolHandlers)
 	a := &reactAgent{
-		model: model, tools: tools, system: p.System, opts: langchainwire.CallOptions(cfg.Model.Parameters),
+		model: model, tools: tools, system: p.System, opts: langchainwire.ModelCallOptions(cfg),
 		modelName: cfg.Model.Name, run: r, onText: onText,
 		exec: func(ctx context.Context, tc llms.ToolCall) (llms.MessageContent, *stategraph.Command, error) {
 			m, err := langchainwire.RunTool(ctx, r, fns, tc)

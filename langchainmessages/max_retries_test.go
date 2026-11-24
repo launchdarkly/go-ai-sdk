@@ -115,19 +115,43 @@ func TestMaxRetriesReachesTheModel(t *testing.T) {
 }
 
 // Unset, the option is not passed, so each library's own default applies:
-// openai-go and anthropic-sdk-go retry twice (3 requests); the AWS SDK makes
-// 3 attempts in all; genai does not retry without retry options (1 request).
+// openai-go and anthropic-sdk-go retry twice (3 requests) and the AWS SDK makes
+// 3 attempts in all. Gemini is TestMaxRetriesUnsetStillRetriesOnGemini.
 func TestMaxRetriesUnsetKeepsTheVendorDefault(t *testing.T) {
-	for _, route := range routes {
+	for _, route := range []string{"OpenAI", "Anthropic", "Bedrock"} {
 		t.Run(route, func(t *testing.T) {
-			want := int32(3)
-			if route == "Gemini" {
-				want = 1
-			}
 			f := failingEnv(t)
 			callOnce(mustHandler(t, Options{}), providerCfg(route, nil), false)
-			wantRequests(t, f, want)
+			wantRequests(t, f, 3)
 		})
+	}
+}
+
+// genai retries only when the client has retry options, so the handler always
+// sets them and an unset count keeps genai's default attempts (5, with
+// backoff from one second). A server that fails once shows the retry without
+// waiting out the whole default.
+func TestMaxRetriesUnsetStillRetriesOnGemini(t *testing.T) {
+	failingEnv(t)
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		if n.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = io.WriteString(w, `{"error":{"code":500,"message":"down"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}]}`)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("GOOGLE_GEMINI_BASE_URL", srv.URL)
+	resp, err := mustHandler(t, Options{}).Invoke(bg, aiserver.HandlerRequest{Config: providerCfg("Gemini", nil), UserInput: "q"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := n.Load(); got != 2 || resp.Output != "ok" {
+		t.Errorf("requests = %d, output %q; want 2 and ok", got, resp.Output)
 	}
 }
 

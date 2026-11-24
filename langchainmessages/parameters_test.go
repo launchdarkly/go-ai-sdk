@@ -138,3 +138,60 @@ func TestNoSecondStructuredOutputSchema(t *testing.T) {
 		}
 	}
 }
+
+// The Gemini parameter table (TESTING.md §1.12): max_output_tokens wins over
+// max_tokens, stop_sequences over stop, thinking_level is sent upper case and
+// wins over thinking_budget, and a value outside a key's allowed set is
+// dropped. Invoke and stream send the same generationConfig.
+func TestGeminiParameterTable(t *testing.T) {
+	for name, tc := range map[string]struct {
+		params map[string]any
+		want   map[string]any
+	}{
+		"max_output_tokens wins": {map[string]any{"max_tokens": 10.0, "max_output_tokens": 20.0}, map[string]any{"maxOutputTokens": 20.0}},
+		"max_tokens renamed":     {map[string]any{"max_tokens": 10.0}, map[string]any{"maxOutputTokens": 10.0}},
+		"stop_sequences wins":    {map[string]any{"stop": []any{"a"}, "stop_sequences": []any{"b"}}, map[string]any{"stopSequences": []any{"b"}}},
+		"thinking_level":         {map[string]any{"thinking_level": "low"}, map[string]any{"thinkingConfig": map[string]any{"thinkingLevel": "LOW"}}},
+		"thinking_level wins": {map[string]any{"thinking_level": "High", "thinking_budget": 512.0},
+			map[string]any{"thinkingConfig": map[string]any{"thinkingLevel": "HIGH"}}},
+		"invalid level falls back to the budget": {map[string]any{"thinking_level": "max", "thinking_budget": 512.0},
+			map[string]any{"thinkingConfig": map[string]any{"thinkingBudget": 512.0}}},
+		"thinking_budget":            {map[string]any{"thinking_budget": -1.0}, map[string]any{"thinkingConfig": map[string]any{"thinkingBudget": -1.0}}},
+		"fractional budget dropped":  {map[string]any{"thinking_budget": 1.5}, map[string]any{}},
+		"string budget dropped":      {map[string]any{"thinking_budget": "512"}, map[string]any{}},
+		"nested thinking_config":     {map[string]any{"thinking_config": map[string]any{"thinking_budget": 5.0}, "include_thoughts": true}, map[string]any{}},
+		"media_resolution":           {map[string]any{"media_resolution": "media_resolution_high"}, map[string]any{"mediaResolution": "MEDIA_RESOLUTION_HIGH"}},
+		"invalid media_resolution":   {map[string]any{"media_resolution": "ultra"}, map[string]any{}},
+		"camelCase keys are dropped": {map[string]any{"maxOutputTokens": 5.0, "thinkingLevel": "low", "mediaResolution": "MEDIA_RESOLUTION_LOW"}, map[string]any{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var configs []map[string]any
+			for _, p := range paths {
+				gc, _ := wireRequest(t, "Gemini", tc.params, p.stream)["generationConfig"].(map[string]any)
+				if gc == nil {
+					gc = map[string]any{}
+				}
+				if !reflect.DeepEqual(gc, tc.want) {
+					t.Errorf("%s: generationConfig = %v, want %v", p.name, gc, tc.want)
+				}
+				configs = append(configs, gc)
+			}
+			if !reflect.DeepEqual(configs[0], configs[1]) {
+				t.Errorf("invoke and stream differ: %v, %v", configs[0], configs[1])
+			}
+		})
+	}
+}
+
+// The Gemini-only keys never reach another route.
+func TestGeminiOnlyParametersStayOnGemini(t *testing.T) {
+	params := map[string]any{"max_output_tokens": 77.0, "thinking_level": "low", "thinking_budget": 5.0, "media_resolution": "MEDIA_RESOLUTION_LOW"}
+	for _, provider := range []string{"Anthropic", "OpenAI"} {
+		raw, _ := json.Marshal(wireRequest(t, provider, params, false))
+		for _, leak := range []string{"77", "LOW", "low", "thinking", "media"} {
+			if strings.Contains(string(raw), leak) {
+				t.Errorf("%s: a Gemini-only key reached the request (%q): %s", provider, leak, raw)
+			}
+		}
+	}
+}

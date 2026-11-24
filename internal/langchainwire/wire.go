@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -95,7 +96,8 @@ func ResolveModel(ctx context.Context, model llms.Model, factory func(aiserver.A
 // response schema. A non-nil maxRetries
 // is the retry count on the client the model builds: option.WithMaxRetries for
 // OpenAI and Anthropic, and maxRetries+1 attempts on the AWS client for Bedrock
-// (never 0 attempts, which the AWS SDK reads as its default).
+// (never 0 attempts, which the AWS SDK reads as its default), and
+// maxRetries+1 attempts on the genai client for Gemini.
 func DefaultModel(_ context.Context, cfg aiserver.AiConfig, schema map[string]any, maxRetries *int) (llms.Model, error) {
 	var (
 		m   llms.Model
@@ -118,10 +120,13 @@ func DefaultModel(_ context.Context, cfg aiserver.AiConfig, schema map[string]an
 		}
 		m, err = llms.NewBedrock(o)
 	case "gemini":
+		// genai retries only when RetryOptions is set; empty options keep its
+		// default attempts, so an unset count still retries (§1.1a).
 		o := llms.GeminiOptions{Model: cfg.Model.Name, JSONSchema: schema}
+		o.HTTPOptions.RetryOptions = &genai.HTTPRetryOptions{}
 		if maxRetries != nil {
 			attempts := int32(*maxRetries + 1)
-			o.HTTPOptions.RetryOptions = &genai.HTTPRetryOptions{Attempts: &attempts}
+			o.HTTPOptions.RetryOptions.Attempts = &attempts
 		}
 		m, err = llms.NewGemini(o)
 	default:
@@ -263,6 +268,51 @@ func CallOptions(params map[string]any) []llms.CallOption {
 		}
 	}
 	return out
+}
+
+// ModelCallOptions is CallOptions plus the keys that only cfg's provider
+// route reads: on the Gemini route, max_output_tokens (which wins over
+// max_tokens), thinking_budget, thinking_level and media_resolution.
+func ModelCallOptions(cfg aiserver.AiConfig) []llms.CallOption {
+	out := CallOptions(cfg.Model.Parameters)
+	if ProviderName(cfg) == "gemini" {
+		out = append(out, geminiCallOptions(cfg.Model.Parameters)...)
+	}
+	return out
+}
+
+var (
+	geminiThinkingLevels   = []string{"MINIMAL", "LOW", "MEDIUM", "HIGH", "XHIGH"}
+	geminiMediaResolutions = []string{"MEDIA_RESOLUTION_LOW", "MEDIA_RESOLUTION_MEDIUM", "MEDIA_RESOLUTION_HIGH"}
+)
+
+// geminiCallOptions reads the Gemini-only keys. A value outside its allowed
+// set, or of the wrong type, is dropped. thinking_level is sent upper case and
+// wins over thinking_budget, which must be a whole number.
+func geminiCallOptions(params map[string]any) []llms.CallOption {
+	var out []llms.CallOption
+	if v, ok := Number(params["max_output_tokens"]); ok {
+		out = append(out, llms.WithMaxTokens(int(v)))
+	}
+	if level, ok := oneOf(params["thinking_level"], geminiThinkingLevels); ok {
+		out = append(out, llms.WithThinkingLevel(level))
+	} else if v, ok := Number(params["thinking_budget"]); ok && v == math.Trunc(v) {
+		out = append(out, llms.WithThinkingBudget(int(v)))
+	}
+	if r, ok := oneOf(params["media_resolution"], geminiMediaResolutions); ok {
+		out = append(out, llms.WithMediaResolution(r))
+	}
+	return out
+}
+
+// oneOf returns v upper-cased when it is a string in allowed, ignoring case.
+func oneOf(v any, allowed []string) (string, bool) {
+	s, ok := v.(string)
+	if !ok {
+		return "", false
+	}
+	s = strings.ToUpper(s)
+	return s, slices.Contains(allowed, s)
 }
 
 // choiceUsage reads token counts from a choice's GenerationInfo using the key
