@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	anthropicoption "github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	openaioption "github.com/openai/openai-go/v3/option"
+	"google.golang.org/genai"
 
 	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/internal/bedrockwire"
@@ -49,8 +51,8 @@ func ProviderName(cfg aiserver.AiConfig) string {
 	return strings.ToLower(cfg.Provider.Name)
 }
 
-// SpanProviderName is gen_ai.provider.name: ProviderName, except the Bedrock
-// route, which is "aws.bedrock" as on the Bedrock handlers' spans.
+// SpanProviderName is gen_ai.provider.name: ProviderName, in its semconv
+// spelling ("aws.bedrock" for Bedrock, "gcp.gemini" for Gemini).
 func SpanProviderName(cfg aiserver.AiConfig) string {
 	return telemetry.ProviderName(ProviderName(cfg))
 }
@@ -88,12 +90,14 @@ func ResolveModel(ctx context.Context, model llms.Model, factory func(aiserver.A
 }
 
 // DefaultModel builds a model from config.provider.name: "anthropic",
-// "bedrock", or OpenAI Chat Completions for anything else (also any
+// "bedrock", "gemini", or OpenAI Chat Completions for anything else (also any
 // OpenAI-compatible endpoint, through OPENAI_BASE_URL). A non-nil schema binds
-// OpenAI's json_schema response format, sent verbatim. A non-nil maxRetries
+// OpenAI's json_schema response format, sent verbatim, or Gemini's JSON
+// response schema. A non-nil maxRetries
 // is the retry count on the client the model builds: option.WithMaxRetries for
 // OpenAI and Anthropic, and maxRetries+1 attempts on the AWS client for Bedrock
-// (never 0 attempts, which the AWS SDK reads as its default).
+// (never 0 attempts, which the AWS SDK reads as its default), and
+// maxRetries+1 attempts on the genai client for Gemini.
 func DefaultModel(_ context.Context, cfg aiserver.AiConfig, schema map[string]any, maxRetries *int) (llms.Model, error) {
 	var (
 		m   llms.Model
@@ -115,6 +119,16 @@ func DefaultModel(_ context.Context, cfg aiserver.AiConfig, schema map[string]an
 			}
 		}
 		m, err = llms.NewBedrock(o)
+	case "gemini":
+		// genai retries only when RetryOptions is set; empty options keep its
+		// default attempts, so an unset count still retries (§1.1a).
+		o := llms.GeminiOptions{Model: cfg.Model.Name, JSONSchema: schema}
+		o.HTTPOptions.RetryOptions = &genai.HTTPRetryOptions{}
+		if maxRetries != nil {
+			attempts := int32(*maxRetries + 1)
+			o.HTTPOptions.RetryOptions.Attempts = &attempts
+		}
+		m, err = llms.NewGemini(o)
 	default:
 		o := llms.OpenAIOptions{Model: cfg.Model.Name, JSONSchema: schema}
 		if maxRetries != nil {
@@ -256,6 +270,51 @@ func CallOptions(params map[string]any) []llms.CallOption {
 	return out
 }
 
+// ModelCallOptions is CallOptions plus the keys that only cfg's provider
+// route reads: on the Gemini route, max_output_tokens (which wins over
+// max_tokens), thinking_budget, thinking_level and media_resolution.
+func ModelCallOptions(cfg aiserver.AiConfig) []llms.CallOption {
+	out := CallOptions(cfg.Model.Parameters)
+	if ProviderName(cfg) == "gemini" {
+		out = append(out, geminiCallOptions(cfg.Model.Parameters)...)
+	}
+	return out
+}
+
+var (
+	geminiThinkingLevels   = []string{"MINIMAL", "LOW", "MEDIUM", "HIGH", "XHIGH"}
+	geminiMediaResolutions = []string{"MEDIA_RESOLUTION_LOW", "MEDIA_RESOLUTION_MEDIUM", "MEDIA_RESOLUTION_HIGH"}
+)
+
+// geminiCallOptions reads the Gemini-only keys. A value outside its allowed
+// set, or of the wrong type, is dropped. thinking_level is sent upper case and
+// wins over thinking_budget, which must be a whole number.
+func geminiCallOptions(params map[string]any) []llms.CallOption {
+	var out []llms.CallOption
+	if v, ok := Number(params["max_output_tokens"]); ok {
+		out = append(out, llms.WithMaxTokens(int(v)))
+	}
+	if level, ok := oneOf(params["thinking_level"], geminiThinkingLevels); ok {
+		out = append(out, llms.WithThinkingLevel(level))
+	} else if v, ok := Number(params["thinking_budget"]); ok && v == math.Trunc(v) {
+		out = append(out, llms.WithThinkingBudget(int(v)))
+	}
+	if r, ok := oneOf(params["media_resolution"], geminiMediaResolutions); ok {
+		out = append(out, llms.WithMediaResolution(r))
+	}
+	return out
+}
+
+// oneOf returns v upper-cased when it is a string in allowed, ignoring case.
+func oneOf(v any, allowed []string) (string, bool) {
+	s, ok := v.(string)
+	if !ok {
+		return "", false
+	}
+	s = strings.ToUpper(s)
+	return s, slices.Contains(allowed, s)
+}
+
 // choiceUsage reads token counts from a choice's GenerationInfo using the key
 // families the built-in llms models write (langchaingo's key names): Anthropic (InputTokens, uncached),
 // OpenAI (PromptTokens, cache-inclusive) and Bedrock (input_tokens).
@@ -316,7 +375,10 @@ func ResponseToolCalls(resp *llms.ContentResponse) []llms.ToolCall {
 
 var finishReasons = map[string]string{
 	"end_turn": "stop", "stop_sequence": "stop", "max_tokens": "length", "tool_use": "tool_calls",
+	"stop": "stop", "length": "length", "tool_calls": "tool_calls", "function_call": "tool_calls", "content_filter": "content_filter",
 	"refusal": "content_filter", "guardrail_intervened": "content_filter", "content_filtered": "content_filter",
+	"safety": "content_filter", "recitation": "content_filter", "blocklist": "content_filter", "prohibited_content": "content_filter",
+	"spii": "content_filter", "image_safety": "content_filter",
 }
 
 // FinishReason is the first choice's stop reason in OpenAI vocabulary.

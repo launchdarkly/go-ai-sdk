@@ -3,7 +3,8 @@
 // the Model a handler calls. Its names follow the subset of
 // github.com/tmc/langchaingo/llms those handlers used, so a langchaingo
 // model ports with a small adapter. The built-in models for OpenAI,
-// Anthropic and Bedrock are in this package too (see New).
+// Anthropic, Bedrock and Gemini are in this package too (NewOpenAI,
+// NewAnthropic, NewBedrock, NewGemini).
 package llms
 
 import (
@@ -41,8 +42,14 @@ type MessageContent struct {
 // BinaryContent, ToolCall or ToolCallResponse.
 type ContentPart interface{ isPart() }
 
-// TextContent is text.
-type TextContent struct{ Text string }
+// TextContent is text. Signature is an opaque provider value returned with
+// the text that the next turn must send back unchanged (Gemini's thought
+// signature, which can arrive on a part with no text); other models leave it
+// empty. It holds raw bytes in a string so TextContent stays comparable.
+type TextContent struct {
+	Text      string
+	Signature string
+}
 
 // ImageURLContent is an image by URL (including data: URLs).
 type ImageURLContent struct {
@@ -56,11 +63,15 @@ type BinaryContent struct {
 	Data     []byte
 }
 
-// ToolCall is a tool call the model made, on an AI message.
+// ToolCall is a tool call the model made, on an AI message. Signature is
+// an opaque provider value returned with the call that the next turn must
+// send back unchanged (Gemini's thought signature); other models leave it
+// empty. It holds raw bytes in a string so ToolCall stays comparable.
 type ToolCall struct {
 	ID           string
 	Type         string
 	FunctionCall *FunctionCall
+	Signature    string
 }
 
 // FunctionCall names the function and carries its JSON arguments.
@@ -125,6 +136,13 @@ type CallOptions struct {
 	FrequencyPenalty *float64
 	PresencePenalty  *float64
 	StopWords        []string
+	// ThinkingBudget, ThinkingLevel and MediaResolution are read by Gemini
+	// only. ThinkingBudget is a token count (-1 dynamic, 0 off), ThinkingLevel
+	// is MINIMAL, LOW, MEDIUM, HIGH or XHIGH, and MediaResolution is
+	// MEDIA_RESOLUTION_LOW, _MEDIUM or _HIGH.
+	ThinkingBudget  *int
+	ThinkingLevel   string
+	MediaResolution string
 	// JSONMode asks for a JSON object reply where the provider supports it.
 	JSONMode bool
 	Tools    []Tool
@@ -161,7 +179,16 @@ func WithPresencePenalty(p float64) CallOption {
 }
 func WithStopWords(words []string) CallOption { return func(o *CallOptions) { o.StopWords = words } }
 func WithJSONMode() CallOption                { return func(o *CallOptions) { o.JSONMode = true } }
-func WithTools(tools []Tool) CallOption       { return func(o *CallOptions) { o.Tools = tools } }
+func WithThinkingBudget(n int) CallOption {
+	return func(o *CallOptions) { o.ThinkingBudget = &n }
+}
+func WithThinkingLevel(level string) CallOption {
+	return func(o *CallOptions) { o.ThinkingLevel = level }
+}
+func WithMediaResolution(r string) CallOption {
+	return func(o *CallOptions) { o.MediaResolution = r }
+}
+func WithTools(tools []Tool) CallOption { return func(o *CallOptions) { o.Tools = tools } }
 func WithStreamingFunc(f func(ctx context.Context, chunk []byte) error) CallOption {
 	return func(o *CallOptions) { o.StreamingFunc = f }
 }

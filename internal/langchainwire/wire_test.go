@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/launchdarkly/go-ai-sdk/aiserver"
 	"github.com/launchdarkly/go-ai-sdk/llms"
 )
 
@@ -37,6 +38,33 @@ func TestAssistantMessage(t *testing.T) {
 		got := AssistantMessage(c.resp)
 		if got.Role != llms.ChatMessageTypeAI || !reflect.DeepEqual(got.Parts, c.want) {
 			t.Errorf("%s: AssistantMessage = %+v, want parts %+v", name, got, c.want)
+		}
+	}
+}
+
+func TestSpanProviderName(t *testing.T) {
+	for configured, want := range map[string]string{
+		"Anthropic": "anthropic", "OpenAI": "openai", "": "openai",
+		"Bedrock": "aws.bedrock", "bedrock": "aws.bedrock",
+		"Gemini": "gcp.gemini", "gemini": "gcp.gemini",
+	} {
+		var cfg aiserver.AiConfig
+		cfg.Provider.Name = configured
+		if got := SpanProviderName(cfg); got != want {
+			t.Errorf("SpanProviderName(%q) = %q, want %q", configured, got, want)
+		}
+	}
+}
+
+// Gemini shouts its enum, so STOP must land on the same value as Anthropic's end_turn.
+func TestFinishReason(t *testing.T) {
+	for raw, want := range map[string]string{
+		"STOP": "stop", "end_turn": "stop", "stop": "stop", "MAX_TOKENS": "length", "length": "length",
+		"tool_use": "tool_calls", "tool_calls": "tool_calls", "SAFETY": "content_filter", "pause_turn": "pause_turn",
+	} {
+		resp := &llms.ContentResponse{Choices: []*llms.ContentChoice{{StopReason: raw}}}
+		if got := FinishReason(resp); got != want {
+			t.Errorf("FinishReason(%q) = %q, want %q", raw, got, want)
 		}
 	}
 }

@@ -22,7 +22,7 @@ func retries(n int) *int { return &n }
 
 // failingProvider answers every request with a retryable 500 and a 1 ms retry
 // hint, and counts requests: one call makes 1 + its retry count. One server
-// stands in for OpenAI, Anthropic and Bedrock Runtime.
+// stands in for OpenAI, Anthropic, Bedrock Runtime and the Gemini API.
 type failingProvider struct{ n atomic.Int32 }
 
 func (f *failingProvider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +44,7 @@ func failingEnv(t *testing.T) *failingProvider {
 	for k, v := range map[string]string{
 		"OPENAI_BASE_URL": srv.URL, "OPENAI_API_KEY": "test",
 		"ANTHROPIC_BASE_URL": srv.URL, "ANTHROPIC_API_KEY": "test",
+		"GOOGLE_GEMINI_BASE_URL": srv.URL, "GOOGLE_API_KEY": "test",
 		"AWS_ENDPOINT_URL_BEDROCK_RUNTIME": srv.URL, "AWS_REGION": "us-east-1",
 		"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test",
 		"AWS_CONFIG_FILE":             filepath.Join(t.TempDir(), "none"),
@@ -94,15 +95,16 @@ func wantRequests(t *testing.T, f *failingProvider, want int32) {
 }
 
 // routes are the built-in models the handler builds from config.provider.name.
-// Bedrock is slower: the AWS retryer's backoff ignores the fake's retry hint,
-// so its counts stay small. Do not "fix" the fake for it.
-var routes = []string{"OpenAI", "Anthropic", "Bedrock"}
+// Bedrock and Gemini are slower: the AWS retryer's and genai's backoff ignore
+// the fake's retry hint (genai waits about a second before its first retry),
+// so their counts stay small. Do not "fix" the fake for them.
+var routes = []string{"OpenAI", "Anthropic", "Bedrock", "Gemini"}
 
 func TestMaxRetriesReachesTheModel(t *testing.T) {
 	for _, route := range routes {
 		t.Run(route, func(t *testing.T) {
 			n := 7
-			if route == "Bedrock" {
+			if route == "Bedrock" || route == "Gemini" {
 				n = 1
 			}
 			f := failingEnv(t)
@@ -113,15 +115,43 @@ func TestMaxRetriesReachesTheModel(t *testing.T) {
 }
 
 // Unset, the option is not passed, so each library's own default applies:
-// openai-go and anthropic-sdk-go retry twice (3 requests); the AWS SDK makes
-// 3 attempts in all.
+// openai-go and anthropic-sdk-go retry twice (3 requests) and the AWS SDK makes
+// 3 attempts in all. Gemini is TestMaxRetriesUnsetStillRetriesOnGemini.
 func TestMaxRetriesUnsetKeepsTheVendorDefault(t *testing.T) {
-	for _, route := range routes {
+	for _, route := range []string{"OpenAI", "Anthropic", "Bedrock"} {
 		t.Run(route, func(t *testing.T) {
 			f := failingEnv(t)
 			callOnce(mustHandler(t, Options{}), providerCfg(route, nil), false)
 			wantRequests(t, f, 3)
 		})
+	}
+}
+
+// genai retries only when the client has retry options, so the handler always
+// sets them and an unset count keeps genai's default attempts (5, with
+// backoff from one second). A server that fails once shows the retry without
+// waiting out the whole default.
+func TestMaxRetriesUnsetStillRetriesOnGemini(t *testing.T) {
+	failingEnv(t)
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		if n.Add(1) == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = io.WriteString(w, `{"error":{"code":500,"message":"down"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}]}`)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("GOOGLE_GEMINI_BASE_URL", srv.URL)
+	resp, err := mustHandler(t, Options{}).Invoke(bg, aiserver.HandlerRequest{Config: providerCfg("Gemini", nil), UserInput: "q"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := n.Load(); got != 2 || resp.Output != "ok" {
+		t.Errorf("requests = %d, output %q; want 2 and ok", got, resp.Output)
 	}
 }
 

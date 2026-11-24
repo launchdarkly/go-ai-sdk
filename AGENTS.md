@@ -18,7 +18,7 @@ Tier 1  claudemessages openaimessages bedrockmessages langchainmessages
         claudeagents   openaiagents   bedrockagents
         internal/{anthropicwire,openaiwire,bedrockwire}  provider wire helpers for each provider's messages/agents pair; bedrockwire is also used by llms and langchainwire
         internal/procgroup  runs a child in its own process group, killed as a group on cancel (Unix; no-op elsewhere)
-        internal/langchainwire  LangChain wire helper for langchainmessages/langchainagents; builds the built-in llms models (imports llms and internal/bedrockwire, plus the anthropic/openai option packages and bedrockruntime for retries)
+        internal/langchainwire  LangChain wire helper for langchainmessages/langchainagents; builds the built-in llms models (imports llms and internal/bedrockwire, plus the anthropic/openai option packages, bedrockruntime and genai for retries)
         skills         Agent Skills (core; imports aiserver and golang.org/x/sys, no provider SDK)
         evaluations    Evaluations from Code (core; imports aiserver and golang.org/x/text, no provider SDK)
 ```
@@ -122,6 +122,7 @@ One module (`go.mod`); each package imports only what it needs.
 | `github.com/anthropics/anthropic-sdk-go` | `claudemessages`, `claudeagents`, `llms`, `internal/langchainwire` (`option` only) | Anthropic Messages API; `internal/langchainwire` sets `option.WithMaxRetries` on the built-in Anthropic model |
 | `github.com/openai/openai-go/v3` | `openaimessages`, `openaiagents`, `llms`, `internal/langchainwire` (`option` only) | OpenAI Responses API; Chat Completions in `llms`; `internal/langchainwire` sets `option.WithMaxRetries` on the built-in OpenAI model |
 | `github.com/aws/aws-sdk-go-v2` (+ `config`, `credentials`, `service/bedrockruntime`, `eventstream`), `github.com/aws/smithy-go` | `bedrockmessages`, `bedrockagents`, `llms`, `internal/langchainwire` (`service/bedrockruntime` only) | Bedrock Converse / ConverseStream; `internal/langchainwire` sets `RetryMaxAttempts` on the AWS client for the built-in Bedrock model |
+| `google.golang.org/genai` | `llms`, `internal/langchainwire` (`HTTPRetryOptions` only) | Gemini API (`generateContent` / `streamGenerateContent`) for the built-in Gemini model; `internal/langchainwire` sets retry attempts on it |
 | `golang.org/x/sys` | `skills` | `*at()` filesystem calls for skill materialization |
 | `golang.org/x/text` | `evaluations` | Unicode case folding for the tool key collision check |
 

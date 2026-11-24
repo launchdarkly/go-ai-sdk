@@ -83,7 +83,7 @@ claude, err := claudemessages.NewHandler(claudemessages.Options{}) // Anthropic/
 if err != nil {
 	return err
 }
-lc, err := langchainmessages.NewHandler(langchainmessages.Options{}) // */messages: OpenAI, Bedrock, ...
+lc, err := langchainmessages.NewHandler(langchainmessages.Options{}) // */messages: OpenAI, Bedrock, Gemini, ...
 if err != nil {
 	return err
 }
@@ -114,7 +114,7 @@ wrapped in a short adapter that converts the messages and options.
 |---|---|
 | `Model` set | that `llms.Model` for every call |
 | `ModelFactory` set | `ModelFactory(config)` per call |
-| neither | built from lowercased `provider.name`: `anthropic` → `llms.NewAnthropic` (Messages API), `bedrock` → `llms.NewBedrock` (Converse API; model id prefixed with `model.region`), anything else → `llms.NewOpenAI` (Chat Completions, so any OpenAI-compatible endpoint works through `OPENAI_BASE_URL`) |
+| neither | built from lowercased `provider.name`: `anthropic` → `llms.NewAnthropic` (Messages API), `bedrock` → `llms.NewBedrock` (Converse API; model id prefixed with `model.region`), `gemini` → `llms.NewGemini` (Gemini API `generateContent`), anything else → `llms.NewOpenAI` (Chat Completions, so any OpenAI-compatible endpoint works through `OPENAI_BASE_URL`) |
 
 `config.model.parameters` maps to `llms` call options: `max_tokens`,
 `temperature`, `top_p`, `top_k`, `seed`, `frequency_penalty`, `presence_penalty`,
@@ -123,6 +123,12 @@ wrapped in a short adapter that converts the messages and options.
 value is left to the provider's default. Bedrock sends `top_k` to Anthropic models only, as
 an additional model request field. `config.model.custom` is never read.
 
+The Gemini route also reads `max_output_tokens` (it wins over `max_tokens`), `thinking_level`
+(`minimal`, `low`, `medium`, `high` or `xhigh`, any case, sent upper case; it wins over
+`thinking_budget`), `thinking_budget` (a whole number: `-1` dynamic, `0` off) and `media_resolution`
+(`MEDIA_RESOLUTION_LOW`, `_MEDIUM` or `_HIGH`). A value outside a key's set is dropped, and a nested
+`thinking_config` or `include_thoughts` is never read. The other routes ignore these keys.
+
 ## Environment variables
 
 | Variable | Read by | Required |
@@ -130,6 +136,8 @@ an additional model request field. `config.model.custom` is never read.
 | `LD_SDK_KEY` | `aiserver` lazy init | Required unless you call `aiserver.InitWithClient` |
 | `ANTHROPIC_API_KEY` | built-in Anthropic model | Required for `provider.name = Anthropic` without an injected model |
 | `OPENAI_API_KEY` | built-in OpenAI model | Required for OpenAI / fallback providers without an injected model |
+| `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) | built-in Gemini model | Required for `provider.name = Gemini` without an injected model |
+| `GOOGLE_GEMINI_BASE_URL` | built-in Gemini model | Optional: Gemini API endpoint |
 | `OPENAI_BASE_URL` / `OPENAI_API_BASE` | built-in OpenAI model | Optional: OpenAI-compatible endpoint (`OPENAI_API_BASE` applies only when `OPENAI_BASE_URL` is unset) |
 | `OPENAI_ORGANIZATION` | built-in OpenAI model | Optional |
 | `OPENAI_MODEL` | built-in OpenAI model | Optional: model when the config names none (default `gpt-4o`) |
@@ -167,6 +175,6 @@ func LangChainMessages(ctx context.Context, configKey, userInput string, userCtx
 
 `config.outputFormat` (blocking only): with no callable tools the model runs in JSON mode with
 the schema in the system prompt (built-in OpenAI models also bind a `json_schema`
-`response_format`) and `Invoke` returns the decoded JSON value. With tools, OpenAI providers
+`response_format`, and the built-in Gemini model a `responseJsonSchema`) and `Invoke` returns the decoded JSON value. With tools, OpenAI providers
 keep JSON mode on every turn and return the string for the client to parse; other providers
 run the tool loop without enforcement. Streaming ignores `outputFormat`.

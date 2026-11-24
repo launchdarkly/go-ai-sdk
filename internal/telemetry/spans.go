@@ -81,10 +81,16 @@ func Flush(ctx context.Context) error {
 }
 
 // ProviderName is a configured provider as gen_ai.provider.name: lowercased,
-// with Bedrock written "aws.bedrock", the value the Bedrock handlers write.
+// with the providers semconv spells differently written its way: Bedrock as
+// "aws.bedrock", the value the Bedrock handlers write, and Gemini as
+// "gcp.gemini".
 func ProviderName(provider string) string {
-	if p := strings.ToLower(provider); p != "bedrock" {
+	switch p := strings.ToLower(provider); p {
+	case "bedrock":
+		return "aws.bedrock"
+	case "gemini":
+		return "gcp.gemini"
+	default:
 		return p
 	}
-	return "aws.bedrock"
 }

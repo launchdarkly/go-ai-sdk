@@ -611,10 +611,12 @@ func TestNoUserTurnWithoutRowInput(t *testing.T) {
 	}
 }
 
-// A Bedrock config's spans name the provider aws.bedrock, as the Bedrock and
-// LangChain handlers write it; other providers are lowercased as configured.
+// A Bedrock config's spans name the provider aws.bedrock and a Gemini config's
+// gcp.gemini, as the handlers write them; other providers, including other
+// Google spellings, are lowercased as configured.
 func TestModelIdentityBedrock(t *testing.T) {
-	for provider, want := range map[string]string{"Bedrock": "aws.bedrock", "bedrock": "aws.bedrock", "OpenAI": "openai", "": ""} {
+	for provider, want := range map[string]string{"Bedrock": "aws.bedrock", "bedrock": "aws.bedrock", "Gemini": "gcp.gemini", "gemini": "gcp.gemini",
+		"Google": "google", "Vertex": "vertex", "OpenAI": "openai", "": ""} {
 		got := map[string]string{}
 		var cfg aiserver.AiConfig
 		cfg.Provider.Name = provider
