@@ -29,6 +29,7 @@ const (
 	openaiSSE = "data: {\"id\":\"c\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":null}]}\n\n" +
 		"data: {\"id\":\"c\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}\n\n" +
 		"data: [DONE]\n\n"
+	geminiJSON = `{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":1}}`
 )
 
 // wireRequest runs one turn through the built-in model for provider against a
@@ -45,6 +46,14 @@ func wireRequest(t *testing.T, provider string, params map[string]any, stream bo
 		streaming, _ := body["stream"].(bool)
 		mu.Unlock()
 		resp := map[[2]bool]string{{true, false}: anthropicJSON, {true, true}: anthropicSSE, {false, false}: openaiJSON, {false, true}: openaiSSE}[[2]bool{provider == "Anthropic", streaming}]
+		if provider == "Gemini" {
+			// Gemini streams by path, not by a body field.
+			streaming = strings.HasSuffix(r.URL.Path, ":streamGenerateContent")
+			resp = geminiJSON
+			if streaming {
+				resp = "data: " + geminiJSON + "\n\n"
+			}
+		}
 		if streaming {
 			w.Header().Set("Content-Type", "text/event-stream")
 		} else {
@@ -57,6 +66,8 @@ func wireRequest(t *testing.T, provider string, params map[string]any, stream bo
 	t.Setenv("ANTHROPIC_API_KEY", "test")
 	t.Setenv("OPENAI_BASE_URL", srv.URL)
 	t.Setenv("OPENAI_API_KEY", "test")
+	t.Setenv("GOOGLE_GEMINI_BASE_URL", srv.URL)
+	t.Setenv("GOOGLE_API_KEY", "test")
 	withTracer(t)
 	h := must(newHandler(Options{}))
 	req := aiserver.HandlerRequest{Config: cfg(func(c *aiserver.AiConfig) {
@@ -90,7 +101,7 @@ var paths = []struct {
 func TestNeverForwardedParameters(t *testing.T) {
 	params := maps.Clone(neverforward.Params)
 	params["temperature"] = 0.3
-	for _, provider := range []string{"Anthropic", "OpenAI"} {
+	for _, provider := range []string{"Anthropic", "OpenAI", "Gemini"} {
 		t.Run(provider, func(t *testing.T) {
 			var bodies []map[string]any
 			for _, p := range paths {
@@ -99,8 +110,12 @@ func TestNeverForwardedParameters(t *testing.T) {
 				if strings.Contains(string(raw), neverforward.Marker) {
 					t.Errorf("%s: a never-forwarded value reached the request: %s", p.name, raw)
 				}
-				if body["temperature"] != 0.3 {
-					t.Errorf("%s: temperature = %v", p.name, body["temperature"])
+				temperature := body["temperature"]
+				if provider == "Gemini" {
+					temperature, _ = body["generationConfig"].(map[string]any)["temperature"]
+				}
+				if temperature != 0.3 {
+					t.Errorf("%s: temperature = %v", p.name, temperature)
 				}
 				bodies = append(bodies, body)
 			}

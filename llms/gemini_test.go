@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-var geminiSignature = []byte("sig-1")
+const geminiSignature = "sig-1"
 
 func geminiReply(parts string, finish string) string {
 	return `{"candidates":[{"content":{"role":"model","parts":[` + parts + `]},"finishReason":"` + finish + `"}],
@@ -78,7 +78,7 @@ func TestGeminiRequest(t *testing.T) {
 	model := contents[1].(map[string]any)
 	calls := model["parts"].([]any)
 	first := calls[0].(map[string]any)
-	if model["role"] != "model" || first["thoughtSignature"] != base64.StdEncoding.EncodeToString(geminiSignature) ||
+	if model["role"] != "model" || first["thoughtSignature"] != base64.StdEncoding.EncodeToString([]byte(geminiSignature)) ||
 		first["functionCall"].(map[string]any)["id"] != "c1" || !reflect.DeepEqual(first["functionCall"].(map[string]any)["args"], map[string]any{"q": "x"}) {
 		t.Errorf("first model part = %v (the thought signature must be sent back)", first)
 	}
@@ -96,7 +96,7 @@ func TestGeminiRequest(t *testing.T) {
 }
 
 func TestGeminiResponse(t *testing.T) {
-	sig := base64.StdEncoding.EncodeToString(geminiSignature)
+	sig := base64.StdEncoding.EncodeToString([]byte(geminiSignature))
 	_, url := newFake(t, "application/json", geminiReply(
 		`{"text":"thinking","thought":true},{"text":"Let me look."},{"functionCall":{"name":"lookup","args":{"z":1,"a":"x"}},"thoughtSignature":"`+sig+`"}`, "STOP"))
 	resp, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")})
@@ -108,7 +108,7 @@ func TestGeminiResponse(t *testing.T) {
 		t.Fatalf("choice = %+v", c)
 	}
 	tc := c.ToolCalls[0]
-	if tc.ID != geminiLocalIDPrefix+"0" || tc.FunctionCall.Arguments != `{"a":"x","z":1}` || !reflect.DeepEqual(tc.Signature, geminiSignature) {
+	if tc.ID != geminiLocalIDPrefix+"0" || tc.FunctionCall.Arguments != `{"a":"x","z":1}` || tc.Signature != geminiSignature {
 		t.Errorf("tool call = %+v", tc)
 	}
 	if !reflect.DeepEqual(c.Parts, []ContentPart{TextContent{Text: "Let me look."}, tc}) {
@@ -227,7 +227,7 @@ func TestGeminiRejectsImageURL(t *testing.T) {
 }
 
 func TestGeminiStreamingKeepsToolCallSignature(t *testing.T) {
-	sig := base64.StdEncoding.EncodeToString(geminiSignature)
+	sig := base64.StdEncoding.EncodeToString([]byte(geminiSignature))
 	body := "data: " + `{"candidates":[{"content":{"role":"model","parts":[{"text":"Let me look."}]}}]}` + "\n\n" +
 		"data: " + `{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"id":"c1","name":"lookup","args":{"q":"x"}},"thoughtSignature":"` + sig + `"}]},"finishReason":"STOP"}]}` + "\n\n"
 	_, url := newFake(t, "text/event-stream", body)
@@ -237,10 +237,101 @@ func TestGeminiStreamingKeepsToolCallSignature(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := resp.Choices[0]
-	if len(c.ToolCalls) != 1 || c.ToolCalls[0].ID != "c1" || !reflect.DeepEqual(c.ToolCalls[0].Signature, geminiSignature) || c.StopReason != "STOP" {
+	if len(c.ToolCalls) != 1 || c.ToolCalls[0].ID != "c1" || c.ToolCalls[0].Signature != geminiSignature || c.StopReason != "STOP" {
 		t.Errorf("streamed choice = %+v (the next turn needs the signature)", c)
 	}
 	if len(c.Parts) != 2 {
 		t.Errorf("parts = %+v, want the text then the tool call", c.Parts)
+	}
+}
+
+// Gemini 3 can put a thought signature on a text part, or on a part with no
+// text at all (a thought summary or an empty closing part). Each reaches the
+// next turn unchanged, and invoke and stream agree.
+func TestGeminiTextSignatures(t *testing.T) {
+	sig := base64.StdEncoding.EncodeToString([]byte(geminiSignature))
+	want := []ContentPart{TextContent{Text: "Hello", Signature: geminiSignature}, TextContent{Signature: "sig-2"}}
+	sig2 := base64.StdEncoding.EncodeToString([]byte("sig-2"))
+
+	_, url := newFake(t, "application/json", geminiReply(
+		`{"text":"Hello","thoughtSignature":"`+sig+`"},{"text":"","thoughtSignature":"`+sig2+`"}`, "STOP"))
+	resp, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := resp.Choices[0]; c.Content != "Hello" || !reflect.DeepEqual(c.Parts, want) {
+		t.Errorf("invoke parts = %+v", c.Parts)
+	}
+
+	body := "data: " + `{"candidates":[{"content":{"role":"model","parts":[{"text":"Hel"}]}}]}` + "\n\n" +
+		"data: " + `{"candidates":[{"content":{"role":"model","parts":[{"text":"lo","thoughtSignature":"` + sig + `"}]}}]}` + "\n\n" +
+		"data: " + `{"candidates":[{"content":{"role":"model","parts":[{"text":"","thoughtSignature":"` + sig2 + `"}]},"finishReason":"STOP"}]}` + "\n\n"
+	_, url = newFake(t, "text/event-stream", body)
+	resp, err = newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")},
+		WithStreamingFunc(func(context.Context, []byte) error { return nil }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := resp.Choices[0]; c.Content != "Hello" || !reflect.DeepEqual(c.Parts, want) {
+		t.Errorf("stream parts = %+v", c.Parts)
+	}
+
+	f, url := newFake(t, "application/json", geminiReply(`{"text":"ok"}`, "STOP"))
+	history := []MessageContent{textParts(ChatMessageTypeHuman, "hi"), {Role: ChatMessageTypeAI, Parts: want}, textParts(ChatMessageTypeHuman, "more")}
+	if _, err := newTestGemini(t, url, nil).GenerateContent(bg, history); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := json.Marshal(f.bodies[0]["contents"].([]any)[1])
+	if !strings.Contains(string(got), `{"text":"Hello","thoughtSignature":"`+sig+`"}`) || !strings.Contains(string(got), `{"thoughtSignature":"`+sig2+`"}`) {
+		t.Errorf("model turn sent back = %s", got)
+	}
+}
+
+// A thought summary carries no text into the reply, but its signature does.
+func TestGeminiThoughtSignature(t *testing.T) {
+	sig := base64.StdEncoding.EncodeToString([]byte(geminiSignature))
+	_, url := newFake(t, "application/json", geminiReply(`{"text":"pondering","thought":true,"thoughtSignature":"`+sig+`"},{"text":"done"}`, "STOP"))
+	resp, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []ContentPart{TextContent{Signature: geminiSignature}, TextContent{Text: "done"}}
+	if c := resp.Choices[0]; c.Content != "done" || !reflect.DeepEqual(c.Parts, want) {
+		t.Errorf("parts = %+v", c.Parts)
+	}
+}
+
+// A reply with only a signature and STOP is still empty.
+func TestGeminiSignatureOnlyReplyIsEmpty(t *testing.T) {
+	sig := base64.StdEncoding.EncodeToString([]byte(geminiSignature))
+	_, url := newFake(t, "application/json", geminiReply(`{"text":"","thoughtSignature":"`+sig+`"}`, "STOP"))
+	if _, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")}); !errors.Is(err, ErrEmptyResponse) {
+		t.Fatalf("err = %v, want ErrEmptyResponse", err)
+	}
+}
+
+// Thinking tokens count as output, tool-use prompt tokens as input, and a
+// cached count above the prompt count is dropped, as langchain-google-genai
+// counts them.
+func TestGeminiUsage(t *testing.T) {
+	for name, tc := range map[string]struct {
+		usage string
+		want  map[string]any
+	}{
+		"thinking": {`{"promptTokenCount":10,"toolUsePromptTokenCount":4,"candidatesTokenCount":5,"thoughtsTokenCount":3,"cachedContentTokenCount":2}`,
+			map[string]any{"PromptTokens": 14, "CompletionTokens": 8, "PromptCachedTokens": 2}},
+		"cache above prompt": {`{"promptTokenCount":10,"candidatesTokenCount":5,"cachedContentTokenCount":40}`,
+			map[string]any{"PromptTokens": 10, "CompletionTokens": 5, "PromptCachedTokens": 0}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, url := newFake(t, "application/json", `{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}],"usageMetadata":`+tc.usage+`}`)
+			resp, err := newTestGemini(t, url, nil).GenerateContent(bg, []MessageContent{textParts(ChatMessageTypeHuman, "hi")})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := resp.Choices[0].GenerationInfo; !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("usage = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

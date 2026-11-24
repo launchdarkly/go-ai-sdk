@@ -42,8 +42,14 @@ type MessageContent struct {
 // BinaryContent, ToolCall or ToolCallResponse.
 type ContentPart interface{ isPart() }
 
-// TextContent is text.
-type TextContent struct{ Text string }
+// TextContent is text. Signature is an opaque provider value returned with
+// the text that the next turn must send back unchanged (Gemini's thought
+// signature, which can arrive on a part with no text); other models leave it
+// empty. It holds raw bytes in a string so TextContent stays comparable.
+type TextContent struct {
+	Text      string
+	Signature string
+}
 
 // ImageURLContent is an image by URL (including data: URLs).
 type ImageURLContent struct {
@@ -60,12 +66,12 @@ type BinaryContent struct {
 // ToolCall is a tool call the model made, on an AI message. Signature is
 // an opaque provider value returned with the call that the next turn must
 // send back unchanged (Gemini's thought signature); other models leave it
-// nil.
+// empty. It holds raw bytes in a string so ToolCall stays comparable.
 type ToolCall struct {
 	ID           string
 	Type         string
 	FunctionCall *FunctionCall
-	Signature    []byte
+	Signature    string
 }
 
 // FunctionCall names the function and carries its JSON arguments.

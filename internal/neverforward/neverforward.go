@@ -13,7 +13,7 @@ const Marker = "never-forwarded"
 var Params = map[string]any{
 	// credentials
 	"api_key": Marker, "apiKey": Marker, "anthropic_api_key": Marker, "openai_api_key": Marker, "google_api_key": Marker,
-	"aws_access_key_id": Marker, "aws_secret_access_key": Marker, "aws_session_token": Marker, "credentials": Marker,
+	"googleApiKey": Marker, "aws_access_key_id": Marker, "aws_secret_access_key": Marker, "aws_session_token": Marker, "credentials": Marker,
 	// endpoints and connection settings
 	"base_url": Marker, "baseURL": Marker, "anthropic_api_url": Marker, "endpoint_url": Marker, "organization": Marker,
 	"timeout": Marker, "request_timeout": Marker, "max_retries": Marker, "default_headers": map[string]any{"x": Marker},

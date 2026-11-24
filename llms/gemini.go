@@ -238,8 +238,8 @@ func geminiModelParts(parts []ContentPart) ([]*genai.Part, error) {
 	for _, part := range parts {
 		switch v := part.(type) {
 		case TextContent:
-			if strings.TrimSpace(v.Text) != "" {
-				out = append(out, &genai.Part{Text: v.Text})
+			if strings.TrimSpace(v.Text) != "" || len(v.Signature) > 0 {
+				out = append(out, &genai.Part{Text: v.Text, ThoughtSignature: signatureBytes(v.Signature)})
 			}
 		case ToolCall:
 			if v.FunctionCall == nil {
@@ -247,7 +247,7 @@ func geminiModelParts(parts []ContentPart) ([]*genai.Part, error) {
 			}
 			out = append(out, &genai.Part{
 				FunctionCall:     &genai.FunctionCall{ID: geminiWireID(v.ID), Name: v.FunctionCall.Name, Args: toolInput(v.FunctionCall.Arguments)},
-				ThoughtSignature: v.Signature,
+				ThoughtSignature: signatureBytes(v.Signature),
 			})
 		default:
 			return nil, fmt.Errorf("llms: gemini: unsupported assistant message part %T", part)
@@ -267,6 +267,14 @@ func geminiToolOutput(content string) map[string]any {
 		return obj
 	}
 	return map[string]any{"output": content}
+}
+
+// signatureBytes is a stored signature as the API sends it, nil when there is none.
+func signatureBytes(sig string) []byte {
+	if sig == "" {
+		return nil
+	}
+	return []byte(sig)
 }
 
 func geminiWireID(id string) string {
@@ -309,8 +317,9 @@ func (s *geminiStream) add(chunk *genai.GenerateContentResponse) string {
 		}
 		if p.Text != "" && !p.Thought {
 			delta.WriteString(p.Text)
-			if n := len(s.parts); n > 0 && s.parts[n-1].Text != "" && s.parts[n-1].FunctionCall == nil && !s.parts[n-1].Thought {
+			if n := len(s.parts); n > 0 && s.parts[n-1].Text != "" && s.parts[n-1].FunctionCall == nil && !s.parts[n-1].Thought && s.parts[n-1].ThoughtSignature == nil {
 				s.parts[n-1].Text += p.Text
+				s.parts[n-1].ThoughtSignature = p.ThoughtSignature
 				continue
 			}
 		}
@@ -334,11 +343,18 @@ func geminiResponse(resp *genai.GenerateContentResponse) (*ContentResponse, erro
 	cand := resp.Candidates[0]
 	choice := &ContentChoice{StopReason: string(cand.FinishReason), GenerationInfo: geminiUsage(resp.UsageMetadata)}
 	var text strings.Builder
+	hasContent := false
 	if cand.Content != nil {
 		for _, p := range cand.Content.Parts {
 			switch {
-			case p == nil || p.Thought:
-				continue // thought summaries are not part of this interface
+			case p == nil:
+				continue
+			case p.Thought || p.Text == "" && p.FunctionCall == nil:
+				// Thought summaries are not part of this interface, but a
+				// signature on one, or on an empty part, must reach the next turn.
+				if len(p.ThoughtSignature) > 0 {
+					choice.Parts = append(choice.Parts, TextContent{Signature: string(p.ThoughtSignature)})
+				}
 			case p.FunctionCall != nil:
 				args, err := json.Marshal(p.FunctionCall.Args)
 				if err != nil {
@@ -351,33 +367,40 @@ func geminiResponse(resp *genai.GenerateContentResponse) (*ContentResponse, erro
 				if id == "" {
 					id = geminiLocalIDPrefix + strconv.Itoa(len(choice.ToolCalls))
 				}
-				tc := ToolCall{ID: id, Type: "function", FunctionCall: &FunctionCall{Name: p.FunctionCall.Name, Arguments: string(args)}, Signature: p.ThoughtSignature}
+				tc := ToolCall{ID: id, Type: "function", FunctionCall: &FunctionCall{Name: p.FunctionCall.Name, Arguments: string(args)}, Signature: string(p.ThoughtSignature)}
 				choice.ToolCalls = append(choice.ToolCalls, tc)
 				choice.Parts = append(choice.Parts, tc)
-			case p.Text != "":
+				hasContent = true
+			default:
 				text.WriteString(p.Text)
-				choice.Parts = append(choice.Parts, TextContent{Text: p.Text})
+				choice.Parts = append(choice.Parts, TextContent{Text: p.Text, Signature: string(p.ThoughtSignature)})
+				hasContent = true
 			}
 		}
 	}
 	choice.Content = text.String()
 	// A blocked or truncated reply has no parts but still carries its finish reason.
-	if len(choice.Parts) == 0 && (cand.FinishReason == "" || cand.FinishReason == genai.FinishReasonUnspecified || cand.FinishReason == genai.FinishReasonStop) {
+	if !hasContent && (cand.FinishReason == "" || cand.FinishReason == genai.FinishReasonUnspecified || cand.FinishReason == genai.FinishReasonStop) {
 		return nil, ErrEmptyResponse
 	}
 	return &ContentResponse{Choices: []*ContentChoice{choice}}, nil
 }
 
-// geminiUsage writes token counts under the OpenAI key family: Gemini's
-// prompt count already includes cached tokens, and thinking tokens are billed
-// as output.
+// geminiUsage writes token counts under the OpenAI key family, as
+// langchain-google-genai counts them: Gemini's prompt count already includes
+// cached tokens, thinking tokens are billed as output, and a cached count above
+// the prompt count (seen with grounding) is dropped as untrustworthy.
 func geminiUsage(u *genai.GenerateContentResponseUsageMetadata) map[string]any {
 	if u == nil {
 		return nil
 	}
+	cached := u.CachedContentTokenCount
+	if cached > u.PromptTokenCount {
+		cached = 0
+	}
 	return map[string]any{
 		"PromptTokens":       int(u.PromptTokenCount + u.ToolUsePromptTokenCount),
 		"CompletionTokens":   int(u.CandidatesTokenCount + u.ThoughtsTokenCount),
-		"PromptCachedTokens": int(u.CachedContentTokenCount),
+		"PromptCachedTokens": int(cached),
 	}
 }
